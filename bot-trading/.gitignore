@@ -1,0 +1,42 @@
+# =============================================================================
+# Bot de Trading Autonomo — Ficheiros ignorados pelo Git
+# =============================================================================
+
+# Ambiente virtual
+venv/
+.venv/
+env/
+
+# Cache Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Pytest
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Dados locais
+data/*.json
+
+# Env secrets
+.env
+
+# macOS
+.DS_Store
+
+# Extras do projecto
+*$py.class
+*.so
+*.egg-info/
+dist/
+build/
+*.egg
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.AppleDouble
+.LSOverride

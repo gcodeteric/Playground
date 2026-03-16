@@ -1,0 +1,816 @@
+2026-03-14 18:09:30 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-14 18:09:30 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-14 18:09:30 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-14 18:09:30 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-14 18:09:30 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 100000.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-14 18:09:30 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-14 18:09:30 | WARNING  | main                 | Telegram NAO configurado — notificacoes desactivadas. Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env.
+2026-03-14 18:09:30 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-14 18:09:30 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-14 18:09:30 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-14 18:09:30 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-14 18:09:30 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-14 18:09:30 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'SPY', 'QQQ'] | capital: 100000.00 | ciclo: 300 s | paper: True
+2026-03-14 18:09:30 | ERROR    | main                 | Erro ao carregar estado de grids: Esquema invalido: campo 'version' ausente ou nao e inteiro. — a iniciar sem grids.
+2026-03-14 18:09:30 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-14 18:09:30 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usopt.nj
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 18:09:35 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-14 18:09:35 | INFO     | src.data_feed        | Ligação ao IB estabelecida com sucesso (127.0.0.1:7497).
+2026-03-14 18:09:35 | INFO     | src.execution        | OrderManager inicializado com sucesso
+2026-03-14 18:09:35 | INFO     | main                 | Conta IB detectada: DU***9204 (PAPER).
+2026-03-14 18:09:35 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-14 18:09:35 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-14 18:09:35 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-14 18:09:36 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 4: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-14 18:09:36 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-14 18:09:36 | ERROR    | src.data_feed        | current_price falhou [1/3] para price:AAPL: This event loop is already running
+2026-03-14 18:09:36 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_price: price:AAPL | erro=This event loop is already running
+2026-03-14 18:09:36 | WARNING  | src.data_feed        | Novo retry de current_price em 0.5 s (tentativa 2/3).
+2026-03-14 18:09:51 | WARNING  | src.data_feed        | Pacing rule aplicada em current_price: espera 14.40 s para price:AAPL (identical_request=14.40s)
+2026-03-14 18:09:51 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-14 18:09:51 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 5: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-14 18:09:51 | WARNING  | src.execution        | Erro IB — reqId=5, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-14 18:09:51 | ERROR    | src.data_feed        | current_price falhou [2/3] para price:AAPL: This event loop is already running
+2026-03-14 18:09:51 | WARNING  | src.data_feed        | Novo retry de current_price em 1.0 s (tentativa 3/3).
+2026-03-14 18:10:06 | WARNING  | src.data_feed        | Pacing rule aplicada em current_price: espera 13.90 s para price:AAPL (identical_request=13.90s)
+2026-03-14 18:10:06 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-14 18:10:06 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 6: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-14 18:10:06 | WARNING  | src.execution        | Erro IB — reqId=6, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-14 18:10:06 | ERROR    | src.data_feed        | current_price falhou [3/3] para price:AAPL: This event loop is already running
+2026-03-14 18:10:06 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_price: price:AAPL | erro=This event loop is already running
+2026-03-14 18:10:06 | ERROR    | src.data_feed        | Erro ao obter preço de AAPL: This event loop is already running
+2026-03-14 18:10:06 | WARNING  | main                 | Snapshot de mercado sem preco para AAPL durante o preflight.
+2026-03-14 18:10:06 | INFO     | main                 | A iniciar reconciliacao de arranque...
+2026-03-14 18:10:06 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-14 18:10:06 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 1/3. Novo retry em 5 s.
+2026-03-14 18:10:06 | ERROR    | ib_insync.wrapper    | Error 300, reqId 6: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:6
+2026-03-14 18:10:06 | WARNING  | src.execution        | Erro IB — reqId=6, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:6 (contrato=None)
+2026-03-14 18:10:21 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-14 18:10:21 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-14 18:10:21 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 2/3. Novo retry em 5 s.
+2026-03-14 18:10:36 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-14 18:10:36 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-14 18:10:36 | DEBUG    | src.execution        | Obtidas 0 ordem(ns) aberta(s) do IB
+2026-03-14 18:10:36 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-14 18:10:36 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-14 18:10:36 | INFO     | main                 | Bot operacional — a entrar no loop principal.
+2026-03-14 18:10:36 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-14 18:10:36 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-14 18:10:36 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-14 18:10:36 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-14 18:10:36 | INFO     | main                 | Sessao fechada para AAPL (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 18:10:36 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-14 18:10:36 | INFO     | main                 | Sessao fechada para SPY (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 18:10:36 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-14 18:10:36 | INFO     | main                 | Sessao fechada para QQQ (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 18:10:36 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-14 18:10:36 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-14 18:10:36 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-14 18:31:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 18:31:15 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 18:31:15 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 18:31:15 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usopt.nj (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 18:31:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2108: A conex\u00e3o do centro de dados de mercado est\u00e1 inativa, mas deve ser disponibilizada sob demanda.usopt.nj (contrato=None)
+2026-03-14 18:47:32 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 18:47:32 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 18:47:32 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 18:47:34 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 18:47:34 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 18:47:34 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 18:47:34 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 18:47:34 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 18:47:34 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 18:47:35 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-14 18:47:35 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 18:47:35 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 18:47:35 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 19:03:45 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:03:45 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:03:45 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 19:03:48 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 19:19:37 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: . Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 19:19:37 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: . Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 19:19:37 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: . Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 19:19:38 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:19:38 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:19:38 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 19:19:40 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 19:19:41 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 19:19:42 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 19:19:42 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 19:36:05 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: euhmds; ushmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm.
+2026-03-14 19:36:05 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: euhmds; ushmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm.
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: euhmds; ushmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm. (contrato=None)
+2026-03-14 19:36:05 | ERROR    | ib_insync.wrapper    | Error 322, reqId 9: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=9, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 19:36:05 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:36:05 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 19:36:05 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 19:36:08 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 19:36:08 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 19:36:08 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 19:36:09 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 19:36:09 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 19:36:09 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 19:36:10 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 19:53:03 | ERROR    | ib_insync.wrapper    | Error 322, reqId 9: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=9, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 19:53:03 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: cashfarm; euhmds. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; usfarm; ushmds; secdefnj.
+2026-03-14 19:53:03 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: cashfarm; euhmds. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; usfarm; ushmds; secdefnj.
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: cashfarm; euhmds. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; usfarm; ushmds; secdefnj. (contrato=None)
+2026-03-14 19:53:03 | ERROR    | ib_insync.wrapper    | Error 322, reqId 10: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=10, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 19:53:03 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:53:03 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 19:53:03 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 19:53:06 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 19:53:06 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 19:53:06 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 19:53:06 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 19:53:06 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 19:53:07 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 19:53:07 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:08:50 | ERROR    | ib_insync.wrapper    | Error 322, reqId 10: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=10, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:08:50 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds.
+2026-03-14 20:08:50 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds.
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds. (contrato=None)
+2026-03-14 20:08:50 | ERROR    | ib_insync.wrapper    | Error 322, reqId 11: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=11, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:08:50 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:08:50 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:08:50 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 20:08:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:08:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:08:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:08:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:08:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:08:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 20:08:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:13:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:13:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:13:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:13:53 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:13:54 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:13:54 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:13:54 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 20:13:55 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:13:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 20:13:57 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 20:13:58 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 20:13:58 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 20:13:58 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 20:13:58 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 20:13:59 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:14:13 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-14 20:14:14 | ERROR    | ib_insync.wrapper    | Error 322, reqId 11: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:14:14 | WARNING  | src.execution        | Erro IB — reqId=11, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:14:14 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 20:14:14 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 20:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 20:14:14 | ERROR    | ib_insync.wrapper    | Error 322, reqId 12: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:14:14 | WARNING  | src.execution        | Erro IB — reqId=12, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:14:24 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-14 20:14:24 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-14 20:14:24 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-14 20:14:24 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-14 20:14:24 | INFO     | main                 | Sessao fechada para AAPL (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 20:14:24 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-14 20:14:24 | INFO     | main                 | Sessao fechada para SPY (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 20:14:24 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-14 20:14:24 | INFO     | main                 | Sessao fechada para QQQ (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 20:14:24 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-14 20:14:24 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-14 20:14:24 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-14 20:14:29 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:14:29 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 20:14:29 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:14:29 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 20:19:08 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:19:08 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:19:08 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 20:19:09 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 20:19:12 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:19:13 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 20:19:13 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 20:19:14 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 20:19:14 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-14 20:19:14 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 20:19:14 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 20:19:14 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 20:19:14 | ERROR    | ib_insync.wrapper    | Error 322, reqId 12: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:19:14 | WARNING  | src.execution        | Erro IB — reqId=12, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:19:14 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 20:19:14 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 20:19:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 20:19:14 | ERROR    | ib_insync.wrapper    | Error 322, reqId 13: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:19:14 | WARNING  | src.execution        | Erro IB — reqId=13, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:40:18 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:40:19 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:40:19 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:40:19 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 20:40:20 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:40:22 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:ushmds (contrato=None)
+2026-03-14 20:40:22 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 20:40:22 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 20:40:22 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 20:40:22 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 20:40:22 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 20:40:22 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 20:57:24 | ERROR    | ib_insync.wrapper    | Error 322, reqId 13: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=13, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:57:24 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: ushmds.
+2026-03-14 20:57:24 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: ushmds.
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: ushmds. (contrato=None)
+2026-03-14 20:57:24 | ERROR    | ib_insync.wrapper    | Error 322, reqId 14: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=14, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 20:57:24 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:57:24 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:57:24 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 20:57:27 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 20:57:28 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 20:57:28 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 21:14:14 | ERROR    | ib_insync.wrapper    | Error 322, reqId 14: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=14, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:14:14 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; euhmds; ushmds; secdefnj.
+2026-03-14 21:14:14 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; euhmds; ushmds; secdefnj.
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 21:14:14 | ERROR    | ib_insync.wrapper    | Error 322, reqId 15: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=15, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:14:14 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 21:14:14 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 21:14:14 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 21:14:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 21:14:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 21:14:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 21:14:18 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 21:31:43 | ERROR    | ib_insync.wrapper    | Error 322, reqId 15: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=15, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:31:43 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: eufarm. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 21:31:43 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: eufarm. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: eufarm. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: usfarm.nj; usfuture; cashfarm; usfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 21:31:43 | ERROR    | ib_insync.wrapper    | Error 322, reqId 16: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=16, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 21:31:43 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 21:31:43 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 21:31:43 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 21:31:43 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-14 21:31:43 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-14 21:31:43 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-14 21:31:43 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-14 21:31:43 | INFO     | main                 | Sessao fechada para AAPL (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 21:31:43 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-14 21:31:43 | INFO     | main                 | Sessao fechada para SPY (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 21:31:43 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-14 21:31:43 | INFO     | main                 | Sessao fechada para QQQ (FECHADO_FERIADO) — sem novas entradas.
+2026-03-14 21:31:43 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-14 21:31:43 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-14 21:31:43 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-14 21:31:44 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 21:31:44 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 21:31:44 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 21:31:44 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 21:31:44 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 21:31:45 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 21:31:45 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 21:31:45 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 21:31:46 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 21:31:46 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 21:31:46 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 21:31:46 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 21:31:46 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 21:41:15 | ERROR    | ib_insync.wrapper    | Error 322, reqId 16: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:41:15 | WARNING  | src.execution        | Erro IB — reqId=16, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:41:15 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: ushmds.
+2026-03-14 21:41:15 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: ushmds.
+2026-03-14 21:41:15 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Os seguintes centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; secdefnj. Os seguintes centros de dados n\u00e3o est\u00e3o conectados: ushmds. (contrato=None)
+2026-03-14 21:41:15 | ERROR    | ib_insync.wrapper    | Error 322, reqId 17: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:41:15 | WARNING  | src.execution        | Erro IB — reqId=17, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:41:15 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 21:41:15 | ERROR    | ib_insync.wrapper    | Error 1100, reqId -1: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 21:41:15 | WARNING  | src.data_feed        | Codigo IB 1100: A conectividade entre IBKR e Trader Workstation foi perdida.
+2026-03-14 21:41:15 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1100: A conectividade entre IBKR e Trader Workstation foi perdida. (contrato=None)
+2026-03-14 21:41:15 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm.nj (contrato=None)
+2026-03-14 21:41:16 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:cashfarm (contrato=None)
+2026-03-14 21:41:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfuture (contrato=None)
+2026-03-14 21:41:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-14 21:41:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:usfarm (contrato=None)
+2026-03-14 21:41:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2157: A conex\u00e3o do centro de dados Sec-def foi perdida:secdefnj (contrato=None)
+2026-03-14 21:41:17 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-14 21:41:18 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-14 21:41:18 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-14 21:41:19 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-14 21:41:19 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-14 21:41:20 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-14 21:41:24 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-14 21:41:29 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-14 21:41:29 | ERROR    | ib_insync.wrapper    | Error 322, reqId 17: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:41:29 | WARNING  | src.execution        | Erro IB — reqId=17, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-14 21:41:29 | ERROR    | ib_insync.wrapper    | Error 1102, reqId -1: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 21:41:29 | WARNING  | src.data_feed        | Codigo IB 1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj.
+2026-03-14 21:41:29 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=1102: A conectividade entre IBKR e Trader Workstation foi restaurada - dados mantidos. Todos os centros de dados est\u00e3o conectados: usfarm.nj; usfuture; eufarm; cashfarm; usfarm; euhmds; ushmds; secdefnj. (contrato=None)
+2026-03-14 21:41:29 | ERROR    | ib_insync.wrapper    | Error 322, reqId 18: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first
+2026-03-14 21:41:29 | WARNING  | src.execution        | Erro IB — reqId=18, codigo=322: Erro de processamento da solicita\u00e7\u00e3o.-'b1' : causa - Maximum number of account summary requests exceeded; desubscribe to previous request first (contrato=None)
+2026-03-16 17:02:09 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-16 17:02:09 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-16 17:02:09 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-16 17:02:09 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-16 17:02:09 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 100000.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-16 17:02:09 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-16 17:02:09 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-16 17:02:09 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-16 17:02:09 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 17:02:09 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-16 17:02:09 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-16 17:02:09 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-16 17:02:09 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-16 17:02:09 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-16 17:02:09 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'SPY', 'QQQ', 'VIX'] | capital: 100000.00 | ciclo: 300 s | paper: True
+2026-03-16 17:02:09 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-16 17:02:09 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-16 17:02:09 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 17:02:09 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-16 17:02:09 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-16 17:02:09 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-16 17:02:09 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-16 17:02:09 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-16 17:02:09 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 5 s.
+2026-03-16 17:02:14 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=2)…
+2026-03-16 17:02:14 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-16 17:02:14 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-16 17:02:14 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 10 s.
+2026-03-16 17:02:24 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=3)…
+2026-03-16 17:02:24 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-16 17:02:24 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-16 17:02:24 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 20 s.
+2026-03-16 17:02:24 | CRITICAL | main                 | Nao foi possivel ligar ao IB apos 3 tentativas
+2026-03-16 17:04:25 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-16 17:04:25 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-16 17:04:25 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-16 17:04:25 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-16 17:04:25 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 100000.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-16 17:04:25 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-16 17:04:25 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-16 17:04:25 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-16 17:04:25 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 17:04:25 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-16 17:04:25 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-16 17:04:25 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-16 17:04:25 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-16 17:04:25 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-16 17:04:25 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'SPY', 'QQQ', 'VIX'] | capital: 100000.00 | ciclo: 300 s | paper: True
+2026-03-16 17:04:25 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-16 17:04:25 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-16 17:04:25 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 17:04:25 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-16 17:04:25 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-16 17:04:25 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:hfarm
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:jfarm
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarmnj
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:fundfarm
+2026-03-16 17:04:27 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-16 17:04:27 | INFO     | src.data_feed        | Ligação ao IB estabelecida com sucesso (127.0.0.1:7497).
+2026-03-16 17:04:27 | INFO     | src.execution        | OrderManager inicializado com sucesso
+2026-03-16 17:04:27 | INFO     | main                 | Conta IB detectada: DU***9204 (PAPER).
+2026-03-16 17:04:27 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-16 17:04:28 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-16 17:04:28 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-16 17:04:28 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 4: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:04:28 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:04:28 | ERROR    | src.data_feed        | current_price falhou [1/3] para price:AAPL: This event loop is already running
+2026-03-16 17:04:28 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_price: price:AAPL | erro=This event loop is already running
+2026-03-16 17:04:28 | WARNING  | src.data_feed        | Novo retry de current_price em 0.5 s (tentativa 2/3).
+2026-03-16 17:04:35 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-16 17:04:35 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-16 17:04:37 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-16 17:04:38 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-16 17:04:43 | WARNING  | src.data_feed        | Pacing rule aplicada em current_price: espera 14.40 s para price:AAPL (identical_request=14.40s)
+2026-03-16 17:04:43 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-16 17:04:43 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 5: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:04:43 | WARNING  | src.execution        | Erro IB — reqId=5, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:04:43 | ERROR    | src.data_feed        | current_price falhou [2/3] para price:AAPL: This event loop is already running
+2026-03-16 17:04:43 | WARNING  | src.data_feed        | Novo retry de current_price em 1.0 s (tentativa 3/3).
+2026-03-16 17:04:58 | WARNING  | src.data_feed        | Pacing rule aplicada em current_price: espera 13.90 s para price:AAPL (identical_request=13.90s)
+2026-03-16 17:04:58 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-16 17:04:58 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 6: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:04:58 | WARNING  | src.execution        | Erro IB — reqId=6, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:04:58 | ERROR    | src.data_feed        | current_price falhou [3/3] para price:AAPL: This event loop is already running
+2026-03-16 17:04:58 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_price: price:AAPL | erro=This event loop is already running
+2026-03-16 17:04:58 | ERROR    | src.data_feed        | Erro ao obter preço de AAPL: This event loop is already running
+2026-03-16 17:04:58 | WARNING  | main                 | Snapshot de mercado sem preco para AAPL durante o preflight.
+2026-03-16 17:04:58 | INFO     | main                 | A iniciar reconciliacao de arranque...
+2026-03-16 17:04:58 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 17:04:58 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 1/3. Novo retry em 5 s.
+2026-03-16 17:04:58 | ERROR    | ib_insync.wrapper    | Error 300, reqId 6: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:6
+2026-03-16 17:04:58 | WARNING  | src.execution        | Erro IB — reqId=6, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:6 (contrato=None)
+2026-03-16 17:05:08 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2105: A conex\u00e3o do centro de dados HMDS foi perdida:euhmds (contrato=None)
+2026-03-16 17:05:08 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-16 17:05:09 | WARNING  | src.execution        | Erro IB — reqId=-1, codigo=2103: A conex\u00e3o do centro de dados de mercado foi perdida:eufarm (contrato=None)
+2026-03-16 17:05:09 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-16 17:05:13 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-16 17:05:13 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 17:05:13 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 2/3. Novo retry em 5 s.
+2026-03-16 17:05:17 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usopt.nj
+2026-03-16 17:05:28 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-16 17:05:28 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 17:05:28 | DEBUG    | src.execution        | Obtidas 0 ordem(ns) aberta(s) do IB
+2026-03-16 17:05:28 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 17:05:28 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 17:05:28 | INFO     | main                 | Bot operacional — a entrar no loop principal.
+2026-03-16 17:05:28 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-16 17:05:28 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 17:05:28 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 17:05:28 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 17:05:28 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-16 17:05:29 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-16 17:05:29 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-16 17:05:29 | INFO     | src.data_feed        | A obter barras históricas: AAPL | duração=1 Y | tamanho=1 day
+2026-03-16 17:05:29 | INFO     | src.data_feed        | Barras obtidas com sucesso: AAPL — 251 barras (de 2025-03-17 a 2026-03-16).
+2026-03-16 17:05:29 | INFO     | src.data_feed        | Indicadores calculados para AAPL: preço=252.6000 | SMA25=263.7248 | SMA50=262.3224 | SMA200=245.8452 | RSI14=38.3622 | ATR14=5.9840 | BB=[274.8616, 262.5905, 250.3194] | VolAvg20=18601263.4500 | ATRavg60=5.4789
+2026-03-16 17:05:29 | INFO     | main                 | Regime de AAPL: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-16 17:05:29 | DEBUG    | src.data_feed        | A obter volume actual de AAPL…
+2026-03-16 17:05:29 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 9: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:05:29 | WARNING  | src.execution        | Erro IB — reqId=9, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:05:29 | ERROR    | src.data_feed        | current_volume falhou [1/3] para volume:AAPL: This event loop is already running
+2026-03-16 17:05:29 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_volume: volume:AAPL | erro=This event loop is already running
+2026-03-16 17:05:29 | WARNING  | src.data_feed        | Novo retry de current_volume em 0.5 s (tentativa 2/3).
+2026-03-16 17:05:44 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 14.40 s para volume:AAPL (identical_request=14.40s)
+2026-03-16 17:05:44 | DEBUG    | src.data_feed        | A obter volume actual de AAPL…
+2026-03-16 17:05:44 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 10: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:05:44 | WARNING  | src.execution        | Erro IB — reqId=10, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:05:44 | ERROR    | src.data_feed        | current_volume falhou [2/3] para volume:AAPL: This event loop is already running
+2026-03-16 17:05:44 | WARNING  | src.data_feed        | Novo retry de current_volume em 1.0 s (tentativa 3/3).
+2026-03-16 17:05:59 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 13.90 s para volume:AAPL (identical_request=13.90s)
+2026-03-16 17:05:59 | DEBUG    | src.data_feed        | A obter volume actual de AAPL…
+2026-03-16 17:05:59 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 11: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:05:59 | WARNING  | src.execution        | Erro IB — reqId=11, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:05:59 | ERROR    | src.data_feed        | current_volume falhou [3/3] para volume:AAPL: This event loop is already running
+2026-03-16 17:05:59 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_volume: volume:AAPL | erro=This event loop is already running
+2026-03-16 17:05:59 | ERROR    | src.data_feed        | Erro ao obter volume de AAPL: This event loop is already running
+2026-03-16 17:05:59 | INFO     | main                 | Sinal Kotegawa para AAPL: signal=False | horizonte=LONG_TERM | desvio=-4.22% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-16 17:05:59 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 0.7916, 'magnitude_atr': 0.3309, 'fill_probability': 0.85, 'is_high_prob': False, 'prev_close': 250.12, 'today_open': 252.1, 'atr14': 5.984039620588862}
+2026-03-16 17:05:59 | INFO     | src.gap_fade         | Gap fade sem acção: gap não transaccionável.
+2026-03-16 17:05:59 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-16 17:06:00 | INFO     | src.data_feed        | A qualificar contrato: SPY…
+2026-03-16 17:06:00 | ERROR    | ib_insync.wrapper    | Error 300, reqId 11: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:11
+2026-03-16 17:06:00 | WARNING  | src.execution        | Erro IB — reqId=11, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:11 (contrato=None)
+2026-03-16 17:06:01 | INFO     | src.data_feed        | Contrato qualificado: SPY (conId=756733, exchange=SMART).
+2026-03-16 17:06:01 | INFO     | src.data_feed        | A obter barras históricas: SPY | duração=1 Y | tamanho=1 day
+2026-03-16 17:06:02 | INFO     | src.data_feed        | Barras obtidas com sucesso: SPY — 251 barras (de 2025-03-17 a 2026-03-16).
+2026-03-16 17:06:02 | INFO     | src.data_feed        | Indicadores calculados para SPY: preço=668.7000 | SMA25=682.2656 | SMA50=686.1180 | SMA200=659.0009 | RSI14=40.2152 | ATR14=9.4932 | BB=[697.2370, 680.7795, 664.3220] | VolAvg20=62793718.3500 | ATRavg60=7.2721
+2026-03-16 17:06:02 | INFO     | main                 | Regime de SPY: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-16 17:06:02 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-16 17:06:02 | ERROR    | src.data_feed        | current_volume falhou [1/3] para volume:SPY: This event loop is already running
+2026-03-16 17:06:02 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_volume: volume:SPY | erro=This event loop is already running
+2026-03-16 17:06:02 | WARNING  | src.data_feed        | Novo retry de current_volume em 0.5 s (tentativa 2/3).
+2026-03-16 17:06:02 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 14: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL, contract: Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY')
+2026-03-16 17:06:02 | WARNING  | src.execution        | Erro IB — reqId=14, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL (contrato=Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY'))
+2026-03-16 17:06:17 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 14.40 s para volume:SPY (identical_request=14.40s)
+2026-03-16 17:06:17 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-16 17:06:17 | ERROR    | src.data_feed        | current_volume falhou [2/3] para volume:SPY: This event loop is already running
+2026-03-16 17:06:17 | WARNING  | src.data_feed        | Novo retry de current_volume em 1.0 s (tentativa 3/3).
+2026-03-16 17:06:17 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 15: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL, contract: Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY')
+2026-03-16 17:06:17 | WARNING  | src.execution        | Erro IB — reqId=15, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL (contrato=Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY'))
+2026-03-16 17:06:32 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 13.90 s para volume:SPY (identical_request=13.90s)
+2026-03-16 17:06:32 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-16 17:06:32 | ERROR    | src.data_feed        | current_volume falhou [3/3] para volume:SPY: This event loop is already running
+2026-03-16 17:06:32 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_volume: volume:SPY | erro=This event loop is already running
+2026-03-16 17:06:32 | ERROR    | src.data_feed        | Erro ao obter volume de SPY: This event loop is already running
+2026-03-16 17:06:32 | INFO     | main                 | Sinal Kotegawa para SPY: signal=False | horizonte=LONG_TERM | desvio=-1.99% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-16 17:06:32 | INFO     | src.data_feed        | A qualificar contrato: VIX…
+2026-03-16 17:06:32 | ERROR    | ib_insync.wrapper    | Error 200, reqId 17: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o, contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:06:32 | WARNING  | src.execution        | Erro IB — reqId=17, codigo=200: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o (contrato=Stock(symbol='VIX', exchange='SMART', currency='USD'))
+2026-03-16 17:06:32 | WARNING  | ib_insync.ib         | Unknown contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:06:32 | WARNING  | src.data_feed        | Não foi possível qualificar o contrato: VIX.
+2026-03-16 17:06:32 | WARNING  | main                 | Sem qualificação de contrato para referência VIX.
+2026-03-16 17:06:32 | INFO     | src.data_feed        | A qualificar contrato: ^VIX…
+2026-03-16 17:06:32 | ERROR    | ib_insync.wrapper    | Error 200, reqId 18: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o, contract: Stock(symbol='^VIX', exchange='SMART', currency='USD')
+2026-03-16 17:06:32 | WARNING  | src.execution        | Erro IB — reqId=18, codigo=200: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o (contrato=Stock(symbol='^VIX', exchange='SMART', currency='USD'))
+2026-03-16 17:06:32 | WARNING  | ib_insync.ib         | Unknown contract: Stock(symbol='^VIX', exchange='SMART', currency='USD')
+2026-03-16 17:06:32 | WARNING  | src.data_feed        | Não foi possível qualificar o contrato: ^VIX.
+2026-03-16 17:06:32 | WARNING  | main                 | Sem qualificação de contrato para referência ^VIX.
+2026-03-16 17:06:32 | WARNING  | main                 | vix_proxy indisponível — bond_mr_hedge e options_premium operam em modo conservador.
+2026-03-16 17:06:32 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 0.9135, 'magnitude_atr': 0.6373, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 662.29, 'today_open': 668.34, 'atr14': 9.493223155629542}
+2026-03-16 17:06:32 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-16 17:06:32 | INFO     | main                 | Sinal multi-instrumento para SPY: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-16 17:06:32 | WARNING  | risk_manager         | Ordem para SPY — Rácio R:R insuficiente: 1.27 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:06:32 | DEBUG    | risk_manager         | Position sizing — Kelly: 0.3000 | Half-Kelly: 0.1500 | Cap: 0.0500 | Fracção final: 0.0100 | Risco: 1000.00 | Qty: 210 | Entry: 668.3400 | Stop: 673.0866
+2026-03-16 17:06:32 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 17:06:32 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-16 17:06:32 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 17:06:32 | DEBUG    | risk_manager         | Posições OK — Abertas: 0 / 10.
+2026-03-16 17:06:32 | DEBUG    | risk_manager         | Grids OK — Activas: 0 / 5.
+2026-03-16 17:06:32 | WARNING  | risk_manager         | Ordem REJEITADA para SPY — Motivo(s): Rácio R:R insuficiente: 1.27 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:06:32 | INFO     | main                 | Sinal multi-instrumento rejeitado para SPY pelo risco: Rácio R:R insuficiente: 1.27 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:06:32 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-16 17:06:33 | INFO     | src.data_feed        | A qualificar contrato: QQQ…
+2026-03-16 17:06:33 | INFO     | src.data_feed        | Contrato qualificado: QQQ (conId=320227571, exchange=SMART).
+2026-03-16 17:06:33 | INFO     | src.data_feed        | A obter barras históricas: QQQ | duração=1 Y | tamanho=1 day
+2026-03-16 17:06:34 | INFO     | src.data_feed        | Barras obtidas com sucesso: QQQ — 251 barras (de 2025-03-17 a 2026-03-16).
+2026-03-16 17:06:34 | INFO     | src.data_feed        | Indicadores calculados para QQQ: preço=600.7200 | SMA25=605.8928 | SMA50=613.0602 | SMA200=591.4117 | RSI14=45.5430 | ATR14=10.4894 | BB=[615.9095, 605.2930, 594.6765] | VolAvg20=55491486.2000 | ATRavg60=9.1901
+2026-03-16 17:06:34 | INFO     | main                 | Regime de QQQ: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-16 17:06:34 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-16 17:06:34 | ERROR    | src.data_feed        | current_volume falhou [1/3] para volume:QQQ: This event loop is already running
+2026-03-16 17:06:34 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_volume: volume:QQQ | erro=This event loop is already running
+2026-03-16 17:06:34 | WARNING  | src.data_feed        | Novo retry de current_volume em 0.5 s (tentativa 2/3).
+2026-03-16 17:06:34 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 21: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL, contract: Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS')
+2026-03-16 17:06:34 | WARNING  | src.execution        | Erro IB — reqId=21, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'))
+2026-03-16 17:06:49 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 14.40 s para volume:QQQ (identical_request=14.40s)
+2026-03-16 17:06:49 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-16 17:06:49 | ERROR    | src.data_feed        | current_volume falhou [2/3] para volume:QQQ: This event loop is already running
+2026-03-16 17:06:49 | WARNING  | src.data_feed        | Novo retry de current_volume em 1.0 s (tentativa 3/3).
+2026-03-16 17:06:49 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 22: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL, contract: Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS')
+2026-03-16 17:06:49 | WARNING  | src.execution        | Erro IB — reqId=22, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'))
+2026-03-16 17:07:04 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 13.90 s para volume:QQQ (identical_request=13.90s)
+2026-03-16 17:07:04 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-16 17:07:04 | ERROR    | src.data_feed        | current_volume falhou [3/3] para volume:QQQ: This event loop is already running
+2026-03-16 17:07:04 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_volume: volume:QQQ | erro=This event loop is already running
+2026-03-16 17:07:04 | ERROR    | src.data_feed        | Erro ao obter volume de QQQ: This event loop is already running
+2026-03-16 17:07:04 | INFO     | main                 | Sinal Kotegawa para QQQ: signal=False | horizonte=LONG_TERM | desvio=-0.85% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-16 17:07:04 | WARNING  | main                 | vix_proxy indisponível — bond_mr_hedge e options_premium operam em modo conservador.
+2026-03-16 17:07:04 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 1.0645, 'magnitude_atr': 0.6025, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 593.72, 'today_open': 600.04, 'atr14': 10.489386490623088}
+2026-03-16 17:07:04 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-16 17:07:04 | INFO     | main                 | Sinal multi-instrumento para QQQ: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-16 17:07:04 | WARNING  | risk_manager         | Ordem para QQQ — Rácio R:R insuficiente: 1.21 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:07:04 | DEBUG    | risk_manager         | Position sizing — Kelly: 0.3000 | Half-Kelly: 0.1500 | Cap: 0.0500 | Fracção final: 0.0100 | Risco: 1000.00 | Qty: 190 | Entry: 600.0400 | Stop: 605.2847
+2026-03-16 17:07:04 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 17:07:04 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-16 17:07:04 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 17:07:04 | DEBUG    | risk_manager         | Posições OK — Abertas: 0 / 10.
+2026-03-16 17:07:04 | DEBUG    | risk_manager         | Grids OK — Activas: 0 / 5.
+2026-03-16 17:07:04 | WARNING  | risk_manager         | Ordem REJEITADA para QQQ — Motivo(s): Rácio R:R insuficiente: 1.21 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:07:04 | INFO     | main                 | Sinal multi-instrumento rejeitado para QQQ pelo risco: Rácio R:R insuficiente: 1.21 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:07:04 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-16 17:07:05 | INFO     | src.data_feed        | A qualificar contrato: VIX…
+2026-03-16 17:07:05 | ERROR    | ib_insync.wrapper    | Error 200, reqId 24: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o, contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:07:05 | WARNING  | src.execution        | Erro IB — reqId=24, codigo=200: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o (contrato=Stock(symbol='VIX', exchange='SMART', currency='USD'))
+2026-03-16 17:07:05 | WARNING  | ib_insync.ib         | Unknown contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:07:05 | WARNING  | src.data_feed        | Não foi possível qualificar o contrato: VIX.
+2026-03-16 17:07:05 | WARNING  | main                 | Nao foi possivel qualificar o contrato VIX — a saltar.
+2026-03-16 17:07:05 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-16 17:07:05 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 17:07:05 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 17:12:05 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-16 17:12:05 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 17:12:05 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 17:12:05 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 17:12:05 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-16 17:12:06 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-16 17:12:06 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-16 17:12:06 | INFO     | src.data_feed        | A obter barras históricas: AAPL | duração=1 Y | tamanho=1 day
+2026-03-16 17:12:06 | INFO     | src.data_feed        | Barras obtidas com sucesso: AAPL — 251 barras (de 2025-03-17 a 2026-03-16).
+2026-03-16 17:12:06 | INFO     | src.data_feed        | Indicadores calculados para AAPL: preço=252.5100 | SMA25=263.7212 | SMA50=262.3206 | SMA200=245.8448 | RSI14=38.2318 | ATR14=5.9840 | BB=[274.8726, 262.5860, 250.2994] | VolAvg20=18608430.6000 | ATRavg60=5.4789
+2026-03-16 17:12:06 | INFO     | main                 | Regime de AAPL: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-16 17:12:06 | DEBUG    | src.data_feed        | A obter volume actual de AAPL…
+2026-03-16 17:12:06 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 27: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:12:06 | WARNING  | src.execution        | Erro IB — reqId=27, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:12:06 | ERROR    | src.data_feed        | current_volume falhou [1/3] para volume:AAPL: This event loop is already running
+2026-03-16 17:12:06 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_volume: volume:AAPL | erro=This event loop is already running
+2026-03-16 17:12:06 | WARNING  | src.data_feed        | Novo retry de current_volume em 0.5 s (tentativa 2/3).
+2026-03-16 17:12:21 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 14.40 s para volume:AAPL (identical_request=14.40s)
+2026-03-16 17:12:21 | DEBUG    | src.data_feed        | A obter volume actual de AAPL…
+2026-03-16 17:12:21 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 28: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:12:21 | WARNING  | src.execution        | Erro IB — reqId=28, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:12:21 | ERROR    | src.data_feed        | current_volume falhou [2/3] para volume:AAPL: This event loop is already running
+2026-03-16 17:12:21 | WARNING  | src.data_feed        | Novo retry de current_volume em 1.0 s (tentativa 3/3).
+2026-03-16 17:12:36 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 13.90 s para volume:AAPL (identical_request=13.90s)
+2026-03-16 17:12:36 | DEBUG    | src.data_feed        | A obter volume actual de AAPL…
+2026-03-16 17:12:36 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 29: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 17:12:36 | WARNING  | src.execution        | Erro IB — reqId=29, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 17:12:36 | ERROR    | src.data_feed        | current_volume falhou [3/3] para volume:AAPL: This event loop is already running
+2026-03-16 17:12:36 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_volume: volume:AAPL | erro=This event loop is already running
+2026-03-16 17:12:36 | ERROR    | src.data_feed        | Erro ao obter volume de AAPL: This event loop is already running
+2026-03-16 17:12:36 | INFO     | main                 | Sinal Kotegawa para AAPL: signal=False | horizonte=LONG_TERM | desvio=-4.25% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-16 17:12:36 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 0.7916, 'magnitude_atr': 0.3309, 'fill_probability': 0.85, 'is_high_prob': False, 'prev_close': 250.12, 'today_open': 252.1, 'atr14': 5.984039620588862}
+2026-03-16 17:12:36 | INFO     | src.gap_fade         | Gap fade sem acção: gap não transaccionável.
+2026-03-16 17:12:36 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-16 17:12:37 | INFO     | src.data_feed        | A qualificar contrato: SPY…
+2026-03-16 17:12:37 | ERROR    | ib_insync.wrapper    | Error 300, reqId 29: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:29
+2026-03-16 17:12:37 | WARNING  | src.execution        | Erro IB — reqId=29, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:29 (contrato=None)
+2026-03-16 17:12:37 | INFO     | src.data_feed        | Contrato qualificado: SPY (conId=756733, exchange=SMART).
+2026-03-16 17:12:37 | INFO     | src.data_feed        | A obter barras históricas: SPY | duração=1 Y | tamanho=1 day
+2026-03-16 17:12:37 | INFO     | src.data_feed        | Barras obtidas com sucesso: SPY — 251 barras (de 2025-03-17 a 2026-03-16).
+2026-03-16 17:12:37 | INFO     | src.data_feed        | Indicadores calculados para SPY: preço=668.4600 | SMA25=682.2560 | SMA50=686.1132 | SMA200=658.9996 | RSI14=39.9886 | ATR14=9.4932 | BB=[697.2624, 680.7675, 664.2726] | VolAvg20=62820730.9500 | ATRavg60=7.2721
+2026-03-16 17:12:37 | INFO     | main                 | Regime de SPY: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-16 17:12:37 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-16 17:12:37 | ERROR    | src.data_feed        | current_volume falhou [1/3] para volume:SPY: This event loop is already running
+2026-03-16 17:12:37 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_volume: volume:SPY | erro=This event loop is already running
+2026-03-16 17:12:37 | WARNING  | src.data_feed        | Novo retry de current_volume em 0.5 s (tentativa 2/3).
+2026-03-16 17:12:38 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 32: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL, contract: Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY')
+2026-03-16 17:12:38 | WARNING  | src.execution        | Erro IB — reqId=32, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL (contrato=Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY'))
+2026-03-16 17:12:52 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 14.40 s para volume:SPY (identical_request=14.40s)
+2026-03-16 17:12:52 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-16 17:12:52 | ERROR    | src.data_feed        | current_volume falhou [2/3] para volume:SPY: This event loop is already running
+2026-03-16 17:12:52 | WARNING  | src.data_feed        | Novo retry de current_volume em 1.0 s (tentativa 3/3).
+2026-03-16 17:12:53 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 33: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL, contract: Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY')
+2026-03-16 17:12:53 | WARNING  | src.execution        | Erro IB — reqId=33, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.SPY ARCA/TOP/ALL (contrato=Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY'))
+2026-03-16 17:13:07 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 13.90 s para volume:SPY (identical_request=13.90s)
+2026-03-16 17:13:07 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-16 17:13:07 | ERROR    | src.data_feed        | current_volume falhou [3/3] para volume:SPY: This event loop is already running
+2026-03-16 17:13:07 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_volume: volume:SPY | erro=This event loop is already running
+2026-03-16 17:13:07 | ERROR    | src.data_feed        | Erro ao obter volume de SPY: This event loop is already running
+2026-03-16 17:13:07 | INFO     | main                 | Sinal Kotegawa para SPY: signal=False | horizonte=LONG_TERM | desvio=-2.02% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-16 17:13:07 | INFO     | src.data_feed        | A qualificar contrato: VIX…
+2026-03-16 17:13:08 | ERROR    | ib_insync.wrapper    | Error 200, reqId 35: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o, contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:13:08 | WARNING  | src.execution        | Erro IB — reqId=35, codigo=200: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o (contrato=Stock(symbol='VIX', exchange='SMART', currency='USD'))
+2026-03-16 17:13:08 | WARNING  | ib_insync.ib         | Unknown contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:13:08 | WARNING  | src.data_feed        | Não foi possível qualificar o contrato: VIX.
+2026-03-16 17:13:08 | WARNING  | main                 | Sem qualificação de contrato para referência VIX.
+2026-03-16 17:13:08 | INFO     | src.data_feed        | A qualificar contrato: ^VIX…
+2026-03-16 17:13:08 | ERROR    | ib_insync.wrapper    | Error 200, reqId 36: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o, contract: Stock(symbol='^VIX', exchange='SMART', currency='USD')
+2026-03-16 17:13:08 | WARNING  | src.execution        | Erro IB — reqId=36, codigo=200: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o (contrato=Stock(symbol='^VIX', exchange='SMART', currency='USD'))
+2026-03-16 17:13:08 | WARNING  | ib_insync.ib         | Unknown contract: Stock(symbol='^VIX', exchange='SMART', currency='USD')
+2026-03-16 17:13:08 | WARNING  | src.data_feed        | Não foi possível qualificar o contrato: ^VIX.
+2026-03-16 17:13:08 | WARNING  | main                 | Sem qualificação de contrato para referência ^VIX.
+2026-03-16 17:13:08 | WARNING  | main                 | vix_proxy indisponível — bond_mr_hedge e options_premium operam em modo conservador.
+2026-03-16 17:13:08 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 0.9135, 'magnitude_atr': 0.6373, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 662.29, 'today_open': 668.34, 'atr14': 9.493223155629542}
+2026-03-16 17:13:08 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-16 17:13:08 | INFO     | main                 | Sinal multi-instrumento para SPY: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-16 17:13:08 | WARNING  | risk_manager         | Ordem para SPY — Rácio R:R insuficiente: 1.27 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:13:08 | DEBUG    | risk_manager         | Position sizing — Kelly: 0.3000 | Half-Kelly: 0.1500 | Cap: 0.0500 | Fracção final: 0.0100 | Risco: 1000.00 | Qty: 210 | Entry: 668.3400 | Stop: 673.0866
+2026-03-16 17:13:08 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 17:13:08 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-16 17:13:08 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 17:13:08 | DEBUG    | risk_manager         | Posições OK — Abertas: 0 / 10.
+2026-03-16 17:13:08 | DEBUG    | risk_manager         | Grids OK — Activas: 0 / 5.
+2026-03-16 17:13:08 | WARNING  | risk_manager         | Ordem REJEITADA para SPY — Motivo(s): Rácio R:R insuficiente: 1.27 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:13:08 | INFO     | main                 | Sinal multi-instrumento rejeitado para SPY pelo risco: Rácio R:R insuficiente: 1.27 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:13:08 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-16 17:13:08 | INFO     | src.data_feed        | A qualificar contrato: QQQ…
+2026-03-16 17:13:08 | INFO     | src.data_feed        | Contrato qualificado: QQQ (conId=320227571, exchange=SMART).
+2026-03-16 17:13:08 | INFO     | src.data_feed        | A obter barras históricas: QQQ | duração=1 Y | tamanho=1 day
+2026-03-16 17:13:09 | INFO     | src.data_feed        | Barras obtidas com sucesso: QQQ — 251 barras (de 2025-03-17 a 2026-03-16).
+2026-03-16 17:13:09 | INFO     | src.data_feed        | Indicadores calculados para QQQ: preço=600.5600 | SMA25=605.8864 | SMA50=613.0570 | SMA200=591.4109 | RSI14=45.4246 | ATR14=10.4894 | BB=[615.9162, 605.2850, 594.6538] | VolAvg20=55505599.6500 | ATRavg60=9.1901
+2026-03-16 17:13:09 | INFO     | main                 | Regime de QQQ: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-16 17:14:27 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 78.56 s para volume:QQQ (historical_window=78.56s)
+2026-03-16 17:14:27 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-16 17:14:27 | ERROR    | src.data_feed        | current_volume falhou [1/3] para volume:QQQ: This event loop is already running
+2026-03-16 17:14:27 | WARNING  | main                 | ALERTA OPERACIONAL: Retry IB iniciado em current_volume: volume:QQQ | erro=This event loop is already running
+2026-03-16 17:14:27 | WARNING  | src.data_feed        | Novo retry de current_volume em 0.5 s (tentativa 2/3).
+2026-03-16 17:14:28 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 39: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL, contract: Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS')
+2026-03-16 17:14:28 | WARNING  | src.execution        | Erro IB — reqId=39, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'))
+2026-03-16 17:14:42 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 14.40 s para volume:QQQ (identical_request=14.40s)
+2026-03-16 17:14:42 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-16 17:14:42 | ERROR    | src.data_feed        | current_volume falhou [2/3] para volume:QQQ: This event loop is already running
+2026-03-16 17:14:42 | WARNING  | src.data_feed        | Novo retry de current_volume em 1.0 s (tentativa 3/3).
+2026-03-16 17:14:42 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 40: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL, contract: Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS')
+2026-03-16 17:14:42 | WARNING  | src.execution        | Erro IB — reqId=40, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.Os dados de mercado atrasados est\u00e3o dispon\u00edveis.QQQ NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'))
+2026-03-16 17:14:57 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 13.90 s para volume:QQQ (identical_request=13.90s)
+2026-03-16 17:14:57 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-16 17:14:57 | ERROR    | src.data_feed        | current_volume falhou [3/3] para volume:QQQ: This event loop is already running
+2026-03-16 17:14:57 | WARNING  | main                 | ALERTA OPERACIONAL: Falha terminal IB em current_volume: volume:QQQ | erro=This event loop is already running
+2026-03-16 17:14:57 | ERROR    | src.data_feed        | Erro ao obter volume de QQQ: This event loop is already running
+2026-03-16 17:14:57 | INFO     | main                 | Sinal Kotegawa para QQQ: signal=False | horizonte=LONG_TERM | desvio=-0.88% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-16 17:14:57 | WARNING  | main                 | vix_proxy indisponível — bond_mr_hedge e options_premium operam em modo conservador.
+2026-03-16 17:14:57 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 1.0645, 'magnitude_atr': 0.6025, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 593.72, 'today_open': 600.04, 'atr14': 10.489386490623088}
+2026-03-16 17:14:57 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-16 17:14:57 | INFO     | main                 | Sinal multi-instrumento para QQQ: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-16 17:14:57 | WARNING  | risk_manager         | Ordem para QQQ — Rácio R:R insuficiente: 1.21 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:14:57 | DEBUG    | risk_manager         | Position sizing — Kelly: 0.3000 | Half-Kelly: 0.1500 | Cap: 0.0500 | Fracção final: 0.0100 | Risco: 1000.00 | Qty: 190 | Entry: 600.0400 | Stop: 605.2847
+2026-03-16 17:14:57 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 17:14:57 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-16 17:14:57 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 17:14:57 | DEBUG    | risk_manager         | Posições OK — Abertas: 0 / 10.
+2026-03-16 17:14:57 | DEBUG    | risk_manager         | Grids OK — Activas: 0 / 5.
+2026-03-16 17:14:57 | WARNING  | risk_manager         | Ordem REJEITADA para QQQ — Motivo(s): Rácio R:R insuficiente: 1.21 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:14:57 | INFO     | main                 | Sinal multi-instrumento rejeitado para QQQ pelo risco: Rácio R:R insuficiente: 1.21 (mínimo: 2.5). Alvo deve ser >= 2.5x o risco.
+2026-03-16 17:14:57 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-16 17:14:58 | INFO     | src.data_feed        | A qualificar contrato: VIX…
+2026-03-16 17:14:58 | ERROR    | ib_insync.wrapper    | Error 200, reqId 42: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o, contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:14:58 | WARNING  | src.execution        | Erro IB — reqId=42, codigo=200: N\u00e3o foram encontradas defini\u00e7\u00f5es de t\u00edtulo para a solicita\u00e7\u00e3o (contrato=Stock(symbol='VIX', exchange='SMART', currency='USD'))
+2026-03-16 17:14:58 | WARNING  | ib_insync.ib         | Unknown contract: Stock(symbol='VIX', exchange='SMART', currency='USD')
+2026-03-16 17:14:58 | WARNING  | src.data_feed        | Não foi possível qualificar o contrato: VIX.
+2026-03-16 17:14:58 | WARNING  | main                 | Nao foi possivel qualificar o contrato VIX — a saltar.
+2026-03-16 17:14:58 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-16 17:14:58 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 17:14:58 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 17:15:29 | WARNING  | main                 | Sinal SIGINT recebido — a iniciar encerramento gracioso...
+2026-03-16 17:15:29 | INFO     | main                 | A iniciar encerramento gracioso...
+2026-03-16 17:15:29 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 17:15:29 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 17:15:29 | INFO     | main                 | Estado das grids persistido com sucesso.
+2026-03-16 17:15:29 | INFO     | src.logger           | Metricas guardadas em /Users/beatrizneves/Documents/Playground/bot-trading/data/metrics.json
+2026-03-16 17:15:29 | INFO     | main                 | Metricas finais guardadas com sucesso.
+2026-03-16 17:15:29 | WARNING  | src.data_feed        | Desconexão do IB detectada pelo callback.
+2026-03-16 17:15:29 | INFO     | src.data_feed        | Desligado do IB com sucesso.
+2026-03-16 17:15:29 | INFO     | main                 | Ligacao ao IB encerrada.
+2026-03-16 17:15:29 | WARNING  | main                 | IB desconectado. Aguardar sequencia de reconexao.
+2026-03-16 17:15:29 | INFO     | src.data_feed        | A iniciar reconexão automática ao IB com espera inicial de 65 s…
+2026-03-16 17:15:29 | WARNING  | main                 | ALERTA OPERACIONAL: ⚠️ IB desconectado. A reconectar...
+2026-03-16 17:15:30 | INFO     | main                 | Bot encerrado com sucesso.
