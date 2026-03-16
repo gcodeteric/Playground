@@ -814,3 +814,42 @@
 2026-03-16 17:15:29 | INFO     | src.data_feed        | A iniciar reconexão automática ao IB com espera inicial de 65 s…
 2026-03-16 17:15:29 | WARNING  | main                 | ALERTA OPERACIONAL: ⚠️ IB desconectado. A reconectar...
 2026-03-16 17:15:30 | INFO     | main                 | Bot encerrado com sucesso.
+2026-03-16 21:30:52 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-16 21:30:52 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-16 21:30:52 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-16 21:30:52 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-16 21:30:52 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 100000.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-16 21:30:52 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-16 21:30:52 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-16 21:30:52 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-16 21:30:52 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 21:30:52 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-16 21:30:52 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-16 21:30:52 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-16 21:30:52 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-16 21:30:52 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-16 21:30:52 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'SPY', 'QQQ', 'VIX'] | capital: 100000.00 | ciclo: 300 s | paper: True
+2026-03-16 21:30:52 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-16 21:30:52 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-16 21:30:52 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 21:30:52 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-16 21:30:52 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-16 21:30:52 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-16 21:30:52 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-16 21:30:52 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-16 21:30:52 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 5 s.
+2026-03-16 21:30:57 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=2)…
+2026-03-16 21:30:57 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-16 21:30:57 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-16 21:30:57 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 10 s.
+2026-03-16 21:31:07 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=3)…
+2026-03-16 21:31:07 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-16 21:31:07 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-16 21:31:07 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 20 s.
+2026-03-16 21:31:07 | CRITICAL | main                 | Nao foi possivel ligar ao IB apos 3 tentativas
