@@ -18,7 +18,7 @@ def test_us_equity_open_session():
 
 def test_us_equity_preclose():
     spec = parse_watchlist_entry("AAPL")
-    now = datetime(2026, 3, 16, 20, 57, tzinfo=UTC)
+    now = datetime(2026, 3, 16, 19, 57, tzinfo=UTC)
     state = get_session_state(spec, now)
     assert state.is_open is True
     assert state.is_pre_close is True

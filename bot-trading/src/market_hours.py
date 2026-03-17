@@ -121,12 +121,48 @@ def _get_state_for_asset_type(asset_type: str, now: datetime) -> SessionState:
 
 def _equity_session_state(asset_type: str, now: datetime) -> SessionState:
     calendar_name, open_str, close_str = SCHEDULES[asset_type]
-    open_time = _parse_time(open_str)
-    close_time = _parse_time(close_str)
 
+    if get_calendar is not None and calendar_name:
+        try:
+            cal_name = _CALENDAR_ALIASES.get(calendar_name, calendar_name)
+            cal = get_calendar(cal_name)
+            schedule = cal.schedule(now.date(), now.date(), tz="UTC")
+            if schedule.empty:
+                return SessionState(False, False, "FECHADO_FERIADO", None, None)
+
+            opens_at = schedule.iloc[0]["market_open"].to_pydatetime().replace(
+                tzinfo=UTC,
+            )
+            closes_at = schedule.iloc[0]["market_close"].to_pydatetime().replace(
+                tzinfo=UTC,
+            )
+
+            if now < opens_at:
+                return SessionState(
+                    False, False, "ANTES_ABERTURA", opens_at, closes_at,
+                )
+            if now >= closes_at:
+                return SessionState(
+                    False, False, "DEPOIS_FECHO", opens_at, closes_at,
+                )
+
+            mins = _minutes_between(closes_at, now)
+            is_pre_close = mins <= _PRE_CLOSE_MINUTES
+            return SessionState(
+                True,
+                is_pre_close,
+                "PRE_CLOSE" if is_pre_close else "ABERTO",
+                opens_at,
+                closes_at,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("pandas falhou %s: %s. Fallback.", calendar_name, exc)
+
+    # Fallback original (mantém compatibilidade)
     if not _is_trading_day(calendar_name, now):
         return SessionState(False, False, "FECHADO_FERIADO", None, None)
-
+    open_time = _parse_time(open_str)
+    close_time = _parse_time(close_str)
     opens_at = datetime.combine(now.date(), open_time, tzinfo=UTC)
     closes_at = datetime.combine(now.date(), close_time, tzinfo=UTC)
 
