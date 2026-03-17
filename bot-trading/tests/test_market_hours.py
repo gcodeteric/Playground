@@ -26,6 +26,28 @@ def test_us_equity_preclose():
     assert minutes_to_close(spec.display, get_asset_type(spec), now) < 5
 
 
+def test_us_equity_holiday_is_closed():
+    spec = parse_watchlist_entry("AAPL")
+    now = datetime(2026, 12, 25, 15, 0, tzinfo=UTC)  # Natal
+    state = get_session_state(spec, now)
+    assert state.is_open is False
+    assert state.status == "FECHADO_FERIADO"
+
+
+def test_us_equity_dst_transition_updates_open_hour():
+    spec = parse_watchlist_entry("AAPL")
+    before_dst = datetime(2026, 3, 6, 15, 0, tzinfo=UTC)
+    after_dst = datetime(2026, 3, 16, 15, 0, tzinfo=UTC)
+
+    before_state = get_session_state(spec, before_dst)
+    after_state = get_session_state(spec, after_dst)
+
+    assert before_state.opens_at is not None
+    assert after_state.opens_at is not None
+    assert before_state.opens_at.hour == 14
+    assert after_state.opens_at.hour == 13
+
+
 def test_eu_equity_closed_after_hours():
     spec = parse_watchlist_entry("SAP:STK:XETRA:EUR")
     now = datetime(2026, 3, 16, 17, 0, tzinfo=UTC)

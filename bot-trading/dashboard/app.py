@@ -1,19 +1,52 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime, timedelta
+import sys
+from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 
-# ── Configuração ──────────────────────────────────────────────
-DATA_DIR = Path(__file__).parent.parent / "data"
-REFRESH_INTERVAL = 5  # segundos
+APP_DIR = Path(__file__).resolve().parent
+if str(APP_DIR) not in sys.path:
+    sys.path.insert(0, str(APP_DIR))
+if str(APP_DIR.parent) not in sys.path:
+    sys.path.insert(0, str(APP_DIR.parent))
 
-KILL_SWITCH_LIMITS = {"daily": 0.03, "weekly": 0.06, "monthly": 0.10}
+try:
+    from dashboard.helpers import (
+        DATA_DIR,
+        build_status_summary,
+        compute_kpis,
+        emit_command,
+        load_grids_state,
+        load_json_file,
+        load_log_tail,
+        load_metrics,
+        load_positions,
+        load_trades_dataframe,
+        safe_metric,
+    )
+except ModuleNotFoundError:  # pragma: no cover - compatibilidade streamlit local
+    from helpers import (  # type: ignore[no-redef]
+        DATA_DIR,
+        build_status_summary,
+        compute_kpis,
+        emit_command,
+        load_grids_state,
+        load_json_file,
+        load_log_tail,
+        load_metrics,
+        load_positions,
+        load_trades_dataframe,
+        safe_metric,
+    )
 
+PAPER_LABEL = "PAPER MODE"
+DEFAULT_REFRESH_SECONDS = 5
 MODULE_LABELS = {
     "kotegawa": "Kotegawa (Core)",
     "sector_rotation": "Rotação Sectorial",
@@ -27,410 +60,444 @@ MODULE_LABELS = {
     "options_premium": "Options Premium",
     "bond_mr_hedge": "Bond MR Hedge",
 }
-
-REGIME_COLOURS = {
-    "BULL": "#00c853",
-    "BEAR": "#d50000",
-    "SIDEWAYS": "#ff6d00",
-    "RANGING": "#aa00ff",
-    "UNKNOWN": "#607d8b",
-}
+RISK_LIMITS = {"daily": 0.03, "weekly": 0.06, "monthly": 0.10}
 
 
-# ── Carregamento de dados ──────────────────────────────────────
-
-@st.cache_data(ttl=REFRESH_INTERVAL)
-def load_metrics() -> dict:
+def _file_signature(path: Path) -> tuple[str, int]:
+    """Gera uma assinatura simples baseada em caminho e mtime."""
     try:
-        raw = (DATA_DIR / "metrics.json").read_text(encoding="utf-8").strip()
-        return json.loads(raw) if raw and raw != "null" else {}
-    except Exception:
-        return {}
+        return str(path), int(path.stat().st_mtime_ns)
+    except OSError:
+        return str(path), -1
 
 
-@st.cache_data(ttl=REFRESH_INTERVAL)
-def load_trades() -> pd.DataFrame:
-    try:
-        raw = (DATA_DIR / "trades_log.json").read_text(encoding="utf-8").strip()
-        data = json.loads(raw) if raw and raw != "null" else {}
-        trades = data.get("trades", []) if isinstance(data, dict) else data
-        if not trades:
-            return pd.DataFrame()
-        df = pd.DataFrame(trades)
-        for col in ("timestamp", "open_time", "close_time", "date"):
-            if col in df.columns:
-                df[col] = pd.to_datetime(df[col], errors="coerce")
-        for col in ("pnl", "profit_loss", "realized_pnl"):
-            if col in df.columns:
-                df["pnl"] = pd.to_numeric(df[col], errors="coerce").fillna(0.0)
-                break
-        if "pnl" not in df.columns:
-            df["pnl"] = 0.0
-        return df
-    except Exception:
-        return pd.DataFrame()
+@st.cache_data(show_spinner=False)
+def _load_metrics_cached(path_str: str, _signature: int) -> dict[str, Any]:
+    return load_metrics(Path(path_str))
 
 
-@st.cache_data(ttl=REFRESH_INTERVAL)
-def load_grids() -> dict:
-    try:
-        raw = (DATA_DIR / "grids_state.json").read_text(encoding="utf-8").strip()
-        data = json.loads(raw) if raw and raw != "null" else {}
-        if isinstance(data, dict) and "grids" in data and isinstance(data["grids"], list):
-            return {
-                item.get("id", f"grid_{idx}"): item
-                for idx, item in enumerate(data["grids"])
-                if isinstance(item, dict)
-            }
-        return data if isinstance(data, dict) else {}
-    except Exception:
-        return {}
+@st.cache_data(show_spinner=False)
+def _load_trades_cached(path_str: str, _signature: int) -> pd.DataFrame:
+    return load_trades_dataframe(Path(path_str))
 
 
-@st.cache_data(ttl=REFRESH_INTERVAL)
-def load_log_tail(n_lines: int = 100) -> list[str]:
-    try:
-        lines = (DATA_DIR / "bot.log").read_text(encoding="utf-8").splitlines()
-        return lines[-n_lines:]
-    except Exception:
-        return []
+@st.cache_data(show_spinner=False)
+def _load_grids_cached(path_str: str, _signature: int) -> list[dict[str, Any]]:
+    return load_grids_state(Path(path_str))
 
 
-# ── Helpers ───────────────────────────────────────────────────
-
-def safe_float(value: object, default: float = 0.0) -> float:
-    try:
-        return float(value)
-    except (TypeError, ValueError):
-        return default
+@st.cache_data(show_spinner=False)
+def _load_json_cached(path_str: str, _signature: int) -> dict[str, Any]:
+    data = load_json_file(Path(path_str))
+    return data if isinstance(data, dict) else {}
 
 
-def pct_bar(value: float, limit: float, label: str) -> None:
-    ratio = min(value / limit, 1.0) if limit > 0 else 0.0
-    st.markdown(f"**{label}** — `{value * 100:.2f}%` / `{limit * 100:.1f}%`")
-    st.progress(ratio, text=f"{ratio * 100:.1f}% do limite usado")
+@st.cache_data(show_spinner=False)
+def _load_logs_cached(path_str: str, _signature: int, max_lines: int) -> list[str]:
+    return load_log_tail(Path(path_str), max_lines=max_lines)
 
 
-def build_equity_curve(trades_df: pd.DataFrame) -> go.Figure:
+def _fmt_eur(value: Any) -> str:
+    numeric = value if isinstance(value, (int, float)) else None
+    return f"€{numeric:,.2f}" if numeric is not None else "—"
+
+
+def _fmt_dt(value: Any) -> str:
+    if value is None or value == "—":
+        return "—"
+    if isinstance(value, pd.Timestamp):
+        value = value.to_pydatetime()
+    if isinstance(value, datetime):
+        return value.astimezone(UTC).strftime("%Y-%m-%d %H:%M UTC")
+    return str(value)
+
+
+def _risk_tone(value: float, limit: float) -> str:
+    if limit <= 0:
+        return "secondary"
+    ratio = abs(value) / limit
+    if ratio >= 1.0:
+        return "danger"
+    if ratio >= 0.7:
+        return "warning"
+    return "ok"
+
+
+def _build_equity_curve(trades_df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
     if trades_df.empty or "pnl" not in trades_df.columns:
         fig.add_annotation(
             text="Sem trades ainda",
-            xref="paper",
-            yref="paper",
             x=0.5,
             y=0.5,
+            xref="paper",
+            yref="paper",
             showarrow=False,
-            font={"size": 16, "color": "#607d8b"},
         )
     else:
-        ts_col = next(
-            (col for col in ("timestamp", "close_time", "date") if col in trades_df.columns),
-            None,
-        )
-        df = trades_df.sort_values(ts_col) if ts_col else trades_df
-        df = df.copy()
+        df = trades_df.copy()
         df["equity"] = df["pnl"].cumsum()
+        x = df["timestamp"] if "timestamp" in df.columns else list(range(len(df)))
         fig.add_trace(
             go.Scatter(
-                x=list(range(len(df))),
-                y=df["equity"].tolist(),
+                x=x,
+                y=df["equity"],
                 mode="lines",
                 line={"color": "#00c853", "width": 2},
                 fill="tozeroy",
-                fillcolor="rgba(0,200,83,0.1)",
+                fillcolor="rgba(0,200,83,0.10)",
                 name="Equity",
             )
         )
-    fig.update_layout(
-        height=300,
-        margin={"l": 10, "r": 10, "t": 10, "b": 10},
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
-        xaxis={"showgrid": False, "color": "#607d8b"},
-        yaxis={"showgrid": True, "gridcolor": "#1e2530", "color": "#607d8b"},
-        font={"color": "#e0e0e0"},
-    )
+    fig.update_layout(height=320, margin={"l": 8, "r": 8, "t": 8, "b": 8})
     return fig
 
 
-def build_pnl_by_module(trades_df: pd.DataFrame) -> go.Figure:
+def _build_pnl_by_symbol(trades_df: pd.DataFrame) -> go.Figure:
     fig = go.Figure()
-    if trades_df.empty or "pnl" not in trades_df.columns:
+    if trades_df.empty or "symbol" not in trades_df.columns or "pnl" not in trades_df.columns:
         fig.add_annotation(
-            text="Sem trades ainda",
-            xref="paper",
-            yref="paper",
+            text="Sem dados suficientes",
             x=0.5,
             y=0.5,
+            xref="paper",
+            yref="paper",
             showarrow=False,
-            font={"size": 16, "color": "#607d8b"},
         )
-    else:
-        module_col = next(
-            (col for col in ("module", "strategy", "source") if col in trades_df.columns),
-            None,
-        )
-        df = trades_df.copy()
-        if not module_col:
-            df["module"] = "kotegawa"
-            module_col = "module"
-        grouped = (
-            df.groupby(module_col)["pnl"].sum().reset_index().sort_values("pnl", ascending=False)
-        )
-        grouped["label"] = grouped[module_col].map(lambda value: MODULE_LABELS.get(value, value))
-        colours = ["#00c853" if value >= 0 else "#d50000" for value in grouped["pnl"]]
-        fig.add_trace(
-            go.Bar(
-                x=grouped["label"].tolist(),
-                y=grouped["pnl"].tolist(),
-                marker_color=colours,
-                name="P&L",
-            )
-        )
-    fig.update_layout(
-        height=300,
-        margin={"l": 10, "r": 10, "t": 10, "b": 10},
-        paper_bgcolor="#0e1117",
-        plot_bgcolor="#0e1117",
-        xaxis={"color": "#607d8b"},
-        yaxis={"showgrid": True, "gridcolor": "#1e2530", "color": "#607d8b"},
-        font={"color": "#e0e0e0"},
-    )
+        return fig
+    grouped = trades_df.groupby("symbol", dropna=False)["pnl"].sum().sort_values(ascending=False)
+    colors = ["#00c853" if value >= 0 else "#d50000" for value in grouped.values]
+    fig.add_trace(go.Bar(x=grouped.index.tolist(), y=grouped.values.tolist(), marker_color=colors))
+    fig.update_layout(height=320, margin={"l": 8, "r": 8, "t": 8, "b": 8})
     return fig
 
 
-# ── Layout ────────────────────────────────────────────────────
+def _build_trades_per_day(trades_df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    if trades_df.empty or "timestamp" not in trades_df.columns:
+        fig.add_annotation(text="Sem timestamps suficientes", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
+        return fig
+    df = trades_df.dropna(subset=["timestamp"]).copy()
+    if df.empty:
+        fig.add_annotation(text="Sem timestamps suficientes", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
+        return fig
+    df["day"] = df["timestamp"].dt.strftime("%Y-%m-%d")
+    counts = df.groupby("day").size()
+    fig.add_trace(go.Bar(x=counts.index.tolist(), y=counts.values.tolist(), marker_color="#1e88e5"))
+    fig.update_layout(height=320, margin={"l": 8, "r": 8, "t": 8, "b": 8})
+    return fig
 
-def main() -> None:
-    st.set_page_config(
-        page_title="Bot Trading Monitor",
-        page_icon="🤖",
-        layout="wide",
-        initial_sidebar_state="collapsed",
-    )
-    st.markdown(
-        """
-    <style>
-    .stApp { background-color: #0e1117; color: #e0e0e0; }
-    div[data-testid="stMetricValue"] { font-size: 1.8rem; }
-    </style>
-    """,
-        unsafe_allow_html=True,
-    )
 
-    metrics = load_metrics()
+def _build_drawdown_curve(trades_df: pd.DataFrame) -> go.Figure:
+    fig = go.Figure()
+    if trades_df.empty or "pnl" not in trades_df.columns:
+        fig.add_annotation(text="Sem trades ainda", x=0.5, y=0.5, xref="paper", yref="paper", showarrow=False)
+        return fig
+    equity = trades_df["pnl"].cumsum()
+    drawdown = equity.cummax() - equity
+    x = trades_df["timestamp"] if "timestamp" in trades_df.columns else list(range(len(drawdown)))
+    fig.add_trace(go.Scatter(x=x, y=drawdown, mode="lines", line={"color": "#ff6d00", "width": 2}))
+    fig.update_layout(height=320, margin={"l": 8, "r": 8, "t": 8, "b": 8})
+    return fig
 
-    col_title, col_time, col_mode = st.columns(3)
-    with col_title:
-        st.title("🤖 Bot Trading — Monitor")
-    with col_time:
-        st.caption(f"🔄 Auto-refresh: {REFRESH_INTERVAL}s")
-        st.caption(f"⏰ {datetime.now().strftime('%H:%M:%S')}")
-    with col_mode:
-        paper = bool(metrics.get("paper_trading", True))
+
+def _grid_rows(grids_state: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    for grid in grids_state:
+        levels = grid.get("levels", [])
+        bought = len([level for level in levels if isinstance(level, dict) and level.get("status") == "bought"]) if isinstance(levels, list) else 0
+        rows.append(
+            {
+                "grid_id": grid.get("id", "—"),
+                "symbol": grid.get("symbol", "—"),
+                "module": MODULE_LABELS.get(str(grid.get("module", "kotegawa")), str(grid.get("module", "—"))),
+                "regime": str(grid.get("regime", "UNKNOWN")).upper(),
+                "status": str(grid.get("status", "unknown")).upper(),
+                "levels_used": bought,
+                "levels_total": len(levels) if isinstance(levels, list) else 0,
+                "center_price": grid.get("center_price"),
+                "total_pnl": grid.get("total_pnl"),
+                "created_at": grid.get("created_at") or grid.get("opened_at"),
+            }
+        )
+    return rows
+
+
+def _render_header(status: dict[str, str], kpis: dict[str, Any]) -> None:
+    title_col, status_col, meta_col = st.columns([2.2, 1.2, 1.2])
+    with title_col:
+        st.title("Trading Bot v8 — Dashboard Pro")
+        st.caption("Observabilidade e controlo seguro local, exclusivamente em PAPER.")
+    with status_col:
+        tone_color = {"ok": "#00c853", "warning": "#ff6d00", "danger": "#d50000"}.get(status["tone"], "#607d8b")
         st.markdown(
             (
-                f"<div style='background:{'#ff6d00' if paper else '#d50000'};"
-                "padding:8px 12px;border-radius:8px;text-align:center;"
-                f"font-weight:bold;'>{'📄 PAPER' if paper else '💰 LIVE'}</div>"
+                f"<div style='padding:0.9rem;border-radius:0.8rem;background:{tone_color};"
+                "text-align:center;font-weight:700;'>"
+                f"{PAPER_LABEL} • {status['health']}</div>"
             ),
             unsafe_allow_html=True,
         )
+    with meta_col:
+        st.metric("Heartbeat", _fmt_dt(kpis.get("heartbeat")))
+        st.metric("Preflight", _fmt_dt(kpis.get("last_preflight")))
+
+
+def _render_overview(kpis: dict[str, Any], trades_df: pd.DataFrame, status: dict[str, str]) -> None:
+    metrics = st.columns(6)
+    metrics[0].metric("Capital", _fmt_eur(kpis.get("capital")))
+    metrics[1].metric("Equity estimada", _fmt_eur(kpis.get("estimated_equity")))
+    metrics[2].metric("PnL diário", _fmt_eur(kpis.get("daily_pnl")))
+    metrics[3].metric("PnL acumulado", _fmt_eur(kpis.get("total_pnl")))
+    metrics[4].metric("Trades", str(kpis.get("trades_count", 0)))
+    metrics[5].metric("Win rate", f"{float(kpis.get('win_rate', 0.0)):.1f}%")
+
+    info1, info2, info3, info4 = st.columns(4)
+    info1.metric("Open positions", str(kpis.get("open_positions", 0)))
+    info2.metric("Active grids", str(kpis.get("active_grids", 0)))
+    info3.metric("Telegram", str(status.get("telegram_status", "unknown")).upper())
+    info4.metric("Pending commands", str(kpis.get("pending_commands", 0)))
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Equity curve")
+        st.plotly_chart(_build_equity_curve(trades_df), use_container_width=True)
+    with right:
+        st.subheader("PnL por símbolo")
+        st.plotly_chart(_build_pnl_by_symbol(trades_df), use_container_width=True)
+
+
+def _render_trading(trades_df: pd.DataFrame) -> None:
+    if trades_df.empty:
+        st.info("Sem trades registados. O dashboard continua funcional com o bot parado.")
+        return
+
+    module_options = ["Todos"] + sorted(trades_df["module"].dropna().astype(str).unique().tolist())
+    symbol_options = ["Todos"] + sorted(trades_df["symbol"].dropna().astype(str).unique().tolist()) if "symbol" in trades_df.columns else ["Todos"]
+    selected_module = st.selectbox("Módulo", module_options)
+    selected_symbol = st.selectbox("Símbolo", symbol_options)
+
+    filtered = trades_df.copy()
+    if selected_module != "Todos":
+        filtered = filtered[filtered["module"].astype(str) == selected_module]
+    if selected_symbol != "Todos" and "symbol" in filtered.columns:
+        filtered = filtered[filtered["symbol"].astype(str) == selected_symbol]
+
+    st.plotly_chart(_build_trades_per_day(filtered), use_container_width=True)
+    show_cols = [col for col in ["timestamp", "symbol", "module", "side", "price", "quantity", "pnl", "regime"] if col in filtered.columns]
+    st.dataframe(filtered[show_cols].sort_values("timestamp", ascending=False), use_container_width=True, hide_index=True)
+    st.download_button(
+        "Exportar trades CSV",
+        filtered.to_csv(index=False).encode("utf-8"),
+        file_name="dashboard_trades.csv",
+        mime="text/csv",
+    )
+
+
+def _render_risk(kpis: dict[str, Any], metrics: dict[str, Any]) -> None:
+    risk_cols = st.columns(3)
+    for column, key, label in zip(
+        risk_cols,
+        ("daily", "weekly", "monthly"),
+        ("Diário", "Semanal", "Mensal"),
+        strict=True,
+    ):
+        value = float(metrics.get(f"{key}_loss", 0.0) or 0.0)
+        limit = RISK_LIMITS[key]
+        ratio = min(abs(value) / limit, 1.0) if limit > 0 else 0.0
+        column.metric(f"Kill Switch {label}", f"{value * 100:.2f}%")
+        column.progress(ratio, text=f"{ratio * 100:.1f}% do limite")
+        tone = _risk_tone(value, limit)
+        column.caption({"ok": "OK", "warning": "WARNING", "danger": "DANGER"}[tone])
+
+    meta_cols = st.columns(3)
+    meta_cols[0].metric("Average win", _fmt_eur(kpis.get("avg_win")))
+    meta_cols[1].metric("Average loss", _fmt_eur(kpis.get("avg_loss")))
+    profit_factor = kpis.get("profit_factor")
+    meta_cols[2].metric("Profit factor", f"{float(profit_factor):.2f}" if profit_factor is not None else "—")
+
+
+def _render_performance(trades_df: pd.DataFrame, kpis: dict[str, Any]) -> None:
+    cols = st.columns(2)
+    with cols[0]:
+        st.subheader("Drawdown curve")
+        st.plotly_chart(_build_drawdown_curve(trades_df), use_container_width=True)
+    with cols[1]:
+        wins = int((trades_df["pnl"] > 0).sum()) if not trades_df.empty and "pnl" in trades_df.columns else 0
+        losses = int((trades_df["pnl"] < 0).sum()) if not trades_df.empty and "pnl" in trades_df.columns else 0
+        pie = go.Figure(data=[go.Pie(labels=["Wins", "Losses"], values=[wins, losses], hole=0.45)])
+        pie.update_layout(height=320, margin={"l": 8, "r": 8, "t": 8, "b": 8})
+        st.subheader("Distribuição wins/losses")
+        st.plotly_chart(pie, use_container_width=True)
+
+    st.metric("Max drawdown", _fmt_eur(kpis.get("max_drawdown")))
+
+
+def _render_positions(grids_state: list[dict[str, Any]]) -> None:
+    positions_df = load_positions(grids_state=grids_state)
+    grids_df = pd.DataFrame(_grid_rows(grids_state))
+
+    left, right = st.columns(2)
+    with left:
+        st.subheader("Posições abertas")
+        if positions_df.empty:
+            st.info("Sem posições abertas derivadas das grids activas.")
+        else:
+            st.dataframe(positions_df, use_container_width=True, hide_index=True)
+    with right:
+        st.subheader("Estado das grids")
+        if grids_df.empty:
+            st.info("Sem grids activas.")
+        else:
+            st.dataframe(grids_df, use_container_width=True, hide_index=True)
+
+
+def _render_logs(log_lines: list[str]) -> None:
+    if not log_lines:
+        st.info("Sem logs disponíveis.")
+        return
+    level = st.selectbox("Filtro de nível", ["Tudo", "ERROR", "WARNING", "INFO", "DEBUG"])
+    filtered = log_lines if level == "Tudo" else [line for line in log_lines if level in line]
+    if not filtered:
+        st.info("Sem linhas para o filtro seleccionado.")
+        return
+    st.code("".join(filtered[-200:]), language="text")
+
+
+def _render_system_actions(
+    metrics: dict[str, Any],
+    preflight: dict[str, Any],
+    kpis: dict[str, Any],
+) -> None:
+    st.subheader("System health")
+    data_files = [
+        DATA_DIR / "metrics.json",
+        DATA_DIR / "trades_log.json",
+        DATA_DIR / "grids_state.json",
+        DATA_DIR / "preflight_state.json",
+        DATA_DIR / "bot.log",
+    ]
+    file_rows = []
+    for path in data_files:
+        exists = path.exists()
+        file_rows.append(
+            {
+                "ficheiro": path.name,
+                "existe": "✅" if exists else "❌",
+                "modificado": _fmt_dt(datetime.fromtimestamp(path.stat().st_mtime, tz=UTC) if exists else None),
+            }
+        )
+    st.dataframe(pd.DataFrame(file_rows), use_container_width=True, hide_index=True)
+
+    st.subheader("Ações seguras (emit command)")
+    action_cols = st.columns(4)
+    for column, command in zip(
+        action_cols,
+        ["pause", "resume", "reconcile_now", "export_snapshot"],
+        strict=True,
+    ):
+        if column.button(f"Emitir {command}", use_container_width=True):
+            command_path = emit_command(command)
+            st.success(f"Comando emitido: {command_path.name}")
+
+    snapshot = {
+        "paper_mode": True,
+        "kpis": {key: str(value) if isinstance(value, (datetime, pd.Timestamp)) else value for key, value in kpis.items()},
+        "metrics": metrics,
+        "preflight": preflight,
+    }
+    st.download_button(
+        "Exportar snapshot JSON",
+        json.dumps(snapshot, indent=2, ensure_ascii=False).encode("utf-8"),
+        file_name="dashboard_snapshot.json",
+        mime="application/json",
+    )
+
+
+def main() -> None:
+    st.set_page_config(
+        page_title="Trading Bot v8 Dashboard",
+        page_icon="📄",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+
+    if "auto_refresh" not in st.session_state:
+        st.session_state.auto_refresh = True
+    if "refresh_seconds" not in st.session_state:
+        st.session_state.refresh_seconds = DEFAULT_REFRESH_SECONDS
+
+    st.sidebar.header("Controlo do dashboard")
+    st.session_state.auto_refresh = st.sidebar.toggle("Auto-refresh", value=st.session_state.auto_refresh)
+    st.session_state.refresh_seconds = st.sidebar.slider(
+        "Refresh (segundos)",
+        min_value=5,
+        max_value=60,
+        value=int(st.session_state.refresh_seconds),
+        step=5,
+    )
+    if st.sidebar.button("Refresh manual"):
+        st.cache_data.clear()
+        st.rerun()
+
+    metrics_path = DATA_DIR / "metrics.json"
+    trades_path = DATA_DIR / "trades_log.json"
+    grids_path = DATA_DIR / "grids_state.json"
+    preflight_path = DATA_DIR / "preflight_state.json"
+    log_path = DATA_DIR / "bot.log"
+
+    metrics = _load_metrics_cached(*_file_signature(metrics_path))
+    trades_df = _load_trades_cached(*_file_signature(trades_path))
+    grids_state = _load_grids_cached(*_file_signature(grids_path))
+    preflight = _load_json_cached(*_file_signature(preflight_path))
+    log_lines = _load_logs_cached(*_file_signature(log_path), max_lines=200)
+
+    kpis = compute_kpis(trades_df, metrics, grids_state, preflight, data_dir=DATA_DIR)
+    status = build_status_summary(kpis)
+
+    _render_header(status, kpis)
+    st.caption(
+        f"{PAPER_LABEL} • Telegram: {status['telegram_status']} • "
+        f"Preflight: {status['preflight_status']} • "
+        f"Heartbeat: {_fmt_dt(kpis.get('heartbeat'))}"
+    )
     st.divider()
 
-    tab1, tab2, tab3, tab4 = st.tabs(
-        ["📊 Visão Geral", "🔲 Grids Activos", "📈 Histórico de Trades", "📋 Log ao Vivo"]
+    tabs = st.tabs(
+        [
+            "Overview",
+            "Trading",
+            "Risk",
+            "Performance",
+            "Positions",
+            "Logs/Alerts",
+            "System/Actions",
+        ]
     )
 
-    with tab1:
-        trades_df = load_trades()
-        grids = load_grids()
-        capital = safe_float(metrics.get("capital") or metrics.get("initial_capital"))
-        total_pnl = (
-            trades_df["pnl"].sum()
-            if not trades_df.empty and "pnl" in trades_df.columns
-            else 0.0
+    with tabs[0]:
+        _render_overview(kpis, trades_df, status)
+    with tabs[1]:
+        _render_trading(trades_df)
+    with tabs[2]:
+        _render_risk(kpis, metrics)
+    with tabs[3]:
+        _render_performance(trades_df, kpis)
+    with tabs[4]:
+        _render_positions(grids_state)
+    with tabs[5]:
+        _render_logs(log_lines)
+    with tabs[6]:
+        _render_system_actions(metrics, preflight, kpis)
+
+    if st.session_state.auto_refresh:
+        st.markdown(
+            (
+                "<script>setTimeout(function(){window.location.reload();},"
+                f"{int(st.session_state.refresh_seconds) * 1000});</script>"
+            ),
+            unsafe_allow_html=True,
         )
-        n_trades = len(trades_df)
-        n_grids = len(grids) if isinstance(grids, dict) else 0
-        wins = (
-            int((trades_df["pnl"] > 0).sum())
-            if not trades_df.empty and "pnl" in trades_df.columns
-            else 0
-        )
-        win_rate = (wins / n_trades * 100) if n_trades > 0 else 0.0
-
-        c1, c2, c3, c4, c5 = st.columns(5)
-        c1.metric("💶 Capital", f"€{capital:,.2f}" if capital else "—")
-        c2.metric(
-            "📈 P&L Total",
-            f"€{total_pnl:+,.2f}",
-            delta=f"{(total_pnl / capital * 100):+.2f}%" if capital else None,
-        )
-        c3.metric("🔢 Trades", str(n_trades))
-        c4.metric("🏆 Win Rate", f"{win_rate:.1f}%")
-        c5.metric("🔲 Grids Abertos", str(n_grids))
-
-        st.subheader("Equity Curve")
-        st.plotly_chart(build_equity_curve(trades_df), use_container_width=True)
-
-        st.subheader("Kill Switches")
-        kc1, kc2, kc3 = st.columns(3)
-        with kc1:
-            pct_bar(abs(safe_float(metrics.get("daily_loss"))), KILL_SWITCH_LIMITS["daily"], "🔴 Diário")
-        with kc2:
-            pct_bar(abs(safe_float(metrics.get("weekly_loss"))), KILL_SWITCH_LIMITS["weekly"], "🟠 Semanal")
-        with kc3:
-            pct_bar(abs(safe_float(metrics.get("monthly_loss"))), KILL_SWITCH_LIMITS["monthly"], "🟡 Mensal")
-
-        st.subheader("P&L por Módulo")
-        st.plotly_chart(build_pnl_by_module(trades_df), use_container_width=True)
-
-    with tab2:
-        grids = load_grids()
-        if not grids:
-            st.info("ℹ️ Nenhum grid activo no momento.")
-        else:
-            rows: list[dict[str, str]] = []
-            for grid_id, grid in grids.items():
-                if not isinstance(grid, dict):
-                    continue
-                regime = str(grid.get("regime", "UNKNOWN")).upper()
-                levels = grid.get("levels", [])
-                current_level = len([item for item in levels if item.get("status") == "bought"]) if isinstance(levels, list) else 0
-                rows.append(
-                    {
-                        "Grid ID": str(grid_id),
-                        "Símbolo": str(grid.get("symbol", "—")),
-                        "Módulo": MODULE_LABELS.get(str(grid.get("module", "kotegawa")), str(grid.get("module", "—"))),
-                        "Regime": regime,
-                        "Nível": f"{current_level} / {len(levels) if isinstance(levels, list) else '?'}",
-                        "Entry": f"{safe_float(grid.get('center_price') or grid.get('entry_price')):.4f}",
-                        "Stop": f"{safe_float(grid.get('stop_loss')):.4f}",
-                        "TP": f"{safe_float(grid.get('take_profit')):.4f}",
-                        "P&L": f"€{safe_float(grid.get('total_pnl')):+.2f}",
-                        "Aberto em": str(grid.get("created_at") or grid.get("opened_at") or "—"),
-                    }
-                )
-            df_grids = pd.DataFrame(rows)
-            symbols = ["Todos"] + sorted(df_grids["Símbolo"].dropna().unique().tolist())
-            selected = st.selectbox("Filtrar por símbolo:", symbols)
-            if selected != "Todos":
-                df_grids = df_grids[df_grids["Símbolo"] == selected]
-            st.dataframe(df_grids, use_container_width=True, hide_index=True)
-            sc1, sc2, sc3 = st.columns(3)
-            sc1.metric("Grids abertos", len(df_grids))
-            sc2.metric(
-                "P&L não realizado",
-                f"€{sum(safe_float(value.replace('€', '')) for value in df_grids['P&L']):+.2f}",
-            )
-            sc3.metric("Regimes activos", ", ".join(df_grids["Regime"].unique()) or "—")
-
-    with tab3:
-        trades_df = load_trades()
-        if trades_df.empty:
-            st.info("ℹ️ Nenhum trade registado ainda.")
-        else:
-            fc1, fc2, fc3 = st.columns(3)
-            module_col = next(
-                (col for col in ("module", "strategy", "source") if col in trades_df.columns),
-                None,
-            )
-            with fc1:
-                mods = (
-                    ["Todos"] + sorted(trades_df[module_col].dropna().unique().tolist())
-                    if module_col
-                    else ["Todos"]
-                )
-                selected_module = st.selectbox("Módulo:", mods)
-            with fc2:
-                symbols = (
-                    ["Todos"] + sorted(trades_df["symbol"].dropna().unique().tolist())
-                    if "symbol" in trades_df.columns
-                    else ["Todos"]
-                )
-                selected_symbol = st.selectbox("Símbolo:", symbols)
-            with fc3:
-                period = st.selectbox("Período:", ["Tudo", "Hoje", "Últimos 7 dias", "Últimos 30 dias"])
-
-            df_filtered = trades_df.copy()
-            if selected_module != "Todos" and module_col:
-                df_filtered = df_filtered[df_filtered[module_col] == selected_module]
-            if selected_symbol != "Todos" and "symbol" in df_filtered.columns:
-                df_filtered = df_filtered[df_filtered["symbol"] == selected_symbol]
-
-            ts_col = next(
-                (
-                    col
-                    for col in ("timestamp", "close_time", "date")
-                    if col in df_filtered.columns
-                    and pd.api.types.is_datetime64_any_dtype(df_filtered[col])
-                ),
-                None,
-            )
-            if ts_col and period != "Tudo":
-                cutoff = {
-                    "Hoje": datetime.now() - timedelta(days=1),
-                    "Últimos 7 dias": datetime.now() - timedelta(days=7),
-                    "Últimos 30 dias": datetime.now() - timedelta(days=30),
-                }.get(period, datetime.min)
-                df_filtered = df_filtered[df_filtered[ts_col] >= cutoff]
-
-            n_filtered = len(df_filtered)
-            pnl_filtered = df_filtered["pnl"].sum() if "pnl" in df_filtered.columns else 0.0
-            wins_filtered = int((df_filtered["pnl"] > 0).sum()) if "pnl" in df_filtered.columns else 0
-            win_rate_filtered = (wins_filtered / n_filtered * 100) if n_filtered > 0 else 0.0
-
-            tm1, tm2, tm3, tm4 = st.columns(4)
-            tm1.metric("Trades", str(n_filtered))
-            tm2.metric("P&L", f"€{pnl_filtered:+,.2f}")
-            tm3.metric("Win Rate", f"{win_rate_filtered:.1f}%")
-            tm4.metric("Média/Trade", f"€{(pnl_filtered / n_filtered):+.2f}" if n_filtered else "—")
-
-            display_cols = [
-                col
-                for col in (ts_col, "symbol", module_col, "action", "entry_price", "exit_price", "pnl", "regime")
-                if col and col in df_filtered.columns
-            ]
-            display_df = (
-                df_filtered[display_cols].sort_values(ts_col, ascending=False)
-                if ts_col
-                else df_filtered[display_cols]
-            )
-            st.dataframe(display_df, use_container_width=True, hide_index=True)
-
-    with tab4:
-        lc1, lc2 = st.columns(2)
-        with lc1:
-            n_lines = st.slider("Linhas:", 20, 200, 50, step=10)
-        with lc2:
-            level = st.selectbox("Nível:", ["Tudo", "ERROR", "WARNING", "INFO", "DEBUG"])
-        lines = load_log_tail(n_lines)
-        if level != "Tudo":
-            lines = [line for line in lines if level in line]
-        if not lines:
-            st.info("ℹ️ Nenhuma linha disponível.")
-        else:
-            coloured: list[str] = []
-            for line in reversed(lines):
-                if "ERROR" in line or "CRITICAL" in line:
-                    coloured.append(f"🔴 `{line}`")
-                elif "WARNING" in line:
-                    coloured.append(f"🟠 `{line}`")
-                elif "INFO" in line:
-                    coloured.append(f"⚪ `{line}`")
-                else:
-                    coloured.append(f"🔵 `{line}`")
-            st.markdown("\n\n".join(coloured))
-
-    st.markdown(
-        (
-            "<script>setTimeout(function(){window.location.reload();},"
-            f"{REFRESH_INTERVAL * 1000});</script>"
-        ),
-        unsafe_allow_html=True,
-    )
 
 
 if __name__ == "__main__":

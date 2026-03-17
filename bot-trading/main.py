@@ -551,6 +551,11 @@ class TradingBot:
         self._orphan_positions: dict[str, dict[str, Any]] = {}
         self._reconciliation_log_path: Path = config.data_dir / "reconciliation.log"
         self._startup_reconciled: bool = False
+        self._manual_pause: bool = False
+        self._reconciliation_in_progress: bool = False
+        self._last_cycle_started_at: datetime | None = None
+        self._last_cycle_completed_at: datetime | None = None
+        self._last_error: str | None = None
         self._reference_history_cache: dict[str, list[float]] = {}
         self._defensive_state: dict[str, Any] = {"mode": "NORMAL", "days_in_defensive": 0}
         self._defensive_state_date = datetime.now(timezone.utc).date()
@@ -940,15 +945,24 @@ class TradingBot:
 
         # Persistir estado do preflight para observabilidade externa
         state_file = self._config.data_dir / "preflight_state.json"
+        telegram_status = "disabled"
+        if self._telegram is not None:
+            telegram_status = "OK" if getattr(self._telegram, "enabled", True) else "error"
         state = {
             "startup_reconciled": self._startup_reconciled,
-            "telegram_status": "OK" if self._telegram else "disabled",
+            "telegram_status": telegram_status,
             "last_preflight": datetime.now(timezone.utc).isoformat(),
+            "watchlist_size": len(self._watchlist),
+            "capital": self._capital,
         }
-        state_file.write_text(
-            json.dumps(state, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        try:
+            state_file.parent.mkdir(parents=True, exist_ok=True)
+            state_file.write_text(
+                json.dumps(state, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.warning("Falha ao persistir preflight_state.json: %s", exc)
 
     async def _post_reconnect_sequence(self) -> None:
         """Revalida o bot apos reconnect do IB e retoma a operacao."""
@@ -1272,117 +1286,286 @@ class TradingBot:
                     cancelled += 1
         return cancelled
 
-    async def _reconcile_startup(self) -> None:
-        """Reconcilia o estado local com posicoes e ordens reais do IB."""
+    async def _run_reconciliation(self) -> None:
+        """Lógica de reconciliação reutilizável — chamada por arranque e por comando runtime."""
+        if self._reconciliation_in_progress:
+            logger.warning("Reconciliação já em curso — a ignorar pedido duplicado.")
+            return
         if self._order_manager is None:
             raise RuntimeError("OrderManager nao inicializado para reconciliacao.")
 
-        logger.info("A iniciar reconciliacao de arranque...")
-        positions = await self._fetch_positions_with_retry()
-        open_orders = await self._order_manager.get_open_orders()
+        self._reconciliation_in_progress = True
+        try:
+            logger.info("A iniciar reconciliacao...")
+            positions = await self._fetch_positions_with_retry()
+            open_orders = await self._order_manager.get_open_orders()
 
-        positions_by_symbol: dict[str, float] = {}
-        for position in positions:
-            symbol = str(position.get("symbol", "")).upper()
-            qty = float(position.get("quantity", 0.0) or 0.0)
-            positions_by_symbol[symbol] = positions_by_symbol.get(symbol, 0.0) + qty
+            positions_by_symbol: dict[str, float] = {}
+            for position in positions:
+                symbol = str(position.get("symbol", "")).upper()
+                qty = float(position.get("quantity", 0.0) or 0.0)
+                positions_by_symbol[symbol] = positions_by_symbol.get(symbol, 0.0) + qty
 
-        grids_by_symbol: dict[str, list[Grid]] = {}
-        for grid in self._grid_engine.get_active_grids():
-            grids_by_symbol.setdefault(grid.symbol.upper(), []).append(grid)
+            grids_by_symbol: dict[str, list[Grid]] = {}
+            for grid in self._grid_engine.get_active_grids():
+                grids_by_symbol.setdefault(grid.symbol.upper(), []).append(grid)
 
-        reconciliation_lines: list[str] = []
-        ok_count = 0
-        ghost_count = 0
-        orphan_count = 0
+            reconciliation_lines: list[str] = []
+            ok_count = 0
+            ghost_count = 0
+            orphan_count = 0
 
-        for symbol, grids in grids_by_symbol.items():
-            ib_qty = positions_by_symbol.get(symbol, 0.0)
-            expected_qty = sum(
-                level.quantity
-                for grid in grids
-                for level in grid.levels
-                if level.status == "bought"
+            for symbol, grids in grids_by_symbol.items():
+                ib_qty = positions_by_symbol.get(symbol, 0.0)
+                expected_qty = sum(
+                    level.quantity
+                    for grid in grids
+                    for level in grid.levels
+                    if level.status == "bought"
+                )
+
+                if ib_qty and expected_qty == 0:
+                    for grid in grids:
+                        grid.status = "paused"
+                        grid.reconciliation_state = "mismatch"
+                    cancelled = await self._order_manager.cancel_symbol_orders(symbol)
+                    line = (
+                        f"{symbol}: divergencia de arranque (grid=0.00, ib={ib_qty:.2f}); "
+                        f"grid pausada e ordens canceladas={cancelled}"
+                    )
+                    logger.critical(line)
+                    reconciliation_lines.append(line)
+                    continue
+
+                if ib_qty == 0:
+                    for grid in grids:
+                        grid.status = "paused"
+                        grid.reconciliation_state = "ghost"
+                    cancelled = await self._order_manager.cancel_symbol_orders(symbol)
+                    line = (
+                        f"{symbol}: grid no JSON sem posicao real; marcada ghost e "
+                        f"ordens pendentes canceladas={cancelled}"
+                    )
+                    logger.warning(line)
+                    reconciliation_lines.append(line)
+                    ghost_count += len(grids)
+                    continue
+
+                if abs(expected_qty - ib_qty) > 1e-9:
+                    for grid in grids:
+                        grid.status = "paused"
+                        grid.reconciliation_state = "mismatch"
+                    cancelled = await self._order_manager.cancel_symbol_orders(symbol)
+                    line = (
+                        f"{symbol}: divergencia de quantidade (grid={expected_qty:.2f}, "
+                        f"ib={ib_qty:.2f}); grid pausada e ordens canceladas={cancelled}"
+                    )
+                    logger.critical(line)
+                    reconciliation_lines.append(line)
+                    continue
+
+                for grid in grids:
+                    grid.reconciliation_state = "synced"
+                line = f"{symbol}: reconciliado com sucesso (qty={ib_qty:.2f})."
+                logger.info(line)
+                reconciliation_lines.append(line)
+                ok_count += len(grids)
+
+            for symbol, ib_qty in positions_by_symbol.items():
+                if symbol not in grids_by_symbol and abs(ib_qty) > 1e-9:
+                    orphan_info = {
+                        "symbol": symbol,
+                        "quantity": ib_qty,
+                        "open_orders": [
+                            order for order in open_orders
+                            if str(order.get("symbol", "")).upper() == symbol
+                        ],
+                    }
+                    self._orphan_positions[symbol] = orphan_info
+                    line = (
+                        f"{symbol}: posicao no IB sem grid ({ib_qty:.2f}); "
+                        "registada como orfa e bloqueada para novas grids."
+                    )
+                    logger.warning(line)
+                    reconciliation_lines.append(line)
+                    orphan_count += 1
+
+            if not reconciliation_lines:
+                reconciliation_lines.append("Sem divergencias detectadas na reconciliacao.")
+
+            summary = f"Reconciliação: {ok_count} OK | {ghost_count} fantasmas | {orphan_count} órfãos"
+            reconciliation_lines.append(summary)
+            await self._write_reconciliation_log(reconciliation_lines)
+            self._schedule_telegram(
+                self._telegram.notify_reconciliation(summary)
+                if self._telegram else None
             )
+            self._grid_engine.save_state()
+        finally:
+            self._reconciliation_in_progress = False
 
-            if ib_qty and expected_qty == 0:
-                for grid in grids:
-                    grid.status = "paused"
-                    grid.reconciliation_state = "mismatch"
-                cancelled = await self._order_manager.cancel_symbol_orders(symbol)
-                line = (
-                    f"{symbol}: divergencia de arranque (grid=0.00, ib={ib_qty:.2f}); "
-                    f"grid pausada e ordens canceladas={cancelled}"
-                )
-                logger.critical(line)
-                reconciliation_lines.append(line)
+    async def _reconcile_startup(self) -> None:
+        """Reconcilia o estado local com posicoes e ordens reais do IB no arranque."""
+        await self._run_reconciliation()
+        self._startup_reconciled = True
+
+    # ------------------------------------------------------------------
+    # Command consumer — ficheiros em data/commands/
+    # ------------------------------------------------------------------
+
+    def _move_command_file(self, path: Path, destination: str, result: dict[str, Any]) -> None:
+        """Move um ficheiro de comando para processed/ ou failed/."""
+        target_dir = path.parent / destination
+        target_dir.mkdir(parents=True, exist_ok=True)
+        try:
+            envelope = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            envelope = {}
+        envelope["status"] = destination.rstrip("/")
+        envelope["processed_at"] = datetime.now(timezone.utc).isoformat()
+        envelope.update(result)
+        target_path = target_dir / path.name
+        try:
+            target_path.write_text(
+                json.dumps(envelope, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            path.unlink(missing_ok=True)
+        except OSError as exc:
+            logger.error("Falha ao mover comando %s para %s: %s", path.name, destination, exc)
+
+    async def _process_command_queue(self) -> None:
+        """Consome ficheiros de comando pendentes em data/commands/."""
+        commands_dir = self._config.data_dir / "commands"
+        if not commands_dir.exists():
+            return
+
+        for cmd_path in sorted(commands_dir.glob("*.json")):
+            try:
+                raw = json.loads(cmd_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                logger.warning("Comando ignorado (parse error): %s — %s", cmd_path.name, exc)
+                self._move_command_file(cmd_path, "failed", {"error": str(exc)})
                 continue
 
-            if ib_qty == 0:
-                for grid in grids:
-                    grid.status = "paused"
-                    grid.reconciliation_state = "ghost"
-                cancelled = await self._order_manager.cancel_symbol_orders(symbol)
-                line = (
-                    f"{symbol}: grid no JSON sem posicao real; marcada ghost e "
-                    f"ordens pendentes canceladas={cancelled}"
-                )
-                logger.warning(line)
-                reconciliation_lines.append(line)
-                ghost_count += len(grids)
+            if not isinstance(raw, dict) or raw.get("status") != "pending":
                 continue
 
-            if abs(expected_qty - ib_qty) > 1e-9:
-                for grid in grids:
-                    grid.status = "paused"
-                    grid.reconciliation_state = "mismatch"
-                cancelled = await self._order_manager.cancel_symbol_orders(symbol)
-                line = (
-                    f"{symbol}: divergencia de quantidade (grid={expected_qty:.2f}, "
-                    f"ib={ib_qty:.2f}); grid pausada e ordens canceladas={cancelled}"
-                )
-                logger.critical(line)
-                reconciliation_lines.append(line)
-                continue
+            command = raw.get("command", "")
+            payload = raw.get("payload", {})
+            logger.info("A processar comando: %s (%s)", command, cmd_path.name)
 
-            for grid in grids:
-                grid.reconciliation_state = "synced"
-            line = f"{symbol}: reconciliado com sucesso (qty={ib_qty:.2f})."
-            logger.info(line)
-            reconciliation_lines.append(line)
-            ok_count += len(grids)
+            try:
+                result = await self._dispatch_command(command, payload)
+                self._move_command_file(cmd_path, "processed", result)
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Erro ao executar comando %s: %s", command, exc)
+                self._move_command_file(cmd_path, "failed", {"error": str(exc)})
 
-        for symbol, ib_qty in positions_by_symbol.items():
-            if symbol not in grids_by_symbol and abs(ib_qty) > 1e-9:
-                orphan_info = {
-                    "symbol": symbol,
-                    "quantity": ib_qty,
-                    "open_orders": [
-                        order for order in open_orders
-                        if str(order.get("symbol", "")).upper() == symbol
-                    ],
-                }
-                self._orphan_positions[symbol] = orphan_info
-                line = (
-                    f"{symbol}: posicao no IB sem grid ({ib_qty:.2f}); "
-                    "registada como orfa e bloqueada para novas grids."
-                )
-                logger.warning(line)
-                reconciliation_lines.append(line)
-                orphan_count += 1
+    async def _dispatch_command(self, command: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """Despacha um comando para o handler correcto."""
+        if command == "pause":
+            return await self._handle_pause(payload)
+        if command == "resume":
+            return await self._handle_resume(payload)
+        if command == "reconcile_now":
+            return await self._handle_reconcile_now(payload)
+        if command == "export_snapshot":
+            return await self._handle_export_snapshot(payload)
+        return {"error": f"Comando desconhecido: {command}"}
 
-        if not reconciliation_lines:
-            reconciliation_lines.append("Sem divergencias detectadas na reconciliacao.")
-
-        summary = f"Reconciliação: {ok_count} OK | {ghost_count} fantasmas | {orphan_count} órfãos"
-        reconciliation_lines.append(summary)
-        await self._write_reconciliation_log(reconciliation_lines)
+    async def _handle_pause(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Activa pausa manual do bot."""
+        del payload
+        self._manual_pause = True
+        logger.warning("Bot pausado manualmente via comando.")
         self._schedule_telegram(
-            self._telegram.notify_reconciliation(summary)
+            self._telegram.notify_operational_alert("Bot pausado manualmente.")
             if self._telegram else None
         )
-        self._grid_engine.save_state()
-        self._startup_reconciled = True
+        return {"action": "paused"}
+
+    async def _handle_resume(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Desactiva pausa manual do bot."""
+        del payload
+        self._manual_pause = False
+        logger.info("Bot retomado manualmente via comando.")
+        self._schedule_telegram(
+            self._telegram.notify_operational_alert("Bot retomado manualmente.")
+            if self._telegram else None
+        )
+        return {"action": "resumed"}
+
+    async def _handle_reconcile_now(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Executa reconciliação on-demand."""
+        del payload
+        if self._order_manager is None:
+            return {"error": "OrderManager nao inicializado — reconciliação impossível."}
+        try:
+            await self._run_reconciliation()
+            return {"action": "reconciled"}
+        except RuntimeError as exc:
+            return {"error": str(exc)}
+
+    async def _handle_export_snapshot(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Exporta snapshot do estado actual do bot."""
+        del payload
+        snapshot = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "capital": getattr(self, "_capital", None),
+            "manual_pause": self._manual_pause,
+            "startup_reconciled": self._startup_reconciled,
+            "active_grids": len(self._grid_engine.get_active_grids()) if hasattr(self, "_grid_engine") else 0,
+            "watchlist": [spec.display for spec in self._watchlist] if hasattr(self, "_watchlist") else [],
+            "period_pnl": dict(self._period_pnl) if hasattr(self, "_period_pnl") else {},
+            "orphan_positions": list(self._orphan_positions.keys()) if hasattr(self, "_orphan_positions") else [],
+            "dynamic_win_rate": getattr(self, "_dynamic_win_rate", None),
+            "last_error": self._last_error,
+        }
+        snapshot_path = self._config.data_dir / "snapshot.json"
+        try:
+            snapshot_path.write_text(
+                json.dumps(snapshot, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.error("Falha ao escrever snapshot: %s", exc)
+            return {"error": str(exc)}
+        logger.info("Snapshot exportado para %s", snapshot_path)
+        return {"action": "exported", "path": str(snapshot_path)}
+
+    # ------------------------------------------------------------------
+    # Heartbeat — data/heartbeat.json
+    # ------------------------------------------------------------------
+
+    def _write_heartbeat(self) -> None:
+        """Escreve o ficheiro de heartbeat com o estado actual do bot."""
+        heartbeat = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "last_cycle_started_at": (
+                self._last_cycle_started_at.isoformat()
+                if self._last_cycle_started_at else None
+            ),
+            "last_cycle_completed_at": (
+                self._last_cycle_completed_at.isoformat()
+                if self._last_cycle_completed_at else None
+            ),
+            "manual_pause": self._manual_pause,
+            "ib_connected": (
+                self._connection.is_connected
+                if hasattr(self, "_connection") and hasattr(self._connection, "is_connected")
+                else False
+            ),
+            "last_error": self._last_error,
+        }
+        heartbeat_path = self._config.data_dir / "heartbeat.json"
+        try:
+            heartbeat_path.write_text(
+                json.dumps(heartbeat, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+        except OSError as exc:
+            logger.debug("Falha ao escrever heartbeat: %s", exc)
 
     # ------------------------------------------------------------------
     # Ciclo principal
@@ -1452,6 +1635,7 @@ class TradingBot:
                 try:
                     await self._main_cycle()
                 except Exception as exc:  # noqa: BLE001
+                    self._last_error = str(exc)
                     logger.error(
                         "Erro nao tratado no ciclo principal: %s", exc,
                         exc_info=True,
@@ -1491,6 +1675,15 @@ class TradingBot:
 
     async def _main_cycle(self) -> None:
         """Executa um ciclo completo do loop principal."""
+        self._last_cycle_started_at = datetime.now(timezone.utc)
+
+        await self._process_command_queue()
+
+        if self._manual_pause:
+            logger.info("Bot em pausa manual — a saltar ciclo.")
+            self._write_heartbeat()
+            return
+
         logger.debug("--- Inicio de ciclo ---")
         self._reference_history_cache.clear()
         self._advance_defensive_day_counter()
@@ -1500,6 +1693,7 @@ class TradingBot:
         connected = await self._connection.ensure_connected()
         if not connected:
             logger.warning("Sem ligacao ao IB — a saltar este ciclo.")
+            self._write_heartbeat()
             return
 
         self.refresh_dynamic_win_rate()  # WinRate
@@ -1509,6 +1703,7 @@ class TradingBot:
         # Fazemos isto no inicio do ciclo para cortar rapido se necessario
         kill_switch_triggered = await self._check_risk_limits()
         if kill_switch_triggered:
+            self._write_heartbeat()
             return  # Bot pausado — nao processar mais nada
 
         # Processar cada simbolo da watchlist
@@ -1533,6 +1728,8 @@ class TradingBot:
         if self._order_manager is not None:
             self._order_manager.cleanup_completed()
 
+        self._last_cycle_completed_at = datetime.now(timezone.utc)
+        self._write_heartbeat()
         logger.debug("--- Fim de ciclo ---")
 
     # ------------------------------------------------------------------
