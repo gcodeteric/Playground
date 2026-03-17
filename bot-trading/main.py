@@ -938,6 +938,18 @@ class TradingBot:
             ) if self._telegram else None
         )
 
+        # Persistir estado do preflight para observabilidade externa
+        state_file = self._config.data_dir / "preflight_state.json"
+        state = {
+            "startup_reconciled": self._startup_reconciled,
+            "telegram_status": "OK" if self._telegram else "disabled",
+            "last_preflight": datetime.now(timezone.utc).isoformat(),
+        }
+        state_file.write_text(
+            json.dumps(state, indent=2, ensure_ascii=False),
+            encoding="utf-8",
+        )
+
     async def _post_reconnect_sequence(self) -> None:
         """Revalida o bot apos reconnect do IB e retoma a operacao."""
         logger.info("IB reconectado. A executar sequencia pos-reconnect.")

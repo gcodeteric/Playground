@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
@@ -98,3 +99,35 @@ async def test_reconciliation_registers_orphan_position(tmp_path):
 
     assert "AAPL" in bot._orphan_positions
     assert bot._startup_reconciled is True
+
+
+@pytest.mark.asyncio
+async def test_preflight_persists_state_file(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = SimpleNamespace(
+        data_dir=tmp_path,
+        ib=SimpleNamespace(paper_trading=True),
+    )
+    bot._watchlist = [parse_watchlist_entry("AAPL")]
+    bot._connection = SimpleNamespace(
+        connect=AsyncMock(return_value=True),
+        request_executor=SimpleNamespace(
+            run=AsyncMock(side_effect=[["DU123456"], []]),
+        ),
+        ib=SimpleNamespace(
+            managedAccounts=MagicMock(return_value=["DU123456"]),
+            accountValues=MagicMock(return_value=[]),
+        ),
+    )
+    bot._check_data_files_integrity = AsyncMock()
+    bot._verify_market_data_permissions = AsyncMock()
+    bot._schedule_telegram = lambda coro: None
+    bot._order_manager = object()
+    bot._telegram = None
+
+    await TradingBot.preflight_check(bot)
+
+    state = json.loads((tmp_path / "preflight_state.json").read_text(encoding="utf-8"))
+    assert state["startup_reconciled"] is False
+    assert state["telegram_status"] == "disabled"
+    assert "last_preflight" in state
