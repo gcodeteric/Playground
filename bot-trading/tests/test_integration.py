@@ -22,6 +22,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from main import TradingBot
 from src.signal_engine import (
     Regime,
     SignalResult,
@@ -117,6 +118,107 @@ def simulate_price_series(
         volumes.append(float(volume))
 
     return closes, highs, lows, volumes
+
+
+def _build_period_pnl_bot(trade_logger: TradeLogger) -> TradingBot:
+    """Cria um stub mínimo do bot para testes de P&L por período."""
+    bot = object.__new__(TradingBot)
+    bot._trade_logger = trade_logger
+    bot._period_pnl = {"daily": 0.0, "weekly": 0.0, "monthly": 0.0}
+    return bot
+
+
+class TestPeriodPnlCalculation:
+    def test_calculates_daily_weekly_monthly_pnl_from_trade_log(
+        self,
+        trade_logger: TradeLogger,
+    ):
+        now = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        bot = _build_period_pnl_bot(trade_logger)
+
+        trade_logger.log_trade({
+            "timestamp": "2026-03-17T09:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "SELL",
+            "price": 101.0,
+            "quantity": 1,
+            "order_id": 1,
+            "grid_id": "g1",
+            "level": 1,
+            "pnl": 100.0,
+            "regime": "BULL",
+            "signal_confidence": "ALTO",
+        })
+        trade_logger.log_trade({
+            "timestamp": "2026-03-16T11:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "SELL",
+            "price": 99.0,
+            "quantity": 1,
+            "order_id": 2,
+            "grid_id": "g2",
+            "level": 1,
+            "pnl": -50.0,
+            "regime": "BULL",
+            "signal_confidence": "ALTO",
+        })
+        trade_logger.log_trade({
+            "timestamp": "2026-03-03T15:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "SELL",
+            "price": 102.0,
+            "quantity": 1,
+            "order_id": 3,
+            "grid_id": "g3",
+            "level": 1,
+            "pnl": 30.0,
+            "regime": "BULL",
+            "signal_confidence": "ALTO",
+        })
+        trade_logger.log_trade({
+            "timestamp": "2026-02-28T15:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "SELL",
+            "price": 98.0,
+            "quantity": 1,
+            "order_id": 4,
+            "grid_id": "g4",
+            "level": 1,
+            "pnl": -20.0,
+            "regime": "BULL",
+            "signal_confidence": "ALTO",
+        })
+
+        period_pnl = TradingBot._calculate_period_pnl(bot, now=now)
+
+        assert period_pnl["daily"] == pytest.approx(100.0)
+        assert period_pnl["weekly"] == pytest.approx(50.0)
+        assert period_pnl["monthly"] == pytest.approx(80.0)
+
+    def test_refresh_period_pnl_updates_bot_snapshot(
+        self,
+        trade_logger: TradeLogger,
+    ):
+        now = datetime(2026, 3, 17, 12, 0, tzinfo=timezone.utc)
+        bot = _build_period_pnl_bot(trade_logger)
+        trade_logger.log_trade({
+            "timestamp": "2026-03-17T10:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "SELL",
+            "price": 101.0,
+            "quantity": 1,
+            "order_id": 10,
+            "grid_id": "g10",
+            "level": 1,
+            "pnl": -75.0,
+            "regime": "BULL",
+            "signal_confidence": "ALTO",
+        })
+
+        snapshot = TradingBot._refresh_period_pnl(bot, now=now)
+
+        assert snapshot == {"daily": -75.0, "weekly": -75.0, "monthly": -75.0}
+        assert bot._period_pnl == snapshot
 
 
 def execute_trading_cycle(

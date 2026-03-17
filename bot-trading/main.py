@@ -22,7 +22,7 @@ import logging
 import os
 import signal
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Coroutine
 
@@ -554,6 +554,11 @@ class TradingBot:
         self._reference_history_cache: dict[str, list[float]] = {}
         self._defensive_state: dict[str, Any] = {"mode": "NORMAL", "days_in_defensive": 0}
         self._defensive_state_date = datetime.now(timezone.utc).date()
+        self._period_pnl: dict[str, float] = {
+            "daily": 0.0,
+            "weekly": 0.0,
+            "monthly": 0.0,
+        }
 
         # --- Watchlist ---
         self._watchlist: list[InstrumentSpec] = get_watchlist_specs()
@@ -666,6 +671,73 @@ class TradingBot:
                 self._dynamic_win_rate * 100, new_rate * 100,  # WinRate
             )  # WinRate
         self._dynamic_win_rate = new_rate  # WinRate
+
+    @staticmethod
+    def _parse_trade_timestamp(value: Any) -> datetime | None:
+        """Converte timestamps de trade para UTC de forma tolerante."""
+        if value is None:
+            return None
+        try:
+            timestamp = (
+                value
+                if isinstance(value, datetime)
+                else datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+            )
+        except (TypeError, ValueError):
+            return None
+
+        if timestamp.tzinfo is None:
+            timestamp = timestamp.replace(tzinfo=timezone.utc)
+        return timestamp.astimezone(timezone.utc)
+
+    def _calculate_period_pnl(
+        self,
+        now: datetime | None = None,
+    ) -> dict[str, float]:
+        """
+        Calcula P&L diário, semanal e mensal a partir do trades_log.
+
+        Usa apenas trades com ``pnl`` numérico e timestamp válido.
+        """
+        now_utc = (
+            now.astimezone(timezone.utc)
+            if now is not None else datetime.now(timezone.utc)
+        )
+        day_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = day_start - timedelta(days=day_start.weekday())
+        month_start = day_start.replace(day=1)
+
+        period_pnl = {"daily": 0.0, "weekly": 0.0, "monthly": 0.0}
+
+        for trade in self._trade_logger.get_trades():
+            pnl_raw = trade.get("pnl")
+            if pnl_raw is None:
+                continue
+            try:
+                pnl = float(pnl_raw)
+            except (TypeError, ValueError):
+                continue
+
+            timestamp = self._parse_trade_timestamp(trade.get("timestamp"))
+            if timestamp is None:
+                continue
+
+            if timestamp >= month_start:
+                period_pnl["monthly"] += pnl
+            if timestamp >= week_start:
+                period_pnl["weekly"] += pnl
+            if timestamp >= day_start:
+                period_pnl["daily"] += pnl
+
+        return {key: round(value, 4) for key, value in period_pnl.items()}
+
+    def _refresh_period_pnl(
+        self,
+        now: datetime | None = None,
+    ) -> dict[str, float]:
+        """Actualiza o snapshot local de P&L por período."""
+        self._period_pnl = self._calculate_period_pnl(now=now)
+        return dict(self._period_pnl)
 
     async def _on_ib_disconnected(self) -> None:
         """Notifica a perda de ligacao ao IB."""
@@ -1410,6 +1482,7 @@ class TradingBot:
         logger.debug("--- Inicio de ciclo ---")
         self._reference_history_cache.clear()
         self._advance_defensive_day_counter()
+        self._refresh_period_pnl()
 
         # 1. Verificar conexao IB (reconnect se necessario)
         connected = await self._connection.ensure_connected()
@@ -1420,7 +1493,7 @@ class TradingBot:
         self.refresh_dynamic_win_rate()  # WinRate
         await self._evaluate_sector_rotation()
 
-        # 7. Verificar limites de risco (daily 3%, monthly 10% kill switch)
+        # 7. Verificar limites de risco (daily/weekly/monthly)
         # Fazemos isto no inicio do ciclo para cortar rapido se necessario
         kill_switch_triggered = await self._check_risk_limits()
         if kill_switch_triggered:
@@ -1505,11 +1578,11 @@ class TradingBot:
             return
 
         # Calcular indicadores
-        indicators = self._data_feed.get_market_data(contract, bars_df)
+        indicators = await self._data_feed.get_market_data_live(contract, bars_df)
 
         # Verificar se todos os indicadores necessarios estao disponiveis
         required_keys = [
-            "current_price", "sma25", "sma50", "sma200",
+            "last_close", "current_price", "sma25", "sma50", "sma200",
             "rsi14", "atr14", "bb_lower", "volume_avg_20", "atr_avg_60",
         ]
         missing = [k for k in required_keys if indicators.get(k) is None]
@@ -1520,6 +1593,7 @@ class TradingBot:
             return
 
         price: float = indicators["current_price"]  # type: ignore[assignment]
+        last_close: float = indicators["last_close"]  # type: ignore[assignment]
         sma25: float = indicators["sma25"]  # type: ignore[assignment]
         sma50: float = indicators["sma50"]  # type: ignore[assignment]
         sma200: float = indicators["sma200"]  # type: ignore[assignment]
@@ -1542,6 +1616,12 @@ class TradingBot:
         logger.info(
             "Regime de %s: %s — %s",
             spec.display, regime_info.regime.value, regime_info.motivo,
+        )
+        logger.info(
+            "Mercado %s: preço actual=%.4f | último fecho=%.4f",
+            spec.display,
+            price,
+            last_close,
         )
 
         # Notificar mudanca de regime
@@ -1656,15 +1736,16 @@ class TradingBot:
                     new_signal.get("metadata", {}).get("strike"),
                 )
             else:
+                period_pnl = dict(self._period_pnl)
                 validation = self._risk_manager.validate_order_full({
                     "symbol": spec.symbol,
                     "entry_price": new_signal.get("entry_price", 0.0),
                     "stop_price": new_signal.get("stop_loss", 0.0),
                     "take_profit_price": new_signal.get("take_profit", 0.0),
                     "capital": self._capital,
-                    "daily_pnl": self._trade_logger.get_daily_summary().get("total_pnl", 0.0),
-                    "weekly_pnl": 0.0,
-                    "monthly_pnl": 0.0,
+                    "daily_pnl": period_pnl["daily"],
+                    "weekly_pnl": period_pnl["weekly"],
+                    "monthly_pnl": period_pnl["monthly"],
                     "current_positions": len(
                         [
                             level
@@ -1875,8 +1956,7 @@ class TradingBot:
             return
 
         # Validar a ordem com o gestor de risco
-        daily_summary = self._trade_logger.get_daily_summary()
-        daily_pnl = daily_summary.get("total_pnl", 0.0)
+        period_pnl = dict(self._period_pnl)
         current_positions = len(
             [g for g in active_grids
              for lv in g.levels if lv.status == "bought"]
@@ -1888,9 +1968,9 @@ class TradingBot:
             "stop_price": first_stop,
             "take_profit_price": first_take_profit,
             "capital": self._capital,
-            "daily_pnl": daily_pnl,
-            "weekly_pnl": 0.0,  # simplificado
-            "monthly_pnl": 0.0,  # simplificado
+            "daily_pnl": period_pnl["daily"],
+            "weekly_pnl": period_pnl["weekly"],
+            "monthly_pnl": period_pnl["monthly"],
             "current_positions": current_positions,
             "current_grids": len(active_grids),
             "win_rate": win_rate if 0 < win_rate < 1 else self._dynamic_win_rate,  # WinRate
@@ -2096,6 +2176,7 @@ class TradingBot:
                         self._capital += pnl  # Finding 8
                         self._risk_manager.update_capital(self._capital)  # Finding 8
                         self._risk_manager.update_peak_equity(self._capital)  # Finding 8
+                        self._refresh_period_pnl()
                         self._schedule_telegram(
                             self._telegram.trade_closed(
                                 symbol=grid.symbol,
@@ -2150,6 +2231,7 @@ class TradingBot:
                         self._capital += loss  # Finding 8
                         self._risk_manager.update_capital(self._capital)  # Finding 8
                         self._risk_manager.update_peak_equity(self._capital)  # Finding 8
+                        self._refresh_period_pnl()
                         # Verificar se o kill switch deve ser activado
                         daily_summary = self._trade_logger.get_daily_summary()
                         daily_pnl_pct = (
@@ -2264,23 +2346,26 @@ class TradingBot:
 
     async def _check_risk_limits(self) -> bool:
         """
-        Verifica os limites de risco (diario 3%, mensal 10%).
+        Verifica os limites de risco diário, semanal e mensal.
 
         Retorna True se o kill switch foi activado (bot deve parar).
         """
-        daily_summary = self._trade_logger.get_daily_summary()
-        daily_pnl = daily_summary.get("total_pnl", 0.0)
+        period_pnl = self._refresh_period_pnl()
+        daily_pnl = period_pnl["daily"]
+        weekly_pnl = period_pnl["weekly"]
+        monthly_pnl = period_pnl["monthly"]
         daily_loss = abs(min(daily_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
-        weekly_loss = 0.0
+        weekly_loss = abs(min(weekly_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
+        monthly_loss = abs(min(monthly_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
 
         # Verificar limite diario (3%)
         daily_ok = self._risk_manager.check_daily_limit(daily_pnl, self._capital)
-        if daily_loss >= 0.70 * 0.03:
+        if daily_loss >= 0.70 * self._config.risk.daily_loss_limit:
             self._schedule_telegram(
                 self._telegram.kill_switch_warning(
                     level="diário",
                     current_pct=daily_loss,
-                    limit_pct=0.03,
+                    limit_pct=self._config.risk.daily_loss_limit,
                     paper=self._config.ib.paper_trading,
                 ) if self._telegram else None
             )
@@ -2304,21 +2389,46 @@ class TradingBot:
             )
             return True
 
+        # Verificar limite semanal (6%)
+        weekly_ok = self._risk_manager.check_weekly_limit(weekly_pnl, self._capital)
+        if weekly_loss >= 0.70 * self._config.risk.weekly_loss_limit:
+            self._schedule_telegram(
+                self._telegram.kill_switch_warning(
+                    level="semanal",
+                    current_pct=weekly_loss,
+                    limit_pct=self._config.risk.weekly_loss_limit,
+                    paper=self._config.ib.paper_trading,
+                ) if self._telegram else None
+            )
+        if not weekly_ok:
+            logger.critical(
+                "LIMITE SEMANAL ATINGIDO — P&L da semana: %.2f (%.2f%% do capital). "
+                "Todas as operacoes pausadas ate nova semana.",
+                weekly_pnl,
+                (weekly_pnl / self._capital * 100) if self._capital > 0 else 0,
+            )
+            if self._order_manager is not None:
+                for grid in self._grid_engine.get_active_grids():
+                    await self._order_manager.cancel_all_grid_orders(grid.id)
+            self._schedule_telegram(
+                self._telegram.kill_switch_triggered(
+                    level="semanal",
+                    current_pct=weekly_loss,
+                    paper=self._config.ib.paper_trading,
+                ) if self._telegram else None
+            )
+            return True
+
         # Verificar kill switch mensal (10%)
-        # Aproximacao: somar P&L de todos os trades do mes actual
-        metrics = self._trade_logger.calculate_metrics()
-        monthly_pnl = metrics.get("total_pnl", 0.0)
-        monthly_loss = abs(min(monthly_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
-        if monthly_loss >= 0.70 * 0.10:
+        if monthly_loss >= 0.70 * self._config.risk.monthly_dd_limit:
             self._schedule_telegram(
                 self._telegram.kill_switch_warning(
                     level="mensal",
                     current_pct=monthly_loss,
-                    limit_pct=0.10,
+                    limit_pct=self._config.risk.monthly_dd_limit,
                     paper=self._config.ib.paper_trading,
                 ) if self._telegram else None
             )
-
         monthly_ok = self._risk_manager.check_kill_switch(
             monthly_pnl, self._capital,
         )
@@ -2365,6 +2475,7 @@ class TradingBot:
 
             summary = self._trade_logger.get_daily_summary()
             metrics = self._trade_logger.calculate_metrics()
+            period_pnl = self._refresh_period_pnl(now=now)
 
             # Adicionar informacao de grids activas
             active_grids = self._grid_engine.get_active_grids()
@@ -2394,11 +2505,13 @@ class TradingBot:
                     open_grids=len(active_grids),
                     kill_switch_pct={
                         "daily": abs(
-                            min(float(summary.get("total_pnl", 0.0) or 0.0) / self._capital, 0.0)
+                            min(float(period_pnl.get("daily", 0.0) or 0.0) / self._capital, 0.0)
                         ) if self._capital > 0 else 0.0,
-                        "weekly": 0.0,
+                        "weekly": abs(
+                            min(float(period_pnl.get("weekly", 0.0) or 0.0) / self._capital, 0.0)
+                        ) if self._capital > 0 else 0.0,
                         "monthly": abs(
-                            min(float(metrics.get("total_pnl", 0.0) or 0.0) / self._capital, 0.0)
+                            min(float(period_pnl.get("monthly", 0.0) or 0.0) / self._capital, 0.0)
                         ) if self._capital > 0 else 0.0,
                     },
                     paper=self._config.ib.paper_trading,

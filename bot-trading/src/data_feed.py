@@ -806,6 +806,18 @@ class DataFeed:
                 self._cache.set(cache_key, price)
             return price
 
+    async def get_current_price_live(
+        self,
+        contract: Stock | Forex | Future | CFD,
+    ) -> float | None:
+        """
+        Obtém o snapshot actual do mercado.
+
+        Este alias torna explícita a separação entre preço live e
+        ``last_close`` diário usado nos indicadores.
+        """
+        return await self.get_current_price(contract)
+
         async def _request_price() -> float | None:
             logger.debug("A obter preço actual de %s…", contract.symbol)
 
@@ -1082,6 +1094,8 @@ class DataFeed:
         self,
         contract: Stock | Forex | Future | CFD,
         bars_df: pd.DataFrame,
+        *,
+        current_price: float | None = None,
     ) -> dict[str, float | None]:
         """
         Calcula e devolve todos os indicadores técnicos a partir de barras históricas.
@@ -1096,7 +1110,8 @@ class DataFeed:
           - bb_middle    — Bollinger Band central
           - bb_lower     — Bollinger Band inferior
           - volume_avg_20 — Volume médio de 20 períodos
-          - current_price — Último preço de fecho nas barras
+          - last_close   — Último preço de fecho nas barras
+          - current_price — Snapshot actual do mercado (injectado externamente)
           - atr_avg_60   — Média do ATR(14) nos últimos 60 períodos
                            (utilizado para detecção de regime SIDEWAYS)
 
@@ -1122,6 +1137,7 @@ class DataFeed:
             "bb_middle": None,
             "bb_lower": None,
             "volume_avg_20": None,
+            "last_close": None,
             "current_price": None,
             "atr_avg_60": None,
         }
@@ -1139,8 +1155,10 @@ class DataFeed:
         low: pd.Series = bars_df["low"]
         volume: pd.Series = bars_df["volume"]
 
-        # ---- Preço actual (último fecho) ----
-        result["current_price"] = _safe_last(close)
+        # ---- Último fecho diário / preço actual injectado externamente ----
+        result["last_close"] = _safe_last(close)
+        if current_price is not None:
+            result["current_price"] = round(float(current_price), 6)
 
         # ---- SMAs ----
         sma25 = compute_sma(close, 25)
@@ -1182,10 +1200,11 @@ class DataFeed:
         result["volume_avg_20"] = _safe_last(vol_avg_20)
 
         logger.info(
-            "Indicadores calculados para %s: preço=%.4f | SMA25=%s | SMA50=%s | "
+            "Indicadores calculados para %s: close=%.4f | preço actual=%s | SMA25=%s | SMA50=%s | "
             "SMA200=%s | RSI14=%s | ATR14=%s | BB=[%s, %s, %s] | VolAvg20=%s | ATRavg60=%s",
             contract.symbol,
-            result["current_price"] or 0.0,
+            result["last_close"] or 0.0,
+            _fmt(result["current_price"]),
             _fmt(result["sma25"]),
             _fmt(result["sma50"]),
             _fmt(result["sma200"]),
@@ -1199,6 +1218,34 @@ class DataFeed:
         )
 
         return result
+
+    async def get_market_data_live(
+        self,
+        contract: Stock | Forex | Future | CFD,
+        bars_df: pd.DataFrame,
+    ) -> dict[str, float | None]:
+        """
+        Enriquece os indicadores técnicos com o snapshot actual do mercado.
+
+        Quando o snapshot falha, usa o último fecho como fallback gracioso
+        e regista um aviso explícito.
+        """
+        indicators = self.get_market_data(contract, bars_df)
+        last_close = indicators.get("last_close")
+        live_price = await self.get_current_price_live(contract)
+
+        if live_price is None and last_close is not None:
+            live_price = float(last_close)
+            logger.warning(
+                "Preço actual indisponível para %s — a usar último fecho %.4f como fallback.",
+                contract.symbol,
+                live_price,
+            )
+
+        indicators["current_price"] = (
+            round(float(live_price), 6) if live_price is not None else None
+        )
+        return indicators
 
 
 # ---------------------------------------------------------------------------

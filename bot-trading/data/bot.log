@@ -853,3 +853,345 @@
 2026-03-16 21:31:07 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
 2026-03-16 21:31:07 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 20 s.
 2026-03-16 21:31:07 | CRITICAL | main                 | Nao foi possivel ligar ao IB apos 3 tentativas
+2026-03-16 22:27:57 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-16 22:27:57 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-16 22:27:57 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-16 22:27:57 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-16 22:27:57 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 100000.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-16 22:27:57 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-16 22:27:57 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-16 22:27:57 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-16 22:27:57 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 22:27:57 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-16 22:27:57 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-16 22:27:57 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-16 22:27:57 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-16 22:27:57 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-16 22:27:57 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'SPY', 'QQQ', 'VIX'] | capital: 100000.00 | ciclo: 300 s | paper: True
+2026-03-16 22:27:57 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-16 22:27:57 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-16 22:27:57 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:27:57 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-16 22:27:57 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-16 22:27:57 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usopt.nj
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:fundfarm
+2026-03-16 22:27:57 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-16 22:27:58 | INFO     | src.data_feed        | Ligação ao IB estabelecida com sucesso (127.0.0.1:7497).
+2026-03-16 22:27:58 | INFO     | src.data_feed        | Tipo de dados de mercado IB configurado para delayed (3).
+2026-03-16 22:27:58 | INFO     | src.execution        | OrderManager inicializado com sucesso
+2026-03-16 22:27:58 | INFO     | main                 | Conta IB detectada: DU***9204 (PAPER).
+2026-03-16 22:27:58 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-16 22:27:58 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-16 22:27:58 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-16 22:27:58 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 4: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 22:27:58 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 22:28:08 | WARNING  | src.data_feed        | Timeout ao obter preço de AAPL.
+2026-03-16 22:28:08 | DEBUG    | yfinance             | Entering history()
+2026-03-16 22:28:08 | DEBUG    | peewee               | ('CREATE TABLE IF NOT EXISTS "_tz_kv" ("key" VARCHAR(255) NOT NULL PRIMARY KEY, "value" VARCHAR(255)) WITHOUT ROWID', [])
+2026-03-16 22:28:08 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['AAPL', 1, 0])
+2026-03-16 22:28:08 | DEBUG    | yfinance             |  Entering history()
+2026-03-16 22:28:08 | DEBUG    | yfinance             | AAPL: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-16 22:28:08 | DEBUG    | yfinance             |   Entering get()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |    Entering _make_request()
+2026-03-16 22:28:08 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/AAPL
+2026-03-16 22:28:08 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-16 22:28:08 | DEBUG    | yfinance             |     Entering _get_cookie_and_crumb()
+2026-03-16 22:28:08 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-16 22:28:08 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |       Entering _get_cookie_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |        Entering _load_cookie_curlCffi()
+2026-03-16 22:28:08 | DEBUG    | peewee               | ('CREATE TABLE IF NOT EXISTS "_cookieschema" ("strategy" VARCHAR(255) NOT NULL PRIMARY KEY, "fetch_date" DATETIME NOT NULL, "cookie_bytes" BLOB NOT NULL) WITHOUT ROWID', [])
+2026-03-16 22:28:08 | DEBUG    | peewee               | ('SELECT "t1"."strategy", "t1"."fetch_date", "t1"."cookie_bytes" FROM "_cookieschema" AS "t1" WHERE ("t1"."strategy" = ?) LIMIT ? OFFSET ?', ['curlCffi', 1, 0])
+2026-03-16 22:28:08 | DEBUG    | yfinance             |        Exiting _load_cookie_curlCffi()
+2026-03-16 22:28:08 | DEBUG    | yfinance             | reusing persistent cookie
+2026-03-16 22:28:08 | DEBUG    | yfinance             |       Exiting _get_cookie_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |       Entering _get_crumb_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             | reusing cookie
+2026-03-16 22:28:08 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             | crumb = 'Cn4IrLkS5Lk'
+2026-03-16 22:28:08 | DEBUG    | yfinance             |       Exiting _get_crumb_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb_basic()
+2026-03-16 22:28:08 | DEBUG    | yfinance             |     Exiting _get_cookie_and_crumb()
+2026-03-16 22:28:09 | DEBUG    | yfinance             | response code=200
+2026-03-16 22:28:09 | DEBUG    | yfinance             |    Exiting _make_request()
+2026-03-16 22:28:09 | DEBUG    | yfinance             |   Exiting get()
+2026-03-16 22:28:09 | DEBUG    | yfinance             | AAPL: yfinance received OHLC data: 2026-03-10 13:30:00 -> 2026-03-16 20:00:03
+2026-03-16 22:28:09 | DEBUG    | yfinance             | AAPL: OHLC after cleaning: 2026-03-10 09:30:00-04:00 -> 2026-03-16 16:00:03-04:00
+2026-03-16 22:28:09 | DEBUG    | yfinance             | AAPL: OHLC after combining events: 2026-03-10 00:00:00-04:00 -> 2026-03-16 00:00:00-04:00
+2026-03-16 22:28:09 | DEBUG    | yfinance             | AAPL: yfinance returning OHLC: 2026-03-10 00:00:00-04:00 -> 2026-03-16 00:00:00-04:00
+2026-03-16 22:28:09 | DEBUG    | yfinance             |  Exiting history()
+2026-03-16 22:28:09 | DEBUG    | yfinance             | Exiting history()
+2026-03-16 22:28:09 | INFO     | src.data_feed        | Preço IB indisponível — yfinance fallback: AAPL = 252.8200
+2026-03-16 22:28:09 | INFO     | main                 | A iniciar reconciliacao de arranque...
+2026-03-16 22:28:09 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 22:28:09 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 1/3. Novo retry em 5 s.
+2026-03-16 22:28:09 | ERROR    | ib_insync.wrapper    | Error 300, reqId 4: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:4
+2026-03-16 22:28:09 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:4 (contrato=None)
+2026-03-16 22:28:24 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-16 22:28:24 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 22:28:24 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 2/3. Novo retry em 5 s.
+2026-03-16 22:28:39 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-16 22:28:39 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 22:28:39 | DEBUG    | src.execution        | Obtidas 0 ordem(ns) aberta(s) do IB
+2026-03-16 22:28:39 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 22:28:39 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:28:39 | INFO     | main                 | Bot operacional — a entrar no loop principal.
+2026-03-16 22:28:39 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-16 22:28:39 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 22:28:39 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 22:28:39 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 22:28:39 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-16 22:28:39 | INFO     | main                 | Sessao fechada para AAPL (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:28:39 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-16 22:28:39 | INFO     | main                 | Sessao fechada para SPY (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:28:39 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-16 22:28:39 | INFO     | main                 | Sessao fechada para QQQ (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:28:39 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-16 22:28:39 | INFO     | main                 | Sessao fechada para VIX (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:28:39 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-16 22:28:39 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 22:28:39 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:32:50 | WARNING  | main                 | Sinal SIGINT recebido — a iniciar encerramento gracioso...
+2026-03-16 22:32:50 | INFO     | main                 | A iniciar encerramento gracioso...
+2026-03-16 22:32:50 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 22:32:50 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:32:50 | INFO     | main                 | Estado das grids persistido com sucesso.
+2026-03-16 22:32:50 | INFO     | src.logger           | Metricas guardadas em /Users/beatrizneves/Documents/Playground/bot-trading/data/metrics.json
+2026-03-16 22:32:50 | INFO     | main                 | Metricas finais guardadas com sucesso.
+2026-03-16 22:32:50 | WARNING  | src.data_feed        | Desconexão do IB detectada pelo callback.
+2026-03-16 22:32:50 | INFO     | src.data_feed        | Desligado do IB com sucesso.
+2026-03-16 22:32:50 | INFO     | main                 | Ligacao ao IB encerrada.
+2026-03-16 22:32:50 | WARNING  | main                 | IB desconectado. Aguardar sequencia de reconexao.
+2026-03-16 22:32:50 | INFO     | src.data_feed        | A iniciar reconexão automática ao IB com espera inicial de 65 s…
+2026-03-16 22:32:50 | WARNING  | main                 | ALERTA OPERACIONAL: ⚠️ IB desconectado. A reconectar...
+2026-03-16 22:32:51 | INFO     | main                 | Bot encerrado com sucesso.
+2026-03-16 22:35:30 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-16 22:35:30 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-16 22:35:30 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-16 22:35:30 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-16 22:35:30 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 500.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-16 22:35:30 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-16 22:35:30 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-16 22:35:30 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-16 22:35:30 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 22:35:30 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-16 22:35:30 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-16 22:35:30 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-16 22:35:30 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-16 22:35:30 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-16 22:35:30 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'MSFT', 'SPY', 'QQQ', 'EWG', 'EWJ', 'GLD', 'TLT', 'VIX'] | capital: 500.00 | ciclo: 300 s | paper: True
+2026-03-16 22:35:30 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-16 22:35:30 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-16 22:35:30 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:35:30 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-16 22:35:30 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-16 22:35:30 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usopt.nj
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:fundfarm
+2026-03-16 22:35:30 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-16 22:35:30 | INFO     | src.data_feed        | Ligação ao IB estabelecida com sucesso (127.0.0.1:7497).
+2026-03-16 22:35:30 | INFO     | src.data_feed        | Tipo de dados de mercado IB configurado para delayed (3).
+2026-03-16 22:35:30 | INFO     | src.execution        | OrderManager inicializado com sucesso
+2026-03-16 22:35:30 | INFO     | main                 | Conta IB detectada: DU***9204 (PAPER).
+2026-03-16 22:35:30 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-16 22:35:31 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-16 22:35:31 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-16 22:35:31 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 4: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-16 22:35:31 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
+2026-03-16 22:35:41 | WARNING  | src.data_feed        | Timeout ao obter preço de AAPL.
+2026-03-16 22:35:41 | DEBUG    | yfinance             | Entering history()
+2026-03-16 22:35:41 | DEBUG    | peewee               | ('CREATE TABLE IF NOT EXISTS "_tz_kv" ("key" VARCHAR(255) NOT NULL PRIMARY KEY, "value" VARCHAR(255)) WITHOUT ROWID', [])
+2026-03-16 22:35:41 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['AAPL', 1, 0])
+2026-03-16 22:35:41 | DEBUG    | yfinance             |  Entering history()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | AAPL: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-16 22:35:41 | DEBUG    | yfinance             |   Entering get()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |    Entering _make_request()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/AAPL
+2026-03-16 22:35:41 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-16 22:35:41 | DEBUG    | yfinance             |     Entering _get_cookie_and_crumb()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-16 22:35:41 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |       Entering _get_cookie_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |        Entering _load_cookie_curlCffi()
+2026-03-16 22:35:41 | DEBUG    | peewee               | ('CREATE TABLE IF NOT EXISTS "_cookieschema" ("strategy" VARCHAR(255) NOT NULL PRIMARY KEY, "fetch_date" DATETIME NOT NULL, "cookie_bytes" BLOB NOT NULL) WITHOUT ROWID', [])
+2026-03-16 22:35:41 | DEBUG    | peewee               | ('SELECT "t1"."strategy", "t1"."fetch_date", "t1"."cookie_bytes" FROM "_cookieschema" AS "t1" WHERE ("t1"."strategy" = ?) LIMIT ? OFFSET ?', ['curlCffi', 1, 0])
+2026-03-16 22:35:41 | DEBUG    | yfinance             |        Exiting _load_cookie_curlCffi()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | reusing persistent cookie
+2026-03-16 22:35:41 | DEBUG    | yfinance             |       Exiting _get_cookie_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |       Entering _get_crumb_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | reusing cookie
+2026-03-16 22:35:41 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | crumb = 'Cn4IrLkS5Lk'
+2026-03-16 22:35:41 | DEBUG    | yfinance             |       Exiting _get_crumb_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb_basic()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |     Exiting _get_cookie_and_crumb()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | response code=200
+2026-03-16 22:35:41 | DEBUG    | yfinance             |    Exiting _make_request()
+2026-03-16 22:35:41 | DEBUG    | yfinance             |   Exiting get()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | AAPL: yfinance received OHLC data: 2026-03-10 13:30:00 -> 2026-03-16 20:00:03
+2026-03-16 22:35:41 | DEBUG    | yfinance             | AAPL: OHLC after cleaning: 2026-03-10 09:30:00-04:00 -> 2026-03-16 16:00:03-04:00
+2026-03-16 22:35:41 | DEBUG    | yfinance             | AAPL: OHLC after combining events: 2026-03-10 00:00:00-04:00 -> 2026-03-16 00:00:00-04:00
+2026-03-16 22:35:41 | DEBUG    | yfinance             | AAPL: yfinance returning OHLC: 2026-03-10 00:00:00-04:00 -> 2026-03-16 00:00:00-04:00
+2026-03-16 22:35:41 | DEBUG    | yfinance             |  Exiting history()
+2026-03-16 22:35:41 | DEBUG    | yfinance             | Exiting history()
+2026-03-16 22:35:41 | INFO     | src.data_feed        | Preço IB indisponível — yfinance fallback: AAPL = 252.8200
+2026-03-16 22:35:41 | INFO     | main                 | A iniciar reconciliacao de arranque...
+2026-03-16 22:35:41 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 22:35:41 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 1/3. Novo retry em 5 s.
+2026-03-16 22:35:41 | ERROR    | ib_insync.wrapper    | Error 300, reqId 4: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:4
+2026-03-16 22:35:41 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:4 (contrato=None)
+2026-03-16 22:35:56 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-16 22:35:56 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 22:35:56 | WARNING  | main                 | Leitura de posicoes do IB sem dados na tentativa 2/3. Novo retry em 5 s.
+2026-03-16 22:36:11 | WARNING  | src.data_feed        | Pacing rule aplicada em get_positions: espera 10.00 s para positions (identical_request=10.00s)
+2026-03-16 22:36:11 | DEBUG    | src.execution        | Obtidas 0 posicao(oes) do IB
+2026-03-16 22:36:11 | DEBUG    | src.execution        | Obtidas 0 ordem(ns) aberta(s) do IB
+2026-03-16 22:36:11 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 22:36:11 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:36:11 | INFO     | main                 | Bot operacional — a entrar no loop principal.
+2026-03-16 22:36:11 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-16 22:36:11 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 22:36:11 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 22:36:11 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 22:36:11 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-16 22:36:11 | INFO     | main                 | Sessao fechada para AAPL (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:11 | DEBUG    | main                 | A processar simbolo: MSFT
+2026-03-16 22:36:11 | INFO     | main                 | Sessao fechada para MSFT (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:11 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-16 22:36:12 | INFO     | main                 | Sessao fechada para SPY (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:12 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-16 22:36:12 | INFO     | main                 | Sessao fechada para QQQ (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:12 | DEBUG    | main                 | A processar simbolo: EWG
+2026-03-16 22:36:12 | INFO     | main                 | Sessao fechada para EWG (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:12 | DEBUG    | main                 | A processar simbolo: EWJ
+2026-03-16 22:36:12 | INFO     | main                 | Sessao fechada para EWJ (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:12 | DEBUG    | main                 | A processar simbolo: GLD
+2026-03-16 22:36:12 | INFO     | main                 | Sessao fechada para GLD (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:12 | DEBUG    | main                 | A processar simbolo: TLT
+2026-03-16 22:36:12 | INFO     | main                 | Sessao fechada para TLT (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:12 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-16 22:36:13 | INFO     | main                 | Sessao fechada para VIX (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:36:13 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-16 22:36:13 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 22:36:13 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-16 22:41:13 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-16 22:41:13 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-16 22:41:13 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-16 22:41:13 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-16 22:41:13 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-16 22:41:13 | INFO     | main                 | Sessao fechada para AAPL (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:13 | DEBUG    | main                 | A processar simbolo: MSFT
+2026-03-16 22:41:13 | INFO     | main                 | Sessao fechada para MSFT (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:13 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-16 22:41:13 | INFO     | main                 | Sessao fechada para SPY (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:13 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-16 22:41:13 | INFO     | main                 | Sessao fechada para QQQ (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:13 | DEBUG    | main                 | A processar simbolo: EWG
+2026-03-16 22:41:13 | INFO     | main                 | Sessao fechada para EWG (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:13 | DEBUG    | main                 | A processar simbolo: EWJ
+2026-03-16 22:41:14 | INFO     | main                 | Sessao fechada para EWJ (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:14 | DEBUG    | main                 | A processar simbolo: GLD
+2026-03-16 22:41:14 | INFO     | main                 | Sessao fechada para GLD (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:14 | DEBUG    | main                 | A processar simbolo: TLT
+2026-03-16 22:41:14 | INFO     | main                 | Sessao fechada para TLT (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:14 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-16 22:41:14 | INFO     | main                 | Sessao fechada para VIX (DEPOIS_FECHO) — sem novas entradas.
+2026-03-16 22:41:14 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-16 22:41:14 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-16 22:41:14 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-17 08:52:01 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-17 08:52:01 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-17 08:52:01 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-17 08:52:01 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-17 08:52:01 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 500.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-17 08:52:01 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-17 08:52:01 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-17 08:52:01 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-17 08:52:01 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-17 08:52:01 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-17 08:52:01 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-17 08:52:01 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-17 08:52:01 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-17 08:52:01 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-17 08:52:01 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'MSFT', 'SPY', 'QQQ', 'EWG', 'EWJ', 'GLD', 'TLT', 'VIX'] | capital: 500.00 | ciclo: 300 s | paper: True
+2026-03-17 08:52:01 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-17 08:52:01 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-17 08:52:01 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-17 08:52:01 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-17 08:52:01 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-17 08:52:01 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-17 13:47:51 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-17 13:47:51 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-17 13:47:51 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 5 | Posicoes max: 10
+2026-03-17 13:47:51 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-17 13:47:51 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 500.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 10 | Max grids: 5 | R:R mínimo: 2.5
+2026-03-17 13:47:51 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: /Users/beatrizneves/Documents/Playground/bot-trading/data)
+2026-03-17 13:47:51 | INFO     | main                 | Notificacoes Telegram activadas.
+2026-03-17 13:47:51 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-17 13:47:51 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-17 13:47:51 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-17 13:47:51 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-17 13:47:51 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-17 13:47:51 | INFO     | main                 | Handlers de sinal registados (SIGINT, SIGTERM).
+2026-03-17 13:47:51 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-17 13:47:51 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'MSFT', 'SPY', 'QQQ', 'EWG', 'EWJ', 'GLD', 'TLT', 'VIX'] | capital: 500.00 | ciclo: 300 s | paper: True
+2026-03-17 13:47:51 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-17 13:47:51 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-17 13:47:51 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-17 13:47:51 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-17 13:47:51 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-17 13:47:51 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1)…
+2026-03-17 13:48:05 | ERROR    | ib_insync.client     | Peer closed connection.
+2026-03-17 13:48:05 | WARNING  | src.data_feed        | Desconexão do IB detectada pelo callback.
+2026-03-17 13:48:05 | WARNING  | main                 | IB desconectado. Aguardar sequencia de reconexao.
+2026-03-17 13:48:05 | INFO     | src.data_feed        | A iniciar reconexão automática ao IB com espera inicial de 65 s…
+2026-03-17 13:48:05 | WARNING  | main                 | ALERTA OPERACIONAL: ⚠️ IB desconectado. A reconectar...
+2026-03-17 13:48:05 | WARNING  | src.data_feed        | Falha ao ligar ao IB: Not connected. Próxima tentativa em 5 s.
+2026-03-17 13:48:10 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=2)…
+2026-03-17 13:48:10 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-17 13:48:10 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-17 13:48:10 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 10 s.
+2026-03-17 13:48:20 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=3)…
+2026-03-17 13:48:20 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(61, "Connect call failed ('127.0.0.1', 7497)")
+2026-03-17 13:48:20 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-17 13:48:20 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [Errno 61] Connect call failed ('127.0.0.1', 7497). Próxima tentativa em 20 s.
+2026-03-17 13:48:20 | CRITICAL | main                 | Nao foi possivel ligar ao IB apos 3 tentativas

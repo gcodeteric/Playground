@@ -182,7 +182,7 @@ class TestGetMarketData:
         expected_keys = {
             "sma25", "sma50", "sma200", "rsi14", "atr14",
             "bb_upper", "bb_middle", "bb_lower",
-            "volume_avg_20", "current_price", "atr_avg_60",
+            "volume_avg_20", "last_close", "current_price", "atr_avg_60",
         }
         assert set(result.keys()) == expected_keys
 
@@ -195,8 +195,9 @@ class TestGetMarketData:
 
         for key in ["sma25", "sma50", "sma200", "rsi14", "atr14",
                      "bb_upper", "bb_middle", "bb_lower",
-                     "volume_avg_20", "current_price", "atr_avg_60"]:
+                     "volume_avg_20", "last_close", "atr_avg_60"]:
             assert result[key] is not None, f"{key} should not be None"
+        assert result["current_price"] is None
 
     def test_empty_dataframe_returns_all_none(self, data_feed):
         contract = MagicMock()
@@ -207,12 +208,47 @@ class TestGetMarketData:
         for key in result:
             assert result[key] is None
 
-    def test_current_price_is_last_close(self, data_feed, sample_bars_df):
+    def test_last_close_is_last_bar_close(self, data_feed, sample_bars_df):
         contract = MagicMock()
         contract.symbol = "AAPL"
         result = data_feed.get_market_data(contract, sample_bars_df)
         expected_price = round(float(sample_bars_df["close"].iloc[-1]), 6)
+        assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
+        assert result["current_price"] is None
+
+    @pytest.mark.asyncio
+    async def test_get_market_data_live_uses_live_snapshot(
+        self,
+        data_feed,
+        sample_bars_df,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        data_feed.get_current_price_live = AsyncMock(return_value=123.4567)
+
+        result = await data_feed.get_market_data_live(contract, sample_bars_df)
+
+        assert result["current_price"] == pytest.approx(123.4567, abs=1e-5)
+        assert result["last_close"] == pytest.approx(
+            float(sample_bars_df["close"].iloc[-1]),
+            abs=1e-5,
+        )
+
+    @pytest.mark.asyncio
+    async def test_get_market_data_live_falls_back_to_last_close(
+        self,
+        data_feed,
+        sample_bars_df,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        data_feed.get_current_price_live = AsyncMock(return_value=None)
+
+        result = await data_feed.get_market_data_live(contract, sample_bars_df)
+
+        expected_price = round(float(sample_bars_df["close"].iloc[-1]), 6)
         assert result["current_price"] == pytest.approx(expected_price, abs=1e-5)
+        assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
 
     def test_sma_values_are_reasonable(self, data_feed, sample_bars_df):
         contract = MagicMock()
