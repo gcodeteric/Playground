@@ -290,6 +290,45 @@ class TestGetMarketData:
 
 
 # ===================================================================
+# Tests: get_current_price / get_current_volume
+# ===================================================================
+
+
+class TestCurrentSnapshotFallbacks:
+    @pytest.mark.asyncio
+    async def test_get_current_price_uses_async_yfinance_when_ib_disconnected(
+        self,
+        data_feed,
+        mock_connection,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=False)
+        data_feed.get_price_yfinance = AsyncMock(return_value=123.45)
+
+        result = await data_feed.get_current_price(contract)
+
+        assert result == pytest.approx(123.45, abs=1e-5)
+        data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_uses_async_yfinance_when_ib_disconnected(
+        self,
+        data_feed,
+        mock_connection,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=False)
+        data_feed.get_volume_yfinance = AsyncMock(return_value=999_999.0)
+
+        result = await data_feed.get_current_volume(contract)
+
+        assert result == pytest.approx(999_999.0, abs=1e-5)
+        data_feed.get_volume_yfinance.assert_awaited_once_with("AAPL")
+
+
+# ===================================================================
 # Tests: TTLCache
 # ===================================================================
 

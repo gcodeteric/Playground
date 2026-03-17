@@ -601,48 +601,65 @@ class DataFeed:
         symbol_map = getattr(self, "_yf_symbol_map", self._YF_SYMBOL_MAP)
         return symbol_map.get(symbol.upper(), symbol.upper())
 
-    def _get_price_yfinance(self, symbol: str) -> float | None:
-        """Fallback: preço actual via yfinance."""
+    async def get_price_yfinance(self, symbol: str) -> float | None:
+        """Fallback assíncrono: preço actual via yfinance."""
+        cache_key = f"yfinance_price:{symbol.upper()}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return float(cached)
+
         try:
             yf_symbol = self._yf_symbol(symbol)
-            ticker = yf.Ticker(yf_symbol)
-            info = getattr(ticker, "fast_info", {}) or {}
-            price = (
-                info.get("last_price")
-                or info.get("regular_market_price")
-                or info.get("previous_close")
+            loop = asyncio.get_running_loop()
+            df = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: yf.download(yf_symbol, period="1d", progress=False),
+                ),
+                timeout=5.0,
             )
-            if price:
-                return float(price)
-
-            history = ticker.history(period="5d", interval="1d", auto_adjust=False)
-            if not history.empty:
-                return float(history["Close"].dropna().iloc[-1])
+            price = float(df["Close"].iloc[-1]) if not df.empty else None
+            if price is not None:
+                self._cache.set(cache_key, price)
+            return price
+        except asyncio.TimeoutError:
+            logger.warning("yfinance timeout %s", symbol)
+            return None
         except Exception as exc:  # noqa: BLE001
-            logger.debug("Preço via yfinance falhou para %s: %s", symbol, exc)
-        return None
+            logger.warning("yfinance erro %s: %s", symbol, exc)
+            return None
 
-    def _get_volume_yfinance(self, symbol: str) -> float | None:
-        """Fallback: volume actual via yfinance."""
+    async def get_volume_yfinance(self, symbol: str) -> float | None:
+        """Fallback assíncrono: volume actual via yfinance."""
+        cache_key = f"yfinance_volume:{symbol.upper()}"
+        cached = self._cache.get(cache_key)
+        if cached is not None:
+            return float(cached)
+
         try:
             yf_symbol = self._yf_symbol(symbol)
-            ticker = yf.Ticker(yf_symbol)
-            info = getattr(ticker, "fast_info", {}) or {}
+            loop = asyncio.get_running_loop()
+            df = await asyncio.wait_for(
+                loop.run_in_executor(
+                    None,
+                    lambda: yf.download(yf_symbol, period="5d", progress=False),
+                ),
+                timeout=5.0,
+            )
             volume = (
-                info.get("three_month_average_volume")
-                or info.get("regular_market_volume")
+                float(df["Volume"].dropna().iloc[-1])
+                if not df.empty and "Volume" in df and not df["Volume"].dropna().empty
+                else None
             )
-            if volume:
-                return float(volume)
-
-            history = ticker.history(period="5d", interval="1d", auto_adjust=False)
-            if not history.empty and "Volume" in history:
-                recent = history["Volume"].dropna()
-                if not recent.empty:
-                    return float(recent.iloc[-1])
+            if volume is not None:
+                self._cache.set(cache_key, volume)
+            return volume
+        except asyncio.TimeoutError:
+            logger.warning("yfinance timeout %s", symbol)
+            return None
         except Exception as exc:  # noqa: BLE001
-            logger.debug("Volume via yfinance falhou para %s: %s", symbol, exc)
-        return None
+            logger.warning("yfinance erro %s: %s", symbol, exc)
+            return None
 
     # ----------------------------------------------------------------
     # Barras históricas
@@ -796,7 +813,7 @@ class DataFeed:
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
         if not connected:
-            price = self._get_price_yfinance(symbol)
+            price = await self.get_price_yfinance(symbol)
             if price is not None:
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
@@ -805,18 +822,6 @@ class DataFeed:
                 )
                 self._cache.set(cache_key, price)
             return price
-
-    async def get_current_price_live(
-        self,
-        contract: Stock | Forex | Future | CFD,
-    ) -> float | None:
-        """
-        Obtém o snapshot actual do mercado.
-
-        Este alias torna explícita a separação entre preço live e
-        ``last_close`` diário usado nos indicadores.
-        """
-        return await self.get_current_price(contract)
 
         async def _request_price() -> float | None:
             logger.debug("A obter preço actual de %s…", contract.symbol)
@@ -851,7 +856,7 @@ class DataFeed:
             # Timeout — cancelar subscrição
             self.ib.cancelMktData(contract)
             logger.warning("Timeout ao obter preço de %s.", contract.symbol)
-            price = self._get_price_yfinance(symbol)
+            price = await self.get_price_yfinance(symbol)
             if price is not None:
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
@@ -874,7 +879,7 @@ class DataFeed:
                 self.ib.cancelMktData(contract)
             except Exception:
                 pass
-            price = self._get_price_yfinance(symbol)
+            price = await self.get_price_yfinance(symbol)
             if price is not None:
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
@@ -883,6 +888,18 @@ class DataFeed:
                 )
                 self._cache.set(cache_key, price)
             return price
+
+    async def get_current_price_live(
+        self,
+        contract: Stock | Forex | Future | CFD,
+    ) -> float | None:
+        """
+        Obtém o snapshot actual do mercado.
+
+        Este alias torna explícita a separação entre preço live e
+        ``last_close`` diário usado nos indicadores.
+        """
+        return await self.get_current_price(contract)
 
     async def get_current_volume(
         self,
@@ -902,7 +919,7 @@ class DataFeed:
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
         if not connected:
-            volume = self._get_volume_yfinance(symbol)
+            volume = await self.get_volume_yfinance(symbol)
             if volume is not None:
                 logger.info(
                     "Volume IB indisponível — yfinance fallback: %s = %.0f",
@@ -929,7 +946,7 @@ class DataFeed:
 
             self.ib.cancelMktData(contract)
             logger.warning("Timeout ao obter volume de %s.", contract.symbol)
-            volume = self._get_volume_yfinance(symbol)
+            volume = await self.get_volume_yfinance(symbol)
             if volume is not None:
                 logger.info(
                     "Volume IB indisponível — yfinance fallback: %s = %.0f",
@@ -952,7 +969,7 @@ class DataFeed:
                 self.ib.cancelMktData(contract)
             except Exception:
                 pass
-            volume = self._get_volume_yfinance(symbol)
+            volume = await self.get_volume_yfinance(symbol)
             if volume is not None:
                 logger.info(
                     "Volume IB indisponível — yfinance fallback: %s = %.0f",
