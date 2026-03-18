@@ -871,7 +871,7 @@ class TestStatePersistenceAndRecovery:
         state_path.write_text("this is not valid JSON {{{")
 
         engine = GridEngine(data_dir=tmp_data_dir)
-        with pytest.raises(json.JSONDecodeError):
+        with pytest.raises(RuntimeError, match="Estado primario corrompido e sem backup valido"):
             engine.load_state()
 
     def test_empty_state_recovery(self, tmp_data_dir: str):

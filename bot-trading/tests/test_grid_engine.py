@@ -428,7 +428,7 @@ class TestPersistence:
         state_path.write_text(json.dumps({"not_valid": True}))
 
         engine = GridEngine(data_dir=tmp_data_dir)
-        with pytest.raises(ValueError, match="Esquema invalido"):
+        with pytest.raises(RuntimeError, match="Estado primario corrompido e sem backup valido"):
             engine.load_state()
 
     def test_load_state_validates_grid_status(self, tmp_data_dir: str):
@@ -452,7 +452,7 @@ class TestPersistence:
         state_path.write_text(json.dumps(bad_data))
 
         engine = GridEngine(data_dir=tmp_data_dir)
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError, match="Estado primario corrompido e sem backup valido"):
             engine.load_state()
 
     def test_load_state_validates_level_status(self, tmp_data_dir: str):
@@ -483,7 +483,7 @@ class TestPersistence:
         state_path.write_text(json.dumps(bad_data))
 
         engine = GridEngine(data_dir=tmp_data_dir)
-        with pytest.raises(ValueError):
+        with pytest.raises(RuntimeError, match="Estado primario corrompido e sem backup valido"):
             engine.load_state()
 
     def test_load_state_validates_missing_fields(self, tmp_data_dir: str):
@@ -497,7 +497,7 @@ class TestPersistence:
         state_path.write_text(json.dumps(bad_data))
 
         engine = GridEngine(data_dir=tmp_data_dir)
-        with pytest.raises(ValueError, match="campos em falta"):
+        with pytest.raises(RuntimeError, match="Estado primario corrompido e sem backup valido"):
             engine.load_state()
 
     def test_save_load_preserves_level_state(self, engine: GridEngine, tmp_data_dir: str):
