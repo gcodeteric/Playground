@@ -165,6 +165,8 @@ class IBConnection:
         )
 
         self._connected: bool = False
+        self._connection_state: str = "DISCONNECTED"
+        self._connect_lock: asyncio.Lock = asyncio.Lock()
         self._reconnect_delay: int = _INITIAL_RECONNECT_DELAY
         self._reconnecting: bool = False
         self._reconnect_task: asyncio.Task[None] | None = None
@@ -247,50 +249,61 @@ class IBConnection:
         Returns:
             True quando a ligação for estabelecida com sucesso.
         """
-        delay = initial_delay
-        attempt = 0
-
-        while max_attempts is None or attempt < max_attempts:
-            attempt += 1
-            try:
-                logger.info(
-                    "A tentar ligar ao IB em %s:%d (client_id=%d, tentativa=%d)…",
-                    self.host, self.port, self.client_id, attempt,
-                )
-                await self.ib.connectAsync(
-                    host=self.host,
-                    port=self.port,
-                    clientId=self.client_id,
-                    timeout=timeout,
-                )
+        async with self._connect_lock:
+            if self.ib.isConnected():
                 self._connected = True
-                # Activar delayed data por defeito para evitar erro 10089 sem subscrição paga.
-                self.ib.reqMarketDataType(3)
-                self._reconnect_delay = _INITIAL_RECONNECT_DELAY  # reiniciar backoff
-                logger.info(
-                    "Ligação ao IB estabelecida com sucesso (%s:%d).",
-                    self.host, self.port,
-                )
-                logger.info("Tipo de dados de mercado IB configurado para delayed (3).")
+                self._connection_state = "CONNECTED"
                 return True
 
-            except (
-                ConnectionRefusedError,
-                OSError,
-                asyncio.TimeoutError,
-                Exception,
-            ) as exc:
-                logger.warning(
-                    "Falha ao ligar ao IB: %s. Próxima tentativa em %d s.",
-                    exc, delay,
-                )
-                if max_attempts is not None and attempt >= max_attempts:
-                    break
-                await asyncio.sleep(delay)
-                delay = min(delay * 2, _MAX_RECONNECT_DELAY)
+            delay = initial_delay
+            attempt = 0
 
-        self._connected = False
-        return False
+            while max_attempts is None or attempt < max_attempts:
+                attempt += 1
+                self._connection_state = "RECONNECTING" if self._reconnecting else "CONNECTING"
+                try:
+                    logger.info(
+                        "A tentar ligar ao IB em %s:%d (client_id=%d, tentativa=%d, estado=%s)…",
+                        self.host, self.port, self.client_id, attempt, self._connection_state,
+                    )
+                    await self.ib.connectAsync(
+                        host=self.host,
+                        port=self.port,
+                        clientId=self.client_id,
+                        timeout=timeout,
+                    )
+                    self._connected = True
+                    self._connection_state = "CONNECTED"
+                    # Activar delayed data por defeito para evitar erro 10089 sem subscrição paga.
+                    self.ib.reqMarketDataType(3)
+                    self._reconnect_delay = _INITIAL_RECONNECT_DELAY  # reiniciar backoff
+                    logger.info(
+                        "Ligação ao IB estabelecida com sucesso (%s:%d).",
+                        self.host, self.port,
+                    )
+                    logger.info("Tipo de dados de mercado IB configurado para delayed (3).")
+                    return True
+
+                except (
+                    ConnectionRefusedError,
+                    OSError,
+                    asyncio.TimeoutError,
+                    Exception,
+                ) as exc:
+                    self._connected = False
+                    self._connection_state = "DISCONNECTED"
+                    logger.warning(
+                        "Falha ao ligar ao IB: %s. Próxima tentativa em %d s.",
+                        exc, delay,
+                    )
+                    if max_attempts is not None and attempt >= max_attempts:
+                        break
+                    await asyncio.sleep(delay)
+                    delay = min(delay * 2, _MAX_RECONNECT_DELAY)
+
+            self._connected = False
+            self._connection_state = "DISCONNECTED"
+            return False
 
     async def disconnect(self) -> None:
         """Desliga do IB Gateway/TWS de forma limpa."""
@@ -307,6 +320,7 @@ class IBConnection:
             logger.info("Desligado do IB com sucesso.")
 
         self._connected = False
+        self._connection_state = "DISCONNECTED"
 
     async def ensure_connected(self) -> bool:
         """
@@ -317,10 +331,12 @@ class IBConnection:
         """
         if self.ib.isConnected():
             self._connected = True
+            self._connection_state = "CONNECTED"
             return True
 
         logger.warning("Ligação ao IB perdida. A iniciar reconexão…")
         self._connected = False
+        self._connection_state = "DISCONNECTED"
         return await self.connect(max_attempts=3)
 
     def recent_error_codes(self, since_seconds: float = 120.0) -> list[int]:
@@ -355,6 +371,7 @@ class IBConnection:
         assíncrono (se não estiver já em curso).
         """
         self._connected = False
+        self._connection_state = "DISCONNECTED"
         logger.warning("Desconexão do IB detectada pelo callback.")
 
         if self._reconnecting:
@@ -378,6 +395,7 @@ class IBConnection:
         if self._reconnecting:
             return
         self._reconnecting = True
+        self._connection_state = "RECONNECTING"
         try:
             logger.info(
                 "A iniciar reconexão automática ao IB com espera inicial de %d s…",
@@ -421,6 +439,8 @@ class IBConnection:
                 await asyncio.sleep(delay)
         finally:
             self._reconnecting = False
+            if not self.ib.isConnected():
+                self._connection_state = "DISCONNECTED"
 
     @property
     def is_connected(self) -> bool:
@@ -596,6 +616,23 @@ class DataFeed:
                 return f"{contract.symbol}{currency}"
         return str(contract.symbol)
 
+    @staticmethod
+    def _contract_cache_key(contract: Stock | Forex | Future | CFD) -> str:
+        """Constrói uma fingerprint estável para cache por contrato."""
+        sec_type = (
+            getattr(contract, "secType", None)
+            or type(contract).__name__.upper()
+        )
+        symbol = getattr(contract, "localSymbol", None) or getattr(contract, "symbol", "")
+        exchange = (
+            getattr(contract, "primaryExchange", None)
+            or getattr(contract, "exchange", None)
+            or ""
+        )
+        currency = getattr(contract, "currency", None) or ""
+        expiry = getattr(contract, "lastTradeDateOrContractMonth", None) or ""
+        return f"{sec_type}:{symbol}:{exchange}:{currency}:{expiry}"
+
     def _yf_symbol(self, symbol: str) -> str:
         """Converte símbolo IB para símbolo Yahoo Finance."""
         symbol_map = getattr(self, "_yf_symbol_map", self._YF_SYMBOL_MAP)
@@ -690,7 +727,10 @@ class DataFeed:
             DataFrame vazio se não houver dados.
         """
         # Chave de cache
-        cache_key = f"bars:{contract.symbol}:{duration}:{bar_size}"
+        contract_key = self._contract_cache_key(contract)
+        cache_key = (
+            f"bars:{contract_key}:{duration}:{bar_size}:{what_to_show}:{int(use_rth)}"
+        )
         cached = self._bars_cache.get(cache_key)
         if cached is not None:
             logger.debug("Cache hit para barras históricas: %s", cache_key)
@@ -793,37 +833,38 @@ class DataFeed:
     # Preço e volume actuais
     # ----------------------------------------------------------------
 
-    async def get_current_price(
+    async def get_current_price_details(
         self,
         contract: Stock | Forex | Future | CFD,
-    ) -> float | None:
+    ) -> dict[str, Any]:
         """
-        Obtém o preço actual (último negócio ou midpoint) de um contrato.
-
-        Utiliza cache com TTL curto para evitar pedidos redundantes.
+        Obtém o preço actual com metadados de fonte/frescura.
 
         Returns:
-            Preço actual como float, ou None se indisponível.
+            ``{"price": float|None, "source": str|None, "fresh": bool}``
         """
-        cache_key = f"price:{contract.symbol}"
+        contract_key = self._contract_cache_key(contract)
+        cache_key = f"price_snapshot:{contract_key}"
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return cached
+            return dict(cached)
 
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
         if not connected:
             price = await self.get_price_yfinance(symbol)
             if price is not None:
+                snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
                     price,
                 )
-                self._cache.set(cache_key, price)
-            return price
+                self._cache.set(cache_key, snapshot)
+                return snapshot
+            return {"price": None, "source": None, "fresh": False}
 
-        async def _request_price() -> float | None:
+        async def _request_price() -> dict[str, Any]:
             logger.debug("A obter preço actual de %s…", contract.symbol)
 
             # Pedir snapshot de mercado (ticker)
@@ -835,36 +876,40 @@ class DataFeed:
                 await asyncio.sleep(0.1)
                 if _valid_price(ticker.last):
                     price = float(ticker.last)
-                    self._cache.set(cache_key, price)
+                    snapshot = {"price": price, "source": "last", "fresh": True}
+                    self._cache.set(cache_key, snapshot)
                     self.ib.cancelMktData(contract)
                     logger.debug("Preço de %s: %.4f (last).", contract.symbol, price)
-                    return price
-                if _valid_price(ticker.close):
-                    price = float(ticker.close)
-                    self._cache.set(cache_key, price)
-                    self.ib.cancelMktData(contract)
-                    logger.debug("Preço de %s: %.4f (close).", contract.symbol, price)
-                    return price
-                # Para Forex / CFD, usar midpoint
+                    return snapshot
                 if _valid_price(ticker.bid) and _valid_price(ticker.ask):
                     price = round((float(ticker.bid) + float(ticker.ask)) / 2.0, 6)
-                    self._cache.set(cache_key, price)
+                    snapshot = {"price": price, "source": "mid", "fresh": True}
+                    self._cache.set(cache_key, snapshot)
                     self.ib.cancelMktData(contract)
                     logger.debug("Preço de %s: %.4f (mid).", contract.symbol, price)
-                    return price
+                    return snapshot
+                if _valid_price(ticker.close):
+                    price = float(ticker.close)
+                    snapshot = {"price": price, "source": "close", "fresh": False}
+                    self._cache.set(cache_key, snapshot)
+                    self.ib.cancelMktData(contract)
+                    logger.debug("Preço de %s: %.4f (close).", contract.symbol, price)
+                    return snapshot
 
             # Timeout — cancelar subscrição
             self.ib.cancelMktData(contract)
             logger.warning("Timeout ao obter preço de %s.", contract.symbol)
             price = await self.get_price_yfinance(symbol)
             if price is not None:
+                snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
                     price,
                 )
-                self._cache.set(cache_key, price)
-            return price
+                self._cache.set(cache_key, snapshot)
+                return snapshot
+            return {"price": None, "source": None, "fresh": False}
 
         try:
             return await self._request_executor.run(
@@ -881,13 +926,24 @@ class DataFeed:
                 pass
             price = await self.get_price_yfinance(symbol)
             if price is not None:
+                snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
                     price,
                 )
-                self._cache.set(cache_key, price)
-            return price
+                self._cache.set(cache_key, snapshot)
+                return snapshot
+            return {"price": None, "source": None, "fresh": False}
+
+    async def get_current_price(
+        self,
+        contract: Stock | Forex | Future | CFD,
+    ) -> float | None:
+        """Obtém o preço actual em formato simples para compatibilidade."""
+        details = await self.get_current_price_details(contract)
+        price = details.get("price")
+        return float(price) if price is not None else None
 
     async def get_current_price_live(
         self,
@@ -911,7 +967,8 @@ class DataFeed:
         Returns:
             Volume como float, ou None se indisponível.
         """
-        cache_key = f"volume:{contract.symbol}"
+        contract_key = self._contract_cache_key(contract)
+        cache_key = f"volume:{contract_key}"
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
@@ -1240,7 +1297,7 @@ class DataFeed:
         self,
         contract: Stock | Forex | Future | CFD,
         bars_df: pd.DataFrame,
-    ) -> dict[str, float | None]:
+    ) -> dict[str, Any]:
         """
         Enriquece os indicadores técnicos com o snapshot actual do mercado.
 
@@ -1249,10 +1306,15 @@ class DataFeed:
         """
         indicators = self.get_market_data(contract, bars_df)
         last_close = indicators.get("last_close")
-        live_price = await self.get_current_price_live(contract)
+        price_details = await self.get_current_price_details(contract)
+        live_price = price_details.get("price")
+        price_source = price_details.get("source")
+        price_fresh = bool(price_details.get("fresh", False))
 
         if live_price is None and last_close is not None:
             live_price = float(last_close)
+            price_source = "last_close"
+            price_fresh = False
             logger.warning(
                 "Preço actual indisponível para %s — a usar último fecho %.4f como fallback.",
                 contract.symbol,
@@ -1262,6 +1324,8 @@ class DataFeed:
         indicators["current_price"] = (
             round(float(live_price), 6) if live_price is not None else None
         )
+        indicators["price_source"] = price_source
+        indicators["price_fresh"] = price_fresh
         return indicators
 
 

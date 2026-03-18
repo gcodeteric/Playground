@@ -8,6 +8,7 @@ Covers: IBConnection init (mocked), contract creation (Stock, Forex, Futures, CF
 from __future__ import annotations
 
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import numpy as np
@@ -224,11 +225,15 @@ class TestGetMarketData:
     ):
         contract = MagicMock()
         contract.symbol = "AAPL"
-        data_feed.get_current_price_live = AsyncMock(return_value=123.4567)
+        data_feed.get_current_price_details = AsyncMock(
+            return_value={"price": 123.4567, "source": "last", "fresh": True},
+        )
 
         result = await data_feed.get_market_data_live(contract, sample_bars_df)
 
         assert result["current_price"] == pytest.approx(123.4567, abs=1e-5)
+        assert result["price_source"] == "last"
+        assert result["price_fresh"] is True
         assert result["last_close"] == pytest.approx(
             float(sample_bars_df["close"].iloc[-1]),
             abs=1e-5,
@@ -242,12 +247,16 @@ class TestGetMarketData:
     ):
         contract = MagicMock()
         contract.symbol = "AAPL"
-        data_feed.get_current_price_live = AsyncMock(return_value=None)
+        data_feed.get_current_price_details = AsyncMock(
+            return_value={"price": None, "source": None, "fresh": False},
+        )
 
         result = await data_feed.get_market_data_live(contract, sample_bars_df)
 
         expected_price = round(float(sample_bars_df["close"].iloc[-1]), 6)
         assert result["current_price"] == pytest.approx(expected_price, abs=1e-5)
+        assert result["price_source"] == "last_close"
+        assert result["price_fresh"] is False
         assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
 
     def test_sma_values_are_reasonable(self, data_feed, sample_bars_df):
@@ -295,6 +304,59 @@ class TestGetMarketData:
 
 
 class TestCurrentSnapshotFallbacks:
+    def test_contract_cache_key_distinguishes_material_contract_fields(self, data_feed):
+        stock_a = SimpleNamespace(
+            secType="STK",
+            symbol="AAPL",
+            exchange="SMART",
+            primaryExchange="NASDAQ",
+            currency="USD",
+            lastTradeDateOrContractMonth="",
+            localSymbol="AAPL",
+        )
+        future_a = SimpleNamespace(
+            secType="FUT",
+            symbol="MES",
+            exchange="CME",
+            primaryExchange="CME",
+            currency="USD",
+            lastTradeDateOrContractMonth="202406",
+            localSymbol="MESM4",
+        )
+        future_b = SimpleNamespace(
+            secType="FUT",
+            symbol="MES",
+            exchange="CME",
+            primaryExchange="CME",
+            currency="USD",
+            lastTradeDateOrContractMonth="202409",
+            localSymbol="MESU4",
+        )
+
+        assert data_feed._contract_cache_key(stock_a) != data_feed._contract_cache_key(future_a)
+        assert data_feed._contract_cache_key(future_a) != data_feed._contract_cache_key(future_b)
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_prefers_midpoint_over_close(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=99.0,
+            bid=100.0,
+            ask=101.0,
+        )
+
+        result = await data_feed.get_current_price(contract)
+
+        assert result == pytest.approx(100.5, abs=1e-5)
+
     @pytest.mark.asyncio
     async def test_get_current_price_uses_async_yfinance_when_ib_disconnected(
         self,
@@ -356,6 +418,30 @@ class TestTTLCache:
         cache.clear()
         assert cache.get("a") is None
         assert cache.get("b") is None
+
+
+class TestConnectionSerialization:
+    @pytest.mark.asyncio
+    async def test_ensure_connected_serializes_overlapping_connect_attempts(self, mock_ib):
+        state = {"connected": False}
+
+        async def _connect_async(**_kwargs):
+            await asyncio.sleep(0.01)
+            state["connected"] = True
+
+        mock_ib.connectAsync = AsyncMock(side_effect=_connect_async)
+        mock_ib.isConnected.side_effect = lambda: state["connected"]
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=1)
+
+        results = await asyncio.gather(
+            conn.ensure_connected(),
+            conn.ensure_connected(),
+        )
+
+        assert results == [True, True]
+        assert mock_ib.connectAsync.await_count == 1
 
 
 # ===================================================================

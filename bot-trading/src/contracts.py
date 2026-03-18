@@ -6,6 +6,8 @@ Formato suportado:
   - Formato tipado: ``SAP:STK:XETRA:EUR``
   - Forex: ``EURUSD:FX:IDEALPRO``
   - Futuros: ``MES:FUT:CME:USD``
+  - Futuros com expiry explícito: ``MES:FUT:CME:USD:202406`` ou
+    ``MES:FUT:CME:USD:US:202406``
 """
 
 from __future__ import annotations
@@ -104,6 +106,7 @@ class InstrumentSpec:
     currency: str
     region: str
     raw: str
+    expiry: str | None = None
 
     @property
     def display(self) -> str:
@@ -117,7 +120,8 @@ def parse_watchlist_entry(raw_entry: str) -> InstrumentSpec:
 
     Regras:
       - Simbolos simples continuam a significar accoes/ETFs US.
-      - Entradas tipadas seguem ``SYMBOL:ASSET:EXCHANGE[:CURRENCY[:REGION]]``.
+      - Entradas tipadas seguem ``SYMBOL:ASSET:EXCHANGE[:CURRENCY[:REGION[:EXPIRY]]]``.
+      - Para FUT, o quinto segmento pode ser ``EXPIRY`` (YYYYMM) em vez de ``REGION``.
     """
     raw = raw_entry.strip()
     if not raw:
@@ -144,7 +148,22 @@ def parse_watchlist_entry(raw_entry: str) -> InstrumentSpec:
 
     exchange = parts[2] if len(parts) >= 3 else _default_exchange(asset_type)
     currency = parts[3] if len(parts) >= 4 else _default_currency(asset_type, symbol)
-    region = parts[4] if len(parts) >= 5 else infer_region(asset_type, exchange, currency)
+    region = infer_region(asset_type, exchange, currency)
+    expiry: str | None = None
+
+    if asset_type == AssetType.FUTURE:
+        if len(parts) >= 5:
+            fifth = parts[4]
+            if _looks_like_future_expiry(fifth):
+                expiry = fifth
+            else:
+                region = fifth
+                if len(parts) >= 6 and _looks_like_future_expiry(parts[5]):
+                    expiry = parts[5]
+        if len(parts) >= 6 and expiry is None and _looks_like_future_expiry(parts[5]):
+            expiry = parts[5]
+    else:
+        region = parts[4] if len(parts) >= 5 else region
 
     return InstrumentSpec(
         symbol=symbol,
@@ -153,6 +172,7 @@ def parse_watchlist_entry(raw_entry: str) -> InstrumentSpec:
         currency=currency,
         region=region,
         raw=raw,
+        expiry=expiry,
     )
 
 
@@ -178,15 +198,15 @@ def build_contract(spec: InstrumentSpec | str) -> Contract:
         if pair in _FOREX_CONTRACTS:
             return _copy_forex_contract(_FOREX_CONTRACTS[pair])
         return Forex(pair, exchange=spec.exchange)
-    if symbol in _FUTURES_SPECS:
-        return _build_future_contract(symbol)
     if spec.asset_type == AssetType.FUTURE:
         return Future(
             symbol=spec.symbol,
-            lastTradeDateOrContractMonth=_next_futures_expiry(spec.symbol),
+            lastTradeDateOrContractMonth=spec.expiry or _resolve_auto_future_expiry(spec.symbol),
             exchange=spec.exchange,
             currency=spec.currency,
         )
+    if symbol in _FUTURES_SPECS:
+        return _build_future_contract(symbol)
     if spec.asset_type in (AssetType.STOCK, AssetType.ETF):
         return Stock(spec.symbol, spec.exchange, spec.currency)
     if spec.asset_type == AssetType.CFD:
@@ -251,17 +271,48 @@ def _copy_forex_contract(contract: Forex) -> Forex:
     )
 
 
+def _today_utc_date() -> datetime.date:
+    """Data corrente isolada para testes."""
+    return datetime.date.today()
+
+
+def _looks_like_future_expiry(value: str) -> bool:
+    """Valida expiry no formato YYYYMM ou YYYYMMDD."""
+    digits = value.strip()
+    return digits.isdigit() and len(digits) in {6, 8}
+
+
+def _future_roll_months(symbol: str) -> list[int]:
+    """Meses de expiração usados pelo heurístico actual por família de contratos."""
+    sym = symbol.upper()
+    if sym in ("ES", "MES", "NQ", "MNQ", "ZN", "ZB"):
+        return [3, 6, 9, 12]
+    if sym in ("GC", "MGC", "SI"):
+        return [2, 4, 6, 8, 10, 12]
+    return list(range(1, 13))
+
+
+def _is_future_roll_window(symbol: str, today: datetime.date | None = None) -> bool:
+    """
+    Detecta a janela de rollover onde o heurístico deixa de ser defensável.
+
+    Contenção deliberada: nos 10 dias anteriores ao dia 15 do mês de expiração
+    heurística, exige-se expiry explícito.
+    """
+    current_day = today or _today_utc_date()
+    months = _future_roll_months(symbol)
+    if current_day.month not in months:
+        return False
+
+    roll_anchor = datetime.date(current_day.year, current_day.month, 15)
+    days_to_anchor = (roll_anchor - current_day).days
+    return 0 <= days_to_anchor <= 10
+
+
 def _next_futures_expiry(symbol: str) -> str:
     """Retorna `YYYYMM` do contrato front-month activo."""
-    today = datetime.date.today()
-    sym = symbol.upper()
-
-    if sym in ("ES", "MES", "NQ", "MNQ", "ZN", "ZB"):
-        months = [3, 6, 9, 12]
-    elif sym in ("GC", "MGC", "SI"):
-        months = [2, 4, 6, 8, 10, 12]
-    else:
-        months = list(range(1, 13))
+    today = _today_utc_date()
+    months = _future_roll_months(symbol)
 
     year = today.year
     for month in months:
@@ -271,10 +322,20 @@ def _next_futures_expiry(symbol: str) -> str:
     return f"{year + 1}01"
 
 
+def _resolve_auto_future_expiry(symbol: str) -> str:
+    """Resolve expiry automático apenas fora da janela perigosa de rollover."""
+    if _is_future_roll_window(symbol):
+        raise ValueError(
+            f"Auto-resolução de futures bloqueada para {symbol.upper()} perto do rollover. "
+            "Defina expiry explícito na watchlist (ex.: MES:FUT:CME:USD:202406)."
+        )
+    return _next_futures_expiry(symbol)
+
+
 def _build_future_contract(symbol: str) -> Future:
     """Cria um contrato de futuros com expiry front-month automático."""
     specs = _FUTURES_SPECS[symbol.upper()]
-    expiry = _next_futures_expiry(symbol)
+    expiry = _resolve_auto_future_expiry(symbol)
     return Future(
         symbol=specs["symbol"],
         lastTradeDateOrContractMonth=expiry,

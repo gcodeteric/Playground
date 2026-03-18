@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import time
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, PropertyMock, patch
 
 import pytest
@@ -256,20 +257,16 @@ class TestSubmitBracketOrder:
 
         # 3 orders: parent, stop, take-profit
         assert mock_ib.placeOrder.call_count == 3
+        submitted_orders = [call.args[1] for call in mock_ib.placeOrder.call_args_list]
+        assert all(getattr(order, "orderRef", "") for order in submitted_orders)
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)
-    async def test_submit_bracket_order_retries_on_exception(
+    async def test_submit_bracket_order_fails_closed_on_exception_without_retry(
         self, order_manager, mock_ib, mock_contract
     ):
-        """Order submission should retry on exception."""
-        mock_ib.placeOrder.side_effect = [
-            Exception("Connection lost"),
-            Exception("Timeout"),
-            MagicMock(orderStatus=MagicMock(status="PreSubmitted")),
-            MagicMock(orderStatus=MagicMock(status="PreSubmitted")),
-            MagicMock(orderStatus=MagicMock(status="PreSubmitted")),
-        ]
+        """Exposure-changing submissions fail closed until idempotency exists."""
+        mock_ib.placeOrder.side_effect = Exception("Connection lost")
 
         with (
             patch("src.ib_requests.asyncio.sleep", new_callable=AsyncMock),
@@ -285,13 +282,82 @@ class TestSubmitBracketOrder:
                 grid_id="grid_TEST_0001",
                 level=1,
             )
-        # Third attempt succeeds (after 3 calls: first two fail, third succeeds)
-        # But we need 3 orders placed on success, so total calls:
-        # attempt 1: fails on first placeOrder
-        # attempt 2: fails on first placeOrder
-        # attempt 3: 3 placeOrder calls succeed
-        # Total: 5 placeOrder calls
+        assert result is None
+        assert mock_ib.placeOrder.call_count == 1
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(5)
+    async def test_submit_bracket_order_deduplicates_against_open_broker_bracket(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        trade_key = "grid_TEST_0001:1:BUY:entry"
+        parent_trade = MagicMock()
+        parent_trade.contract = mock_contract
+        parent_trade.order = MagicMock(
+            orderId=1001,
+            parentId=0,
+            orderRef=trade_key,
+            action="BUY",
+            totalQuantity=10,
+            lmtPrice=100.0,
+            orderType="LMT",
+        )
+        parent_trade.orderStatus = MagicMock(
+            status=OrderStatus.SUBMITTED,
+            avgFillPrice=0.0,
+            filled=0,
+        )
+        stop_trade = MagicMock()
+        stop_trade.contract = mock_contract
+        stop_trade.order = MagicMock(
+            orderId=1002,
+            parentId=1001,
+            orderRef=trade_key,
+            action="SELL",
+            totalQuantity=10,
+            auxPrice=95.0,
+            orderType="STP",
+        )
+        stop_trade.orderStatus = MagicMock(
+            status=OrderStatus.SUBMITTED,
+            avgFillPrice=0.0,
+            filled=0,
+        )
+        tp_trade = MagicMock()
+        tp_trade.contract = mock_contract
+        tp_trade.order = MagicMock(
+            orderId=1003,
+            parentId=1001,
+            orderRef=trade_key,
+            action="SELL",
+            totalQuantity=10,
+            lmtPrice=110.0,
+            orderType="LMT",
+        )
+        tp_trade.orderStatus = MagicMock(
+            status=OrderStatus.SUBMITTED,
+            avgFillPrice=0.0,
+            filled=0,
+        )
+        mock_ib.openTrades.return_value = [parent_trade, stop_trade, tp_trade]
+
+        result = await order_manager.submit_bracket_order(
+            contract=mock_contract,
+            action="BUY",
+            quantity=10,
+            entry_price=100.0,
+            stop_price=95.0,
+            take_profit_price=110.0,
+            grid_id="grid_TEST_0001",
+            level=1,
+            logical_trade_key=trade_key,
+        )
+
         assert result is not None
+        assert result["order_id"] == 1001
+        assert result["stop_order_id"] == 1002
+        assert result["tp_order_id"] == 1003
+        assert mock_ib.placeOrder.call_count == 0
 
     @pytest.mark.asyncio
     @pytest.mark.timeout(5)
@@ -383,6 +449,45 @@ class TestClosePosition:
         result = await order_manager.close_position(mock_contract, quantity=-5)
         assert result is False
 
+    @pytest.mark.asyncio
+    async def test_close_position_fails_closed_without_retry(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        mock_ib.placeOrder.side_effect = Exception("Connection lost")
+
+        with patch("src.ib_requests.asyncio.sleep", new_callable=AsyncMock):
+            result = await order_manager.close_position(mock_contract, quantity=10)
+
+        assert result is False
+        assert mock_ib.placeOrder.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_close_position_deduplicates_existing_broker_close_intent(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        close_key = "close:AAPL:SELL:10"
+        close_trade = MagicMock()
+        close_trade.contract = mock_contract
+        close_trade.order = MagicMock(
+            orderId=2001,
+            orderRef=close_key,
+            action="SELL",
+            totalQuantity=10,
+            orderType="MKT",
+        )
+        close_trade.orderStatus = MagicMock(status=OrderStatus.SUBMITTED)
+        mock_ib.openTrades.return_value = [close_trade]
+
+        result = await order_manager.close_position(
+            mock_contract,
+            quantity=10,
+            action="SELL",
+            logical_close_key=close_key,
+        )
+
+        assert result is True
+        assert mock_ib.placeOrder.call_count == 0
+
 
 # ===================================================================
 # Tests: Order tracking
@@ -444,6 +549,179 @@ class TestOrderTracking:
         # Grid orders should include this
         grid_orders = order_manager.get_grid_orders("grid_AAPL_20240101_0001")
         assert len(grid_orders) >= 1
+
+    @pytest.mark.asyncio
+    async def test_bracket_legs_are_tracked_independently(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        mock_order_status = MagicMock()
+        mock_order_status.status = "PreSubmitted"
+        mock_trade = MagicMock()
+        mock_trade.orderStatus = mock_order_status
+        mock_ib.placeOrder.return_value = mock_trade
+
+        result = await order_manager.submit_bracket_order(
+            contract=mock_contract,
+            action="BUY",
+            quantity=10,
+            entry_price=100.0,
+            stop_price=95.0,
+            take_profit_price=110.0,
+            grid_id="grid_AAPL_20240101_0001",
+            level=1,
+        )
+
+        assert result is not None
+        parent_id = result["order_id"]
+        stop_id = result["stop_order_id"]
+        tp_id = result["tp_order_id"]
+
+        parent_info = order_manager.get_order_info(parent_id)
+        stop_info = order_manager.get_order_info(stop_id)
+        tp_info = order_manager.get_order_info(tp_id)
+
+        assert parent_info is not None
+        assert stop_info is not None
+        assert tp_info is not None
+        assert parent_info is not stop_info
+        assert parent_info is not tp_info
+        assert stop_info is not tp_info
+        assert parent_info.leg_type == "parent"
+        assert stop_info.leg_type == "stop"
+        assert tp_info.leg_type == "tp"
+
+        parent_trade = MagicMock()
+        parent_trade.order = MagicMock(orderId=parent_id)
+        parent_trade.orderStatus = MagicMock(
+            status=OrderStatus.FILLED,
+            avgFillPrice=100.25,
+            filled=10,
+        )
+        stop_trade = MagicMock()
+        stop_trade.order = MagicMock(orderId=stop_id)
+        stop_trade.orderStatus = MagicMock(
+            status=OrderStatus.SUBMITTED,
+            avgFillPrice=0.0,
+            filled=0,
+        )
+
+        order_manager._on_order_status(parent_trade)
+        order_manager._on_order_status(stop_trade)
+
+        assert order_manager.get_order_info(parent_id).status == OrderStatus.FILLED
+        assert order_manager.get_order_info(parent_id).fill_price == pytest.approx(100.25)
+        assert order_manager.get_order_info(stop_id).status == OrderStatus.SUBMITTED
+        assert order_manager.get_order_info(tp_id).status in {
+            OrderStatus.PENDING,
+            OrderStatus.PRE_SUBMITTED,
+        }
+
+    @pytest.mark.asyncio
+    async def test_submit_bracket_order_deduplicates_same_logical_trade(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        mock_order_status = MagicMock()
+        mock_order_status.status = "PreSubmitted"
+        mock_trade = MagicMock()
+        mock_trade.orderStatus = mock_order_status
+        mock_ib.placeOrder.return_value = mock_trade
+
+        first = await order_manager.submit_bracket_order(
+            contract=mock_contract,
+            action="BUY",
+            quantity=10,
+            entry_price=100.0,
+            stop_price=95.0,
+            take_profit_price=110.0,
+            grid_id="grid_AAPL_20240101_0001",
+            level=1,
+        )
+        second = await order_manager.submit_bracket_order(
+            contract=mock_contract,
+            action="BUY",
+            quantity=10,
+            entry_price=100.0,
+            stop_price=95.0,
+            take_profit_price=110.0,
+            grid_id="grid_AAPL_20240101_0001",
+            level=1,
+        )
+
+        assert first is not None
+        assert second is not None
+        assert second["order_id"] == first["order_id"]
+        assert second["stop_order_id"] == first["stop_order_id"]
+        assert second["tp_order_id"] == first["tp_order_id"]
+        assert mock_ib.placeOrder.call_count == 3
+
+    def test_rehydrate_grid_orders_restores_active_bracket_identity(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        grid = SimpleNamespace(
+            id="grid_AAPL_20240101_0001",
+            status="active",
+            levels=[
+                SimpleNamespace(
+                    level=1,
+                    status="bought",
+                    quantity=10,
+                    buy_price=100.0,
+                    stop_price=95.0,
+                    sell_price=110.0,
+                    buy_order_id=1001,
+                    stop_order_id=1002,
+                    sell_order_id=1003,
+                ),
+            ],
+        )
+
+        restored = order_manager.rehydrate_grid_orders(grid, mock_contract)
+
+        assert restored == 3
+        assert order_manager.get_order_info(1001) is not None
+        assert order_manager.get_order_info(1002) is not None
+        assert order_manager.get_order_info(1003) is not None
+        assert order_manager.get_order_info(1001).status == OrderStatus.FILLED
+        assert order_manager.get_order_info(1002).status == OrderStatus.SUBMITTED
+        assert order_manager.get_order_info(1003).status == OrderStatus.SUBMITTED
+
+    @pytest.mark.asyncio
+    async def test_submit_bracket_order_deduplicates_after_rehydration(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        grid = SimpleNamespace(
+            id="grid_AAPL_20240101_0001",
+            status="active",
+            levels=[
+                SimpleNamespace(
+                    level=1,
+                    status="pending",
+                    quantity=10,
+                    buy_price=100.0,
+                    stop_price=95.0,
+                    sell_price=110.0,
+                    buy_order_id=1001,
+                    stop_order_id=1002,
+                    sell_order_id=1003,
+                ),
+            ],
+        )
+        order_manager.rehydrate_grid_orders(grid, mock_contract)
+
+        result = await order_manager.submit_bracket_order(
+            contract=mock_contract,
+            action="BUY",
+            quantity=10,
+            entry_price=100.0,
+            stop_price=95.0,
+            take_profit_price=110.0,
+            grid_id="grid_AAPL_20240101_0001",
+            level=1,
+        )
+
+        assert result is not None
+        assert result["order_id"] == 1001
+        assert mock_ib.placeOrder.call_count == 0
 
     def test_cleanup_removes_filled_orders(self, order_manager):
         """Cleanup should remove orders in terminal states."""

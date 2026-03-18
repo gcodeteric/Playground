@@ -470,6 +470,115 @@ class TestValidateOrder:
         assert approved is False
         assert "KILL" in reason.upper()
 
+    def test_rejected_when_correlation_limit_is_exceeded(self, rm: RiskManager):
+        approved, reason = rm.validate_order({
+            "symbol": "QQQ",
+            "entry_price": 100.0,
+            "stop_price": 95.0,
+            "take_profit_price": 112.5,
+            "capital": 100_000.0,
+            "daily_pnl": 0.0,
+            "weekly_pnl": 0.0,
+            "monthly_pnl": 0.0,
+            "current_positions": 1,
+            "current_grids": 1,
+            "open_positions": ["SPY"],
+            "returns_map": {
+                "QQQ": [0.01, 0.02, -0.01, 0.03, -0.02] * 20,
+                "SPY": [0.01, 0.02, -0.01, 0.03, -0.02] * 20,
+            },
+        })
+
+        assert approved is False
+        assert "correla" in reason.lower()
+
+    def test_rejected_when_correlation_context_is_missing(self, rm: RiskManager):
+        approved, reason = rm.validate_order({
+            "symbol": "QQQ",
+            "entry_price": 100.0,
+            "stop_price": 95.0,
+            "take_profit_price": 112.5,
+            "capital": 100_000.0,
+            "daily_pnl": 0.0,
+            "weekly_pnl": 0.0,
+            "monthly_pnl": 0.0,
+            "current_positions": 1,
+            "current_grids": 1,
+            "open_positions": ["SPY"],
+            "returns_map": {
+                "SPY": [0.01, 0.02, -0.01, 0.03, -0.02] * 20,
+            },
+        })
+
+        assert approved is False
+        assert "correla" in reason.lower()
+
+
+# ===================================================================
+# Tests: validate_order_full
+# ===================================================================
+
+
+class TestValidateOrderFull:
+    def test_returns_detailed_checks_for_approved_order(self, rm: RiskManager):
+        validation = rm.validate_order_full({
+            "symbol": "AAPL",
+            "entry_price": 100.0,
+            "stop_price": 95.0,
+            "take_profit_price": 112.5,
+            "capital": 100_000.0,
+            "daily_pnl": 0.0,
+            "weekly_pnl": 0.0,
+            "monthly_pnl": 0.0,
+            "current_positions": 2,
+            "current_grids": 1,
+        })
+
+        assert isinstance(validation, OrderValidation)
+        assert validation.approved is True
+        assert validation.rejection_reason == ""
+        assert validation.position_size > 0
+        assert validation.risk_amount > 0
+        assert validation.risk_percent > 0
+
+        metric_names = {check.metric_name for check in validation.checks}
+        assert {
+            "stop_loss_presente",
+            "entry_price_valido",
+            "rr_ratio",
+            "risco_por_nivel",
+            "limite_diario",
+            "limite_semanal",
+            "kill_switch_mensal",
+            "max_posicoes",
+            "max_grids",
+        }.issubset(metric_names)
+
+    def test_preserves_checks_and_sizing_context_when_rejected(self, rm: RiskManager):
+        validation = rm.validate_order_full({
+            "symbol": "AAPL",
+            "entry_price": 100.0,
+            "stop_price": 95.0,
+            "take_profit_price": 112.5,
+            "capital": 100_000.0,
+            "daily_pnl": -5_000.0,
+            "weekly_pnl": 0.0,
+            "monthly_pnl": 0.0,
+            "current_positions": 2,
+            "current_grids": 1,
+        })
+
+        assert validation.approved is False
+        assert "di" in validation.rejection_reason.lower()
+        assert validation.position_size > 0
+        assert validation.risk_amount > 0
+        assert validation.risk_percent > 0
+
+        checks_by_name = {check.metric_name: check for check in validation.checks}
+        assert checks_by_name["limite_diario"].passed is False
+        assert checks_by_name["limite_diario"].status == RiskStatus.REJECTED
+        assert checks_by_name["rr_ratio"].passed is True
+
 
 # ===================================================================
 # Tests: calculate_stop_loss and calculate_take_profit

@@ -851,36 +851,8 @@ class RiskManager:
     # ──────────────────────────────────────────────────────────────────
     # Validação completa de ordens
     # ──────────────────────────────────────────────────────────────────
-    def validate_order(self, order_params: dict[str, Any]) -> tuple[bool, str]:
-        """
-        Validação completa de uma ordem antes de submissão ao broker.
-
-        Verifica TODAS as condições de risco antes de aprovar uma ordem.
-        Qualquer falha resulta em rejeição com motivo explícito.
-
-        Parâmetros esperados em order_params:
-            - symbol (str): Símbolo do ativo.
-            - entry_price (float): Preço de entrada.
-            - stop_price (float): Preço do stop-loss (OBRIGATÓRIO).
-            - take_profit_price (float): Preço do take-profit.
-            - capital (float): Capital actual disponível.
-            - daily_pnl (float): P&L acumulado do dia.
-            - weekly_pnl (float): P&L acumulado da semana.
-            - monthly_pnl (float): P&L acumulado do mês.
-            - current_positions (int): Número actual de posições.
-            - current_grids (int): Número actual de grids activas.
-            - level (int, opcional): Nível da grid (para verificar averaging down).
-            - win_rate (float, opcional): Win rate actual. Defeito: 0.5.
-            - payoff_ratio (float, opcional): Payoff ratio actual. Defeito: 2.5.
-            - num_levels (int, opcional): Número de níveis planeados na grid. # Finding 4d
-
-        Args:
-            order_params: Dicionário com os parâmetros da ordem.
-
-        Returns:
-            Tupla (aprovado, motivo_rejeicao).
-            Se aprovado=True, motivo_rejeicao é string vazia.
-        """
+    def _build_order_validation(self, order_params: dict[str, Any]) -> OrderValidation:
+        """Constroi o resultado detalhado da validacao de risco de uma ordem."""
         checks: list[RiskCheckResult] = []
         rejection_reasons: list[str] = []
 
@@ -899,6 +871,31 @@ class RiskManager:
         win_rate: float = order_params.get("win_rate", 0.5)
         payoff_ratio: float = order_params.get("payoff_ratio", 2.5)
         num_levels: int = order_params.get("num_levels", 1)  # Finding 4d
+        open_positions: list[str] = list(order_params.get("open_positions", []) or [])
+        returns_map: dict[str, list[float]] = dict(order_params.get("returns_map", {}) or {})
+        max_correlation: float = float(order_params.get("max_correlation", 0.70))
+        position_size = 0
+        risk_amount = 0.0
+        risk_percent = 0.0
+
+        sizing_inputs_valid = (
+            stop_price is not None
+            and stop_price > 0
+            and entry_price > 0
+            and capital > 0
+        )
+        if sizing_inputs_valid:
+            position_size = self.position_size_per_level(
+                capital,
+                entry_price,
+                stop_price,
+                win_rate,
+                payoff_ratio,
+                num_levels,
+            )
+            risk_per_unit = abs(entry_price - stop_price)
+            risk_amount = position_size * risk_per_unit
+            risk_percent = risk_amount / capital if capital > 0 else 0.0
 
         # ── 1. Stop-loss obrigatório (regra de ferro #1) ──
         if stop_price is None or stop_price <= 0:
@@ -971,19 +968,13 @@ class RiskManager:
             ))
 
         # ── 4. Risco por nível dentro dos limites ──
-        if stop_price and stop_price > 0 and entry_price > 0 and capital > 0:
-            risk_per_unit = abs(entry_price - stop_price)
-            size = self.position_size_per_level(
-                capital, entry_price, stop_price, win_rate, payoff_ratio, num_levels,  # Finding 4d
-            )
-            actual_risk = size * risk_per_unit
-            risk_pct = actual_risk / capital if capital > 0 else 0.0
+        if sizing_inputs_valid:
             max_risk_pct = min(self.kelly_cap, self.dynamic_risk_per_level(num_levels))  # Finding 4d
 
-            risk_ok = risk_pct <= max_risk_pct + 1e-9  # Tolerância numérica
+            risk_ok = risk_percent <= max_risk_pct + 1e-9  # Tolerância numérica
             if not risk_ok:
                 msg = (
-                    f"Risco por nível excede limite: {risk_pct:.4%} "
+                    f"Risco por nível excede limite: {risk_percent:.4%} "
                     f"(máximo: {max_risk_pct:.4%})."
                 )
                 rejection_reasons.append(msg)
@@ -992,9 +983,9 @@ class RiskManager:
                 passed=risk_ok,
                 status=RiskStatus.APPROVED if risk_ok else RiskStatus.REJECTED,
                 metric_name="risco_por_nivel",
-                current_value=risk_pct,
+                current_value=risk_percent,
                 limit_value=max_risk_pct,
-                message=f"Risco: {risk_pct:.4%}" if risk_ok else msg,
+                message=f"Risco: {risk_percent:.4%}" if risk_ok else msg,
             ))
 
         # ── 5. Limite diário ──
@@ -1072,7 +1063,31 @@ class RiskManager:
             message="Grids OK." if grids_ok else msg,
         ))
 
-        # ── 10. Zero averaging down (se nível especificado) ──
+        # ── 10. Correlação agregada do portefólio ──
+        if open_positions:
+            corr_ok = check_correlation_limit(
+                new_symbol=symbol,
+                open_positions=open_positions,
+                returns_map=returns_map,
+                max_correlation=max_correlation,
+            )
+            if not corr_ok:
+                msg = (
+                    f"Correlação excessiva ou contexto insuficiente para {symbol}. "
+                    "Nova exposição bloqueada."
+                )
+                rejection_reasons.append(msg)
+
+            checks.append(RiskCheckResult(
+                passed=corr_ok,
+                status=RiskStatus.APPROVED if corr_ok else RiskStatus.REJECTED,
+                metric_name="correlacao_portefolio",
+                current_value=float(len(open_positions)),
+                limit_value=max_correlation,
+                message="Correlação agregada OK." if corr_ok else msg,
+            ))
+
+        # ── 11. Zero averaging down (se nível especificado) ──
         if level is not None:
             avg_ok = self.check_averaging_down(symbol, level)
             if not avg_ok:
@@ -1094,21 +1109,7 @@ class RiskManager:
         # ── Decisão final ──
         approved = len(rejection_reasons) == 0
         rejection_reason = "; ".join(rejection_reasons) if rejection_reasons else ""
-
-        # Calcular tamanho e risco para a validação
-        position_size = 0
-        risk_amount = 0.0
-        risk_percent = 0.0
-
-        if approved and stop_price and stop_price > 0 and entry_price > 0:
-            position_size = self.position_size_per_level(
-                capital, entry_price, stop_price, win_rate, payoff_ratio, num_levels,  # Finding 4d
-            )
-            risk_per_unit = abs(entry_price - stop_price)
-            risk_amount = position_size * risk_per_unit
-            risk_percent = risk_amount / capital if capital > 0 else 0.0
-
-        validation = OrderValidation(
+        return OrderValidation(
             approved=approved,
             rejection_reason=rejection_reason,
             checks=checks,
@@ -1117,18 +1118,55 @@ class RiskManager:
             risk_percent=risk_percent,
         )
 
-        if approved:
+    def validate_order(self, order_params: dict[str, Any]) -> tuple[bool, str]:
+        """
+        Validação completa de uma ordem antes de submissão ao broker.
+
+        Verifica TODAS as condições de risco antes de aprovar uma ordem.
+        Qualquer falha resulta em rejeição com motivo explícito.
+
+        Parâmetros esperados em order_params:
+            - symbol (str): Símbolo do ativo.
+            - entry_price (float): Preço de entrada.
+            - stop_price (float): Preço do stop-loss (OBRIGATÓRIO).
+            - take_profit_price (float): Preço do take-profit.
+            - capital (float): Capital actual disponível.
+            - daily_pnl (float): P&L acumulado do dia.
+            - weekly_pnl (float): P&L acumulado da semana.
+            - monthly_pnl (float): P&L acumulado do mês.
+            - current_positions (int): Número actual de posições.
+            - current_grids (int): Número actual de grids activas.
+            - level (int, opcional): Nível da grid (para verificar averaging down).
+            - win_rate (float, opcional): Win rate actual. Defeito: 0.5.
+            - payoff_ratio (float, opcional): Payoff ratio actual. Defeito: 2.5.
+            - num_levels (int, opcional): Número de níveis planeados na grid. # Finding 4d
+
+        Args:
+            order_params: Dicionário com os parâmetros da ordem.
+
+        Returns:
+            Tupla (aprovado, motivo_rejeicao).
+            Se aprovado=True, motivo_rejeicao é string vazia.
+        """
+        validation = self._build_order_validation(order_params)
+        symbol = order_params.get("symbol", "UNKNOWN")
+
+        if validation.approved:
             logger.info(
                 "Ordem APROVADA para %s — Tamanho: %d | Risco: %.2f (%.4f%%).",
-                symbol, position_size, risk_amount, risk_percent * 100,
+                symbol,
+                validation.position_size,
+                validation.risk_amount,
+                validation.risk_percent * 100,
             )
         else:
             logger.warning(
                 "Ordem REJEITADA para %s — Motivo(s): %s",
-                symbol, rejection_reason,
+                symbol,
+                validation.rejection_reason,
             )
 
-        return (approved, rejection_reason)
+        return (validation.approved, validation.rejection_reason)
 
     def validate_order_full(self, order_params: dict[str, Any]) -> OrderValidation:
         """
@@ -1143,48 +1181,7 @@ class RiskManager:
         Returns:
             Objecto OrderValidation com todos os detalhes.
         """
-        checks: list[RiskCheckResult] = []
-        rejection_reasons: list[str] = []
-
-        symbol = order_params.get("symbol", "UNKNOWN")
-        entry_price = order_params.get("entry_price", 0.0)
-        stop_price = order_params.get("stop_price", None)
-        take_profit_price = order_params.get("take_profit_price", None)
-        capital = order_params.get("capital", self._capital)
-        daily_pnl = order_params.get("daily_pnl", 0.0)
-        weekly_pnl = order_params.get("weekly_pnl", 0.0)
-        monthly_pnl = order_params.get("monthly_pnl", 0.0)
-        current_positions = order_params.get("current_positions", 0)
-        current_grids = order_params.get("current_grids", 0)
-        level = order_params.get("level", None)
-        win_rate = order_params.get("win_rate", 0.5)
-        payoff_ratio = order_params.get("payoff_ratio", 2.5)
-        num_levels = order_params.get("num_levels", 1)  # Finding 4d
-
-        # Reutilizar a lógica de validate_order internamente
-        approved, rejection_reason = self.validate_order(order_params)
-
-        # Calcular tamanho e risco
-        position_size = 0
-        risk_amount = 0.0
-        risk_percent = 0.0
-
-        if approved and stop_price and stop_price > 0 and entry_price > 0:
-            position_size = self.position_size_per_level(
-                capital, entry_price, stop_price, win_rate, payoff_ratio, num_levels,  # Finding 4d
-            )
-            risk_per_unit = abs(entry_price - stop_price)
-            risk_amount = position_size * risk_per_unit
-            risk_percent = risk_amount / capital if capital > 0 else 0.0
-
-        return OrderValidation(
-            approved=approved,
-            rejection_reason=rejection_reason,
-            checks=checks,
-            position_size=position_size,
-            risk_amount=risk_amount,
-            risk_percent=risk_percent,
-        )
+        return self._build_order_validation(order_params)
 
     # ──────────────────────────────────────────────────────────────────
     # Stop-Loss e Take-Profit baseados em ATR

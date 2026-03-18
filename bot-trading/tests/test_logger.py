@@ -118,6 +118,9 @@ class TestLogTrade:
         assert trades[0]["symbol"] == "AAPL"
         assert trades[0]["pnl"] is None
         assert trades[0]["side"] is None
+        assert trades[0]["logical_trade_key"] is None
+        assert trades[0]["order_ref"] is None
+        assert trades[0]["order_leg"] is None
 
     def test_log_trade_auto_timestamp(self, logger: TradeLogger):
         """If timestamp is missing, it should be auto-generated."""
@@ -128,6 +131,23 @@ class TestLogTrade:
     def test_log_trade_creates_file(self, logger: TradeLogger, sample_trade: dict):
         logger.log_trade(sample_trade)
         assert logger._trades_path.exists()
+
+    def test_log_trade_preserves_forensic_fields(
+        self,
+        logger: TradeLogger,
+        sample_trade: dict,
+    ):
+        logger.log_trade({
+            **sample_trade,
+            "logical_trade_key": "grid_AAPL_20240115_0001:1:BUY",
+            "order_ref": "grid_AAPL_20240115_0001:1:BUY",
+            "order_leg": "parent",
+        })
+
+        trades = logger.get_trades()
+        assert trades[0]["logical_trade_key"] == "grid_AAPL_20240115_0001:1:BUY"
+        assert trades[0]["order_ref"] == "grid_AAPL_20240115_0001:1:BUY"
+        assert trades[0]["order_leg"] == "parent"
 
 
 # ===================================================================

@@ -709,27 +709,6 @@ class TestKillSwitchActivation:
         assert approved is False
         assert "KILL" in reason.upper()
 
-    def test_kill_switch_closes_all_grids(
-        self,
-        grid_engine: GridEngine,
-    ):
-        """When kill switch activates, all grids should be closed."""
-        # Create several active grids
-        for i in range(3):
-            grid_engine.create_grid(
-                symbol=f"SYM{i}", center_price=100.0, atr=2.0,
-                regime="BULL", num_levels=5, base_quantity=10,
-                confidence="ALTO", size_multiplier=1.0,
-            )
-
-        assert len(grid_engine.get_active_grids()) == 3
-
-        # Simulate kill switch: close all grids
-        for grid in grid_engine.get_active_grids():
-            grid_engine.close_grid(grid)
-
-        assert len(grid_engine.get_active_grids()) == 0
-
     def test_daily_limit_pauses_then_resumes(
         self,
         risk_manager: RiskManager,

@@ -29,7 +29,7 @@ logger = logging.getLogger(__name__)
 # Constantes
 # ---------------------------------------------------------------------------
 
-_VALID_GRID_STATUSES = {"active", "paused", "closed"}
+_VALID_GRID_STATUSES = {"staging", "active", "paused", "closed", "failed"}
 _VALID_LEVEL_STATUSES = {"pending", "bought", "sold", "stopped", "cancelled"}
 
 _REGIME_NUM_LEVELS: dict[str, int] = {
@@ -88,7 +88,7 @@ class Grid:
 
     id: str                    # grid_{symbol}_{date}_{seq}
     symbol: str
-    status: str                # 'active', 'paused', 'closed'
+    status: str                # 'staging', 'active', 'paused', 'closed', 'failed'
     regime: str
     created_at: str
     center_price: float
@@ -101,6 +101,7 @@ class Grid:
     size_multiplier: float = 1.0
     last_respaced_at: str | None = None
     reconciliation_state: str = "unknown"
+    failure_reason: str | None = None
 
     def __post_init__(self) -> None:
         if self.status not in _VALID_GRID_STATUSES:
@@ -167,6 +168,7 @@ class GridEngine:
         size_multiplier: float,
         stop_atr_mult: float = 1.0,
         tp_atr_mult: float = 2.5,
+        status: str = "active",
     ) -> Grid:
         """
         Cria uma nova grid com *num_levels* niveis abaixo do preco central.
@@ -208,7 +210,7 @@ class GridEngine:
         grid = Grid(
             id=grid_id,
             symbol=symbol,
-            status="active",
+            status=status,
             regime=regime,
             created_at=now,
             center_price=center_price,
@@ -230,6 +232,20 @@ class GridEngine:
             grid_id, symbol, regime, num_levels, center_price, atr,
             confidence, size_multiplier,
         )
+        return grid
+
+    def activate_grid(self, grid: Grid) -> Grid:
+        """Promove uma grid staged para active após submissão inicial completa."""
+        grid.status = "active"
+        grid.failure_reason = None
+        logger.info("Grid %s activada.", grid.id)
+        return grid
+
+    def fail_grid(self, grid: Grid, reason: str) -> Grid:
+        """Marca uma grid como falhada sem fingir fecho limpo."""
+        grid.status = "failed"
+        grid.failure_reason = reason
+        logger.error("Grid %s marcada como failed: %s", grid.id, reason)
         return grid
 
     # ------------------------------------------------------------------
@@ -666,6 +682,7 @@ class GridEngine:
             grid_data["spacing_pct"] = round((spacing / center) * 100.0, 6) if center > 0 else 0.0
         grid_data.setdefault("last_respaced_at", grid_data.get("created_at"))
         grid_data.setdefault("reconciliation_state", "unknown")
+        grid_data.setdefault("failure_reason", None)
         return Grid(**grid_data, levels=levels)
 
     @staticmethod

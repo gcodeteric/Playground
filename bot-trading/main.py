@@ -22,6 +22,7 @@ import logging
 import os
 import signal
 import sys
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Coroutine
@@ -109,6 +110,14 @@ _DATA_FILE_DEFAULTS: dict[str, dict[str, Any] | str] = {
 }
 _RECONCILIATION_FETCH_ATTEMPTS = 3
 _RECONCILIATION_FETCH_DELAY_SECONDS = 5
+
+
+@dataclass(slots=True)
+class BrokerPositionsObservation:
+    """Resultado da leitura de posições com noção explícita de confiança."""
+
+    state: str
+    positions: list[dict[str, Any]]
 
 SECTOR_ROTATION_CONFIG: dict[str, Any] = {
     "is_active": True,
@@ -552,6 +561,8 @@ class TradingBot:
         self._reconciliation_log_path: Path = config.data_dir / "reconciliation.log"
         self._startup_reconciled: bool = False
         self._manual_pause: bool = False
+        self._entry_halt_reason: str | None = None
+        self._emergency_halt: bool = False
         self._reconciliation_in_progress: bool = False
         self._last_cycle_started_at: datetime | None = None
         self._last_cycle_completed_at: datetime | None = None
@@ -773,6 +784,211 @@ class TradingBot:
         """Infere de forma conservadora se a conta parece paper ou live."""
         return "PAPER" if account_id.upper().startswith("DU") else "LIVE"
 
+    def _enforce_account_context(
+        self,
+        primary_account: str,
+        *,
+        phase: str,
+    ) -> bool:
+        """Faz fail-closed se o contexto da conta não for compatível com o modo configurado."""
+        masked_account = (
+            mask_account_id(primary_account)
+            if primary_account != "UNKNOWN" else "UNKNOWN"
+        )
+        account_mode = (
+            self._infer_account_mode(primary_account)
+            if primary_account != "UNKNOWN" else "UNKNOWN"
+        )
+        logger.info("Conta IB detectada: %s (%s).", masked_account, account_mode)
+
+        violation: str | None = None
+        if primary_account == "UNKNOWN":
+            violation = (
+                "Contexto de conta IB ambíguo ou indisponível. "
+                "O bot não pode continuar sem confirmar PAPER/LIVE."
+            )
+        elif self._config.ib.paper_trading and account_mode != "PAPER":
+            violation = (
+                "Conta live detectada com PAPER_TRADING=true. "
+                "Arranque/reconexão bloqueado por segurança."
+            )
+        elif not self._config.ib.paper_trading and account_mode != "LIVE":
+            violation = (
+                "Conta paper detectada com PAPER_TRADING=false. "
+                "Arranque/reconexão bloqueado por segurança."
+            )
+
+        if violation is None:
+            return True
+
+        logger.critical("%s", violation)
+        self._entry_halt_reason = "account_context_violation"
+        self._emergency_halt = True
+        self._schedule_telegram(
+            self._telegram.critical_error(
+                error=violation,
+                location=f"account_context:{phase}",
+                paper=self._config.ib.paper_trading,
+            ) if self._telegram else None
+        )
+
+        if phase == "startup":
+            sys.exit(1)
+
+        self._running = False
+        self._shutdown_event.set()
+        return False
+
+    @staticmethod
+    def _coerce_float(value: Any) -> float | None:
+        try:
+            if value in (None, ""):
+                return None
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        if parsed <= 0:
+            return None
+        return parsed
+
+    def _load_metrics_snapshot(self) -> dict[str, Any]:
+        """Lê metrics.json e achata o bloco metrics quando existir."""
+        metrics_path = self._config.data_dir / "metrics.json"
+        try:
+            payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return {}
+
+        if not isinstance(payload, dict):
+            return {}
+
+        merged: dict[str, Any] = {}
+        metrics_block = payload.get("metrics")
+        if isinstance(metrics_block, dict):
+            merged.update(metrics_block)
+        for key, value in payload.items():
+            if key != "metrics":
+                merged[key] = value
+        return merged
+
+    def _extract_account_equity(self, account_values: list[Any]) -> float | None:
+        """Extrai capital/equity do payload do broker com preferência por NetLiquidation."""
+        preferred_tags = (
+            "NetLiquidation",
+            "NetLiquidationByCurrency",
+            "EquityWithLoanValue",
+        )
+        allowed_currencies = {"", "BASE", "USD", "EUR", None}
+
+        for tag in preferred_tags:
+            for item in account_values:
+                if isinstance(item, dict):
+                    item_tag = item.get("tag")
+                    item_value = item.get("value")
+                    item_currency = item.get("currency")
+                else:
+                    item_tag = getattr(item, "tag", None)
+                    item_value = getattr(item, "value", None)
+                    item_currency = getattr(item, "currency", None)
+
+                if item_tag != tag:
+                    continue
+                if item_currency not in allowed_currencies:
+                    continue
+
+                parsed = self._coerce_float(item_value)
+                if parsed is not None:
+                    return parsed
+
+        return None
+
+    def _restore_runtime_capital(self, account_values: list[Any]) -> str:
+        """Restaura o capital do runtime a partir do broker, métricas ou trade log."""
+        source = "config"
+        restored_capital = self._capital
+        restored_peak = getattr(self._risk_manager, "peak_equity", self._capital)
+
+        broker_capital = self._extract_account_equity(account_values)
+        metrics_snapshot = self._load_metrics_snapshot()
+        metrics_capital = self._coerce_float(metrics_snapshot.get("capital"))
+        metrics_peak = self._coerce_float(metrics_snapshot.get("peak_equity"))
+
+        trade_log_capital: float | None = None
+        try:
+            trade_metrics = self._trade_logger.calculate_metrics()
+            total_pnl = float(trade_metrics.get("total_pnl", 0.0) or 0.0)
+            num_trades = int(trade_metrics.get("num_trades", 0) or 0)
+            if num_trades > 0 or abs(total_pnl) > 0:
+                trade_log_capital = max(self._capital + total_pnl, 0.0)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha ao calcular capital a partir do trade log: %s", exc)
+
+        if broker_capital is not None:
+            restored_capital = broker_capital
+            source = "broker"
+        elif metrics_capital is not None:
+            restored_capital = metrics_capital
+            source = "metrics"
+        elif trade_log_capital is not None:
+            restored_capital = trade_log_capital
+            source = "trade_log"
+
+        self._capital = restored_capital
+        self._risk_manager.update_capital(self._capital)
+
+        if metrics_peak is not None:
+            restored_peak = max(restored_peak, metrics_peak, self._capital)
+        else:
+            restored_peak = max(restored_peak, self._capital)
+        self._risk_manager.peak_equity = restored_peak
+
+        logger.info(
+            "Capital de runtime restaurado: %.2f (fonte=%s, peak_equity=%.2f).",
+            self._capital,
+            source,
+            self._risk_manager.peak_equity,
+        )
+        return source
+
+    def _build_metrics_payload(self, metrics: dict[str, Any]) -> dict[str, Any]:
+        """Enriquece o payload de métricas com capital e peak equity de runtime."""
+        payload = dict(metrics)
+        payload["capital"] = round(self._capital, 4)
+        payload["initial_capital"] = round(self._risk_manager.initial_capital, 4)
+        payload["peak_equity"] = round(self._risk_manager.peak_equity, 4)
+        return payload
+
+    def _rehydrate_order_tracking(self) -> int:
+        """Restaura tracking de ordens a partir das grids persistidas."""
+        if (
+            self._order_manager is None
+            or not hasattr(self._order_manager, "rehydrate_grid_orders")
+            or not hasattr(self, "_grid_engine")
+        ):
+            return 0
+
+        restored = 0
+        for grid in getattr(self._grid_engine, "grids", []):
+            if grid.status == "closed":
+                continue
+            try:
+                spec = self._get_instrument_spec(grid.symbol)
+                contract = build_contract(spec)
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "Tracking de ordens não reidratado para grid %s (%s): %s",
+                    grid.id,
+                    grid.symbol,
+                    exc,
+                )
+                continue
+
+            restored += self._order_manager.rehydrate_grid_orders(grid, contract)
+
+        if restored > 0:
+            logger.info("Tracking de ordens reidratado no arranque: %d ordem(ns).", restored)
+        return restored
+
     async def _check_data_files_integrity(self) -> None:
         """Valida os JSONs criticos e repara ficheiros corrompidos."""
         for filename, initial_value in _DATA_FILE_DEFAULTS.items():
@@ -804,23 +1020,33 @@ class TradingBot:
                     if self._telegram else None
                 )
 
-    async def _fetch_positions_with_retry(self) -> list[dict[str, Any]]:
-        """Obtém posições do IB com retry explícito para reconciliação."""
+    async def _fetch_positions_with_retry(self) -> BrokerPositionsObservation:
+        """Obtém posições do IB com retry explícito e semântica fail-closed."""
         if self._order_manager is None:
             raise RuntimeError("OrderManager nao inicializado.")
 
         for attempt in range(1, _RECONCILIATION_FETCH_ATTEMPTS + 1):
             positions = await self._order_manager.get_positions()
-            if positions or attempt == _RECONCILIATION_FETCH_ATTEMPTS:
-                return positions
+            if positions:
+                return BrokerPositionsObservation(
+                    state="confirmed",
+                    positions=positions,
+                )
             logger.warning(
                 "Leitura de posicoes do IB sem dados na tentativa %d/%d. Novo retry em %d s.",
                 attempt,
                 _RECONCILIATION_FETCH_ATTEMPTS,
                 _RECONCILIATION_FETCH_DELAY_SECONDS,
             )
+            if attempt == _RECONCILIATION_FETCH_ATTEMPTS:
+                break
             await asyncio.sleep(_RECONCILIATION_FETCH_DELAY_SECONDS)
-        return []
+        logger.error(
+            "Reconciliação inconclusiva: posições do IB continuam vazias após %d tentativas. "
+            "Sem acções destrutivas neste ciclo.",
+            _RECONCILIATION_FETCH_ATTEMPTS,
+        )
+        return BrokerPositionsObservation(state="unknown", positions=[])
 
     async def _write_reconciliation_log(self, lines: list[str]) -> None:
         """Escreve o log da reconciliação de arranque."""
@@ -900,6 +1126,7 @@ class TradingBot:
 
         if self._order_manager is None:
             self._order_manager = OrderManager(self._connection)
+        self._rehydrate_order_tracking()
 
         self._schedule_telegram(
             self._telegram.notify_connection_status(True) if self._telegram else None
@@ -917,22 +1144,10 @@ class TradingBot:
             self._connection.ib.accountValues,
             request_cost=1,
         )
-        del account_values
 
         primary_account = accounts[0] if accounts else "UNKNOWN"
-        masked_account = mask_account_id(primary_account)
-        account_mode = self._infer_account_mode(primary_account)
-        logger.info("Conta IB detectada: %s (%s).", masked_account, account_mode)
-
-        if primary_account != "UNKNOWN" and self._config.ib.paper_trading and account_mode == "LIVE":
-            logger.warning(
-                "Conta live detectada com PAPER_TRADING=true. Confirmar ambiente IB antes de operar."
-            )
-        if primary_account != "UNKNOWN" and not self._config.ib.paper_trading and account_mode == "PAPER":
-            logger.critical(
-                "Conta paper detectada com PAPER_TRADING=false. Arranque bloqueado por seguranca."
-            )
-            sys.exit(1)
+        self._enforce_account_context(primary_account, phase="startup")
+        self._restore_runtime_capital(account_values)
 
         await self._verify_market_data_permissions()
         self._schedule_telegram(
@@ -973,15 +1188,19 @@ class TradingBot:
             self._connection.ib.reqCurrentTime,
             request_cost=1,
         )
-        await self._connection.request_executor.run(
+        accounts = await self._connection.request_executor.run(
             "managed_accounts_post_reconnect",
             "managed_accounts_post_reconnect",
             self._connection.ib.managedAccounts,
             request_cost=1,
         )
+        primary_account = accounts[0] if accounts else "UNKNOWN"
+        if not self._enforce_account_context(primary_account, phase="reconnect"):
+            return
         await self._verify_market_data_permissions()
         if self._order_manager is None:
             self._order_manager = OrderManager(self._connection)
+        self._rehydrate_order_tracking()
         await self._reconcile_startup()
         self._schedule_telegram(
             self._telegram.notify_reconnect_resumed(datetime.now(timezone.utc).isoformat())
@@ -1099,12 +1318,7 @@ class TradingBot:
 
     async def _telegram_status_callback(self) -> str:
         """Resposta ao comando /status do Telegram."""
-        try:
-            metrics = json.loads(
-                (self._config.data_dir / "metrics.json").read_text(encoding="utf-8")
-            )
-        except Exception:
-            metrics = {}
+        metrics = self._load_metrics_snapshot()
 
         summary = self._trade_logger.get_daily_summary()
         capital = float(metrics.get("capital", self._capital) or self._capital)
@@ -1275,16 +1489,111 @@ class TradingBot:
             # TODO Fase 2: rebalancear posições baseado em momentum sectorial.
 
     async def _cancel_pending_entry_orders(self, grid: Grid) -> int:
-        """Cancela apenas as ordens de entrada ainda pendentes de uma grid."""
+        """Cancela apenas brackets de entrada ainda pendentes de uma grid."""
         if self._order_manager is None:
             return 0
 
         cancelled = 0
+        seen_order_ids: set[int] = set()
         for level in grid.levels:
-            if level.status == "pending" and level.buy_order_id is not None:
-                if await self._order_manager.cancel_order(level.buy_order_id):
+            if level.status != "pending":
+                continue
+            for order_id in (
+                level.buy_order_id,
+                level.stop_order_id,
+                level.sell_order_id,
+            ):
+                if order_id is None or order_id in seen_order_ids:
+                    continue
+                seen_order_ids.add(order_id)
+                if await self._order_manager.cancel_order(order_id):
                     cancelled += 1
         return cancelled
+
+    async def _cancel_active_protection_orders(self, grid: Grid) -> int:
+        """Cancela apenas protecções de níveis já comprados, para iniciar flatten seguro."""
+        if self._order_manager is None:
+            return 0
+
+        cancelled = 0
+        seen_order_ids: set[int] = set()
+        for level in grid.levels:
+            if level.status != "bought":
+                continue
+            for order_id in (level.stop_order_id, level.sell_order_id):
+                if order_id is None or order_id in seen_order_ids:
+                    continue
+                seen_order_ids.add(order_id)
+                if await self._order_manager.cancel_order(order_id):
+                    cancelled += 1
+        return cancelled
+
+    async def _start_grid_flatten(self, grid: Grid) -> bool:
+        """Inicia flatten broker-side para uma grid com posição aberta."""
+        if self._order_manager is None:
+            return False
+
+        bought_levels = [level for level in grid.levels if level.status == "bought"]
+        if not bought_levels:
+            return True
+
+        spec = self._get_instrument_spec(grid.symbol)
+        contract = build_contract(spec)
+        quantity = sum(level.quantity for level in bought_levels)
+        if quantity <= 0:
+            return False
+
+        cancelled = await self._cancel_active_protection_orders(grid)
+        close_key = f"flatten:{grid.id}:{grid.symbol}:SELL:{quantity}"
+        flatten_started = await self._order_manager.close_position(
+            contract,
+            quantity=quantity,
+            action="SELL",
+            logical_close_key=close_key,
+        )
+        if flatten_started:
+            grid.reconciliation_state = "flattening"
+            self._grid_engine.save_state()
+            logger.critical(
+                "Flatten broker-side iniciado para %s (grid=%s, qty=%d, protecções canceladas=%d).",
+                grid.symbol,
+                grid.id,
+                quantity,
+                cancelled,
+            )
+            return True
+
+        logger.critical(
+            "Falha ao iniciar flatten broker-side para %s (grid=%s, qty=%d).",
+            grid.symbol,
+            grid.id,
+            quantity,
+        )
+        return False
+
+    async def _trip_partial_fill_halt(
+        self,
+        grid: Grid,
+        level: GridLevel,
+        leg: str,
+        filled_quantity: int,
+    ) -> None:
+        """Activa halt fail-closed quando é detectado partial fill."""
+        self._entry_halt_reason = "partial_fill_detected"
+        self._emergency_halt = True
+        grid.status = "paused"
+        grid.reconciliation_state = "partial_fill"
+        self._grid_engine.save_state()
+        message = (
+            f"Partial fill detectado em {grid.symbol} (grid={grid.id}, nível={level.level}, "
+            f"perna={leg}, filled={filled_quantity}/{level.quantity}). "
+            "Grid pausada e entradas bloqueadas até intervenção/reconciliação."
+        )
+        logger.critical(message)
+        self._schedule_telegram(
+            self._telegram.notify_operational_alert(message)
+            if self._telegram else None
+        )
 
     async def _run_reconciliation(self) -> None:
         """Lógica de reconciliação reutilizável — chamada por arranque e por comando runtime."""
@@ -1297,8 +1606,33 @@ class TradingBot:
         self._reconciliation_in_progress = True
         try:
             logger.info("A iniciar reconciliacao...")
-            positions = await self._fetch_positions_with_retry()
+            position_observation = await self._fetch_positions_with_retry()
             open_orders = await self._order_manager.get_open_orders()
+            if hasattr(self._order_manager, "sync_tracking_from_open_orders"):
+                synced_orders = self._order_manager.sync_tracking_from_open_orders(open_orders)
+                if synced_orders:
+                    logger.info(
+                        "Tracking local sincronizado com %d ordem(ns) aberta(s) do broker.",
+                        synced_orders,
+                    )
+            if position_observation.state != "confirmed":
+                reconciliation_lines = [
+                    (
+                        "Reconciliação inconclusiva: posições do broker não confirmadas. "
+                        "Sem pausas nem cancelamentos automáticos."
+                    ),
+                ]
+                for grid in self._grid_engine.get_active_grids():
+                    grid.reconciliation_state = "unknown"
+                await self._write_reconciliation_log(reconciliation_lines)
+                self._grid_engine.save_state()
+                self._schedule_telegram(
+                    self._telegram.notify_reconciliation(reconciliation_lines[0])
+                    if self._telegram else None
+                )
+                return
+
+            positions = position_observation.positions
 
             positions_by_symbol: dict[str, float] = {}
             for position in positions:
@@ -1338,6 +1672,22 @@ class TradingBot:
                     continue
 
                 if ib_qty == 0:
+                    if expected_qty > 0 and any(
+                        grid.reconciliation_state == "flattening"
+                        for grid in grids
+                    ):
+                        for grid in grids:
+                            self._grid_engine.close_grid(grid)
+                            grid.reconciliation_state = "synced"
+                        cancelled = await self._order_manager.cancel_symbol_orders(symbol)
+                        line = (
+                            f"{symbol}: flatten broker-side confirmado; grids fechadas e "
+                            f"ordens residuais canceladas={cancelled}"
+                        )
+                        logger.info(line)
+                        reconciliation_lines.append(line)
+                        ok_count += len(grids)
+                        continue
                     for grid in grids:
                         grid.status = "paused"
                         grid.reconciliation_state = "ghost"
@@ -1514,6 +1864,8 @@ class TradingBot:
             "timestamp": datetime.now(timezone.utc).isoformat(),
             "capital": getattr(self, "_capital", None),
             "manual_pause": self._manual_pause,
+            "entry_halt_reason": self._entry_halt_reason,
+            "emergency_halt": self._emergency_halt,
             "startup_reconciled": self._startup_reconciled,
             "active_grids": len(self._grid_engine.get_active_grids()) if hasattr(self, "_grid_engine") else 0,
             "watchlist": [spec.display for spec in self._watchlist] if hasattr(self, "_watchlist") else [],
@@ -1551,6 +1903,8 @@ class TradingBot:
                 if self._last_cycle_completed_at else None
             ),
             "manual_pause": self._manual_pause,
+            "entry_halt_reason": self._entry_halt_reason,
+            "emergency_halt": self._emergency_halt,
             "ib_connected": (
                 self._connection.is_connected
                 if hasattr(self, "_connection") and hasattr(self._connection, "is_connected")
@@ -1678,12 +2032,6 @@ class TradingBot:
         self._last_cycle_started_at = datetime.now(timezone.utc)
 
         await self._process_command_queue()
-
-        if self._manual_pause:
-            logger.info("Bot em pausa manual — a saltar ciclo.")
-            self._write_heartbeat()
-            return
-
         logger.debug("--- Inicio de ciclo ---")
         self._reference_history_cache.clear()
         self._advance_defensive_day_counter()
@@ -1700,23 +2048,27 @@ class TradingBot:
         await self._evaluate_sector_rotation()
 
         # 7. Verificar limites de risco (daily/weekly/monthly)
-        # Fazemos isto no inicio do ciclo para cortar rapido se necessario
-        kill_switch_triggered = await self._check_risk_limits()
-        if kill_switch_triggered:
-            self._write_heartbeat()
-            return  # Bot pausado — nao processar mais nada
+        entry_halt_active = await self._check_risk_limits()
 
-        # Processar cada simbolo da watchlist
-        for spec in self._watchlist:
-            if not self._running:
-                break
-            try:
-                await self._process_symbol(spec)
-            except Exception as exc:  # noqa: BLE001
-                logger.error(
-                    "Erro ao processar simbolo %s: %s", spec.display, exc,
-                    exc_info=True,
-                )
+        if self._manual_pause:
+            logger.info("Bot em pausa manual — novas entradas desactivadas, monitorização activa.")
+        elif entry_halt_active:
+            logger.warning(
+                "Novas entradas bloqueadas por risco: %s",
+                self._entry_halt_reason or "halt_desconhecido",
+            )
+        else:
+            # Processar cada simbolo da watchlist
+            for spec in self._watchlist:
+                if not self._running:
+                    break
+                try:
+                    await self._process_symbol(spec)
+                except Exception as exc:  # noqa: BLE001
+                    logger.error(
+                        "Erro ao processar simbolo %s: %s", spec.display, exc,
+                        exc_info=True,
+                    )
 
         # 6. Monitorizar grids activas
         await self._monitor_active_grids()
@@ -1798,6 +2150,16 @@ class TradingBot:
         if missing:
             logger.warning(
                 "Indicadores em falta para %s: %s — a saltar.", spec.display, missing,
+            )
+            return
+
+        price_source = str(indicators.get("price_source") or "unknown")
+        price_fresh = bool(indicators.get("price_fresh", False))
+        if not price_fresh:
+            logger.warning(
+                "Entradas bloqueadas para %s por preço stale/inconclusivo (%s).",
+                spec.display,
+                price_source,
             )
             return
 
@@ -1945,132 +2307,12 @@ class TradingBot:
                     new_signal.get("metadata", {}).get("strike"),
                 )
             else:
-                period_pnl = dict(self._period_pnl)
-                validation = self._risk_manager.validate_order_full({
-                    "symbol": spec.symbol,
-                    "entry_price": new_signal.get("entry_price", 0.0),
-                    "stop_price": new_signal.get("stop_loss", 0.0),
-                    "take_profit_price": new_signal.get("take_profit", 0.0),
-                    "capital": self._capital,
-                    "daily_pnl": period_pnl["daily"],
-                    "weekly_pnl": period_pnl["weekly"],
-                    "monthly_pnl": period_pnl["monthly"],
-                    "current_positions": len(
-                        [
-                            level
-                            for grid in self._grid_engine.get_active_grids()
-                            for level in grid.levels
-                            if level.status == "bought"
-                        ]
-                    ),
-                    "current_grids": len(self._grid_engine.get_active_grids()),
-                    "win_rate": self._dynamic_win_rate,
-                    "payoff_ratio": 2.5,
-                    "num_levels": 1,
-                })
-                if not validation.approved:
-                    logger.info(
-                        "Sinal multi-instrumento rejeitado para %s pelo risco: %s",
-                        spec.display,
-                        validation.rejection_reason,
-                    )
-                elif int(new_signal.get("confidence", 0)) < 2:
-                    logger.info(
-                        "Sinal multi-instrumento ignorado para %s por confiança insuficiente (%s).",
-                        spec.display,
-                        new_signal.get("confidence"),
-                    )
-                elif self._order_manager is None:
-                    logger.error(
-                        "OrderManager indisponível ao tentar submeter ordem multi-instrumento para %s.",
-                        spec.display,
-                    )
-                else:
-                    order_action = {
-                        "BUY": "BUY",
-                        "LONG": "BUY",
-                        "SELL": "SELL",
-                        "SHORT": "SELL",
-                    }.get(action.upper())
-                    if order_action is None:
-                        logger.warning(
-                            "Acção multi-instrumento não suportada para submissão directa em %s: %s",
-                            spec.display,
-                            action,
-                        )
-                    else:
-                        requested_size = new_signal.get("position_size", 0)
-                        quantity = 0
-                        if isinstance(requested_size, (int, float)) and requested_size >= 1:
-                            quantity = int(requested_size)
-                        if quantity <= 0:
-                            quantity = int(validation.position_size)
-
-                        if quantity <= 0:
-                            logger.warning(
-                                "Sinal multi-instrumento sem quantidade válida para %s. "
-                                "Tamanho calculado=%d, pedido=%s.",
-                                spec.display,
-                                validation.position_size,
-                                requested_size,
-                            )
-                        else:
-                            try:
-                                result = await self._order_manager.submit_bracket_order(
-                                    contract=contract,
-                                    action=order_action,
-                                    quantity=quantity,
-                                    entry_price=float(new_signal["entry_price"]),
-                                    stop_price=float(new_signal["stop_loss"]),
-                                    take_profit_price=float(new_signal["take_profit"]),
-                                    grid_id=(
-                                        f"multi_{spec.symbol}_"
-                                        f"{int(datetime.now(timezone.utc).timestamp())}"
-                                    ),
-                                    level=0,
-                                )
-                                if result is not None:
-                                    logger.info(
-                                        "Ordem multi-instrumento submetida: %s %s @ %.4f | "
-                                        "SL: %.4f | TP: %.4f | qtd=%d",
-                                        order_action,
-                                        spec.symbol,
-                                        float(new_signal["entry_price"]),
-                                        float(new_signal["stop_loss"]),
-                                        float(new_signal["take_profit"]),
-                                        quantity,
-                                    )
-                                    self._schedule_telegram(
-                                        self._telegram.trade_opened(
-                                            symbol=spec.symbol,
-                                            action=order_action,
-                                            entry=float(new_signal["entry_price"]),
-                                            stop=float(new_signal["stop_loss"]),
-                                            tp=float(new_signal["take_profit"]),
-                                            confidence=int(new_signal.get("confidence", 2)),
-                                            module=str(
-                                                new_signal.get("metadata", {}).get("module", "unknown")
-                                            ),
-                                            regime=str(
-                                                new_signal.get("metadata", {}).get(
-                                                    "regime",
-                                                    regime_info.regime.value,
-                                                )
-                                            ),
-                                            paper=self._config.ib.paper_trading,
-                                        ) if self._telegram else None
-                                    )
-                                else:
-                                    logger.error(
-                                        "Falha ao submeter ordem multi-instrumento para %s.",
-                                        spec.symbol,
-                                    )
-                            except Exception as exc:
-                                logger.error(
-                                    "Erro ao submeter ordem multi-instrumento %s: %s",
-                                    spec.symbol,
-                                    exc,
-                                )
+                logger.warning(
+                    "Execução directa de sinais multi-instrumento desactivada por segurança "
+                    "até integração na state machine persistente: %s (%s).",
+                    spec.display,
+                    action,
+                )
 
         # 5. SE sinal valido E risco ok → criar grid
         if not session_state.can_open_new_grid:
@@ -2089,7 +2331,53 @@ class TradingBot:
                 atr=atr14,
                 regime_info=regime_info,
                 signal_result=signal_result,
+                bars_df=bars_df,
             )
+
+    async def _submit_grid_level_bracket(
+        self,
+        *,
+        contract: Any,
+        grid: Grid,
+        level: GridLevel,
+    ) -> bool:
+        """Submete o bracket de um nível com chave lógica estável e persistência imediata."""
+        assert self._order_manager is not None
+        logical_trade_key = OrderManager.build_logical_trade_key(
+            grid.id,
+            level.level,
+            "BUY",
+        )
+        result = await self._order_manager.submit_bracket_order(
+            contract=contract,
+            action="BUY",
+            quantity=level.quantity,
+            entry_price=level.buy_price,
+            stop_price=level.stop_price,
+            take_profit_price=level.sell_price,
+            grid_id=grid.id,
+            level=level.level,
+            logical_trade_key=logical_trade_key,
+        )
+        if result is None:
+            return False
+
+        level.buy_order_id = result.get("order_id")
+        level.stop_order_id = result.get("stop_order_id")
+        level.sell_order_id = result.get("tp_order_id")
+        self._grid_engine.save_state()
+        logger.info(
+            "Bracket colocado para %s, nivel %d a %.4f "
+            "(stop=%.4f, tp=%.4f, qtd=%d, key=%s)",
+            grid.symbol,
+            level.level,
+            level.buy_price,
+            level.stop_price,
+            level.sell_price,
+            level.quantity,
+            logical_trade_key,
+        )
+        return True
 
     # ------------------------------------------------------------------
     # Tentativa de criacao de grid
@@ -2103,6 +2391,7 @@ class TradingBot:
         atr: float,
         regime_info: RegimeInfo,
         signal_result: SignalResult,
+        bars_df: Any | None = None,
     ) -> None:
         """Tenta criar uma nova grid se o risco permitir."""
         assert self._order_manager is not None
@@ -2170,6 +2459,13 @@ class TradingBot:
             [g for g in active_grids
              for lv in g.levels if lv.status == "bought"]
         )
+        open_positions: list[str] = []
+        returns_map: dict[str, list[float]] = {}
+        if bars_df is not None:
+            open_positions, returns_map = await self._build_intl_etf_context(
+                symbol,
+                bars_df,
+            )
 
         order_approved, rejection_reason = self._risk_manager.validate_order({
             "symbol": symbol,
@@ -2185,6 +2481,8 @@ class TradingBot:
             "win_rate": win_rate if 0 < win_rate < 1 else self._dynamic_win_rate,  # WinRate
             "payoff_ratio": payoff_ratio if payoff_ratio > 0 else 2.5,
             "num_levels": num_levels,  # Finding 4d
+            "open_positions": open_positions,
+            "returns_map": returns_map,
         })
 
         if not order_approved:
@@ -2194,7 +2492,7 @@ class TradingBot:
             )
             return
 
-        # Criar a grid
+        # Criar a grid em staging antes de qualquer efeito broker-side
         grid = self._grid_engine.create_grid(
             symbol=symbol,
             center_price=price,
@@ -2206,10 +2504,12 @@ class TradingBot:
             size_multiplier=signal_result.size_multiplier,
             stop_atr_mult=self._config.risk.stop_atr_mult,
             tp_atr_mult=self._config.risk.tp_atr_mult,
+            status="staging",
         )
+        self._grid_engine.save_state()
 
         logger.info(
-            "Grid criada para %s: %s | %d niveis | centro=%.4f | ATR=%.4f",
+            "Grid staged para %s: %s | %d niveis | centro=%.4f | ATR=%.4f",
             symbol, grid.id, len(grid.levels), price, atr,
         )
 
@@ -2218,31 +2518,27 @@ class TradingBot:
             if level.status != "pending":
                 continue
 
-            result = await self._order_manager.submit_bracket_order(
+            submitted = await self._submit_grid_level_bracket(
                 contract=contract,
-                action="BUY",
-                quantity=level.quantity,
-                entry_price=level.buy_price,
-                stop_price=level.stop_price,
-                take_profit_price=level.sell_price,
-                grid_id=grid.id,
-                level=level.level,
+                grid=grid,
+                level=level,
             )
-
-            if result is not None:
-                level.buy_order_id = result.get("order_id")
-                level.stop_order_id = result.get("stop_order_id")
-                level.sell_order_id = result.get("tp_order_id")
-                logger.info(
-                    "Ordem limit colocada para %s, nivel %d a %.4f "
-                    "(stop=%.4f, tp=%.4f, qtd=%d)",
-                    symbol, level.level, level.buy_price,
-                    level.stop_price, level.sell_price, level.quantity,
+            if not submitted:
+                await self._cancel_pending_entry_orders(grid)
+                self._grid_engine.fail_grid(
+                    grid,
+                    f"initial_order_submission_failed_level_{level.level}",
                 )
-            else:
+                self._grid_engine.save_state()
                 logger.error(
-                    "Falha ao colocar ordem para %s, nivel %d.", symbol, level.level,
+                    "Grid %s falhou durante staging no nivel %d. Activação abortada.",
+                    grid.id,
+                    level.level,
                 )
+                return
+
+        self._grid_engine.activate_grid(grid)
+        self._grid_engine.save_state()
 
         # Notificar Telegram
         self._schedule_telegram(
@@ -2300,13 +2596,28 @@ class TradingBot:
                 )
 
         for level in grid.levels:
+            logical_trade_key = OrderManager.build_logical_trade_key(
+                grid.id,
+                level.level,
+                "BUY",
+            )
             # Verificar niveis pendentes — ordem de compra executada?
             if level.status == "pending" and level.buy_order_id is not None:
+                order_info = self._order_manager.get_order_info(level.buy_order_id)
                 status = self._order_manager.get_order_status(level.buy_order_id)
-                if status == OrderStatus.FILLED:
-                    order_info = self._order_manager.get_order_info(
-                        level.buy_order_id
+                if (
+                    order_info is not None
+                    and 0 < order_info.filled_quantity < level.quantity
+                    and status != OrderStatus.FILLED
+                ):
+                    await self._trip_partial_fill_halt(
+                        grid,
+                        level,
+                        order_info.leg_type,
+                        order_info.filled_quantity,
                     )
+                    return
+                if status == OrderStatus.FILLED:
                     fill_price = (
                         order_info.fill_price if order_info else level.buy_price
                     )
@@ -2330,6 +2641,9 @@ class TradingBot:
                         "pnl": None,
                         "regime": grid.regime,
                         "signal_confidence": grid.confidence,
+                        "logical_trade_key": logical_trade_key,
+                        "order_ref": logical_trade_key,
+                        "order_leg": "parent",
                     })
                     self._schedule_telegram(
                         self._telegram.trade_opened(
@@ -2349,16 +2663,26 @@ class TradingBot:
             elif level.status == "bought":
                 # Verificar take-profit (sell_order_id)
                 if level.sell_order_id is not None:
+                    tp_info = self._order_manager.get_order_info(level.sell_order_id)
                     tp_status = self._order_manager.get_order_status(
                         level.sell_order_id
                     )
-                    if tp_status == OrderStatus.FILLED:
-                        order_info = self._order_manager.get_order_info(
-                            level.sell_order_id
+                    if (
+                        tp_info is not None
+                        and 0 < tp_info.filled_quantity < level.quantity
+                        and tp_status != OrderStatus.FILLED
+                    ):
+                        await self._trip_partial_fill_halt(
+                            grid,
+                            level,
+                            tp_info.leg_type,
+                            tp_info.filled_quantity,
                         )
+                        return
+                    if tp_status == OrderStatus.FILLED:
                         fill_price = (
-                            order_info.fill_price
-                            if order_info else level.sell_price
+                            tp_info.fill_price
+                            if tp_info else level.sell_price
                         )
                         self._grid_engine.on_level_sold(
                             grid, level.level, fill_price, now_iso,
@@ -2381,6 +2705,9 @@ class TradingBot:
                             "pnl": pnl,
                             "regime": grid.regime,
                             "signal_confidence": grid.confidence,
+                            "logical_trade_key": logical_trade_key,
+                            "order_ref": logical_trade_key,
+                            "order_leg": "tp",
                         })
                         self._capital += pnl  # Finding 8
                         self._risk_manager.update_capital(self._capital)  # Finding 8
@@ -2402,16 +2729,26 @@ class TradingBot:
 
                 # Verificar stop-loss (stop_order_id)
                 if level.stop_order_id is not None:
+                    sl_info = self._order_manager.get_order_info(level.stop_order_id)
                     sl_status = self._order_manager.get_order_status(
                         level.stop_order_id
                     )
-                    if sl_status == OrderStatus.FILLED:
-                        order_info = self._order_manager.get_order_info(
-                            level.stop_order_id
+                    if (
+                        sl_info is not None
+                        and 0 < sl_info.filled_quantity < level.quantity
+                        and sl_status != OrderStatus.FILLED
+                    ):
+                        await self._trip_partial_fill_halt(
+                            grid,
+                            level,
+                            sl_info.leg_type,
+                            sl_info.filled_quantity,
                         )
+                        return
+                    if sl_status == OrderStatus.FILLED:
                         fill_price = (
-                            order_info.fill_price
-                            if order_info else level.stop_price
+                            sl_info.fill_price
+                            if sl_info else level.stop_price
                         )
                         # Stop-loss atingido — nivel NAO sera reaberto
                         self._grid_engine.on_level_stopped(
@@ -2436,6 +2773,9 @@ class TradingBot:
                             "pnl": loss,
                             "regime": grid.regime,
                             "signal_confidence": grid.confidence,
+                            "logical_trade_key": logical_trade_key,
+                            "order_ref": logical_trade_key,
+                            "order_leg": "stop",
                         })
                         self._capital += loss  # Finding 8
                         self._risk_manager.update_capital(self._capital)  # Finding 8
@@ -2487,6 +2827,9 @@ class TradingBot:
             await self._order_manager.cancel_all_grid_orders(grid.id)
             return
 
+        if self._emergency_halt or grid.reconciliation_state == "flattening":
+            return
+
         # Verificar se o preco saiu da grid → recentrar
         contract = build_contract(spec)
         current_price = await self._data_feed.get_current_price(contract)
@@ -2530,24 +2873,23 @@ class TradingBot:
                     tp_atr_mult=self._config.risk.tp_atr_mult,
                     respaced_at=now_iso,
                 )
+                self._grid_engine.save_state()
 
                 # Colocar novas ordens para niveis pendentes
                 for level in grid.levels:
                     if level.status == "pending":
-                        result = await self._order_manager.submit_bracket_order(
+                        submitted = await self._submit_grid_level_bracket(
                             contract=contract,
-                            action="BUY",
-                            quantity=level.quantity,
-                            entry_price=level.buy_price,
-                            stop_price=level.stop_price,
-                            take_profit_price=level.sell_price,
-                            grid_id=grid.id,
-                            level=level.level,
+                            grid=grid,
+                            level=level,
                         )
-                        if result is not None:
-                            level.buy_order_id = result.get("order_id")
-                            level.stop_order_id = result.get("stop_order_id")
-                            level.sell_order_id = result.get("tp_order_id")
+                        if not submitted:
+                            logger.error(
+                                "Grid %s: falha ao repor bracket do nivel %d após recentragem.",
+                                grid.id,
+                                level.level,
+                            )
+                            break
 
     # ------------------------------------------------------------------
     # Verificacao de limites de risco
@@ -2557,8 +2899,13 @@ class TradingBot:
         """
         Verifica os limites de risco diário, semanal e mensal.
 
-        Retorna True se o kill switch foi activado (bot deve parar).
+        Retorna True se novas entradas devem ficar bloqueadas neste ciclo.
         """
+        if self._emergency_halt:
+            self._entry_halt_reason = self._entry_halt_reason or "monthly_kill_switch"
+            return True
+
+        self._entry_halt_reason = None
         period_pnl = self._refresh_period_pnl()
         daily_pnl = period_pnl["daily"]
         weekly_pnl = period_pnl["weekly"]
@@ -2581,14 +2928,13 @@ class TradingBot:
         if not daily_ok:
             logger.critical(
                 "LIMITE DIARIO ATINGIDO — P&L do dia: %.2f (%.2f%% do capital). "
-                "Todas as operacoes pausadas ate amanha.",
+                "Novas entradas bloqueadas ate novo reset diário.",
                 daily_pnl,
                 (daily_pnl / self._capital * 100) if self._capital > 0 else 0,
             )
-            # Cancelar todas as ordens pendentes
-            if self._order_manager is not None:
-                for grid in self._grid_engine.get_active_grids():
-                    await self._order_manager.cancel_all_grid_orders(grid.id)
+            self._entry_halt_reason = "daily_limit"
+            for grid in self._grid_engine.get_active_grids():
+                await self._cancel_pending_entry_orders(grid)
             self._schedule_telegram(
                 self._telegram.kill_switch_triggered(
                     level="diário",
@@ -2612,13 +2958,13 @@ class TradingBot:
         if not weekly_ok:
             logger.critical(
                 "LIMITE SEMANAL ATINGIDO — P&L da semana: %.2f (%.2f%% do capital). "
-                "Todas as operacoes pausadas ate nova semana.",
+                "Novas entradas bloqueadas até nova semana.",
                 weekly_pnl,
                 (weekly_pnl / self._capital * 100) if self._capital > 0 else 0,
             )
-            if self._order_manager is not None:
-                for grid in self._grid_engine.get_active_grids():
-                    await self._order_manager.cancel_all_grid_orders(grid.id)
+            self._entry_halt_reason = "weekly_limit"
+            for grid in self._grid_engine.get_active_grids():
+                await self._cancel_pending_entry_orders(grid)
             self._schedule_telegram(
                 self._telegram.kill_switch_triggered(
                     level="semanal",
@@ -2644,17 +2990,15 @@ class TradingBot:
         if not monthly_ok:
             logger.critical(
                 "KILL SWITCH MENSAL ACTIVADO — Drawdown mensal: %.2f. "
-                "A fechar todas as posicoes e ordens.",
+                "Novas entradas bloqueadas. Será iniciado flatten broker-side "
+                "e o estado local só fecha após confirmação pela reconciliação.",
                 monthly_pnl,
             )
-            # Fechar tudo
-            if self._order_manager is not None:
-                for grid in self._grid_engine.get_active_grids():
-                    await self._order_manager.cancel_all_grid_orders(grid.id)
-                    self._grid_engine.close_grid(grid)
-
-            # Persistir estado
-            self._grid_engine.save_state()
+            self._entry_halt_reason = "monthly_kill_switch"
+            self._emergency_halt = True
+            for grid in self._grid_engine.get_active_grids():
+                await self._cancel_pending_entry_orders(grid)
+                await self._start_grid_flatten(grid)
 
             self._schedule_telegram(
                 self._telegram.kill_switch_triggered(
@@ -2664,9 +3008,6 @@ class TradingBot:
                 ) if self._telegram else None
             )
 
-            # Parar o bot — requer reinicio manual
-            self._running = False
-            self._shutdown_event.set()
             return True
 
         return False
@@ -2691,7 +3032,7 @@ class TradingBot:
             summary["num_active_grids"] = len(active_grids)
 
             # Guardar metricas
-            self._trade_logger.save_metrics(metrics)
+            self._trade_logger.save_metrics(self._build_metrics_payload(metrics))
 
             # Logar resumo
             logger.info(
@@ -2758,7 +3099,7 @@ class TradingBot:
         # Guardar metricas finais
         try:
             metrics = self._trade_logger.calculate_metrics()
-            self._trade_logger.save_metrics(metrics)
+            self._trade_logger.save_metrics(self._build_metrics_payload(metrics))
             logger.info("Metricas finais guardadas com sucesso.")
         except Exception as exc:  # noqa: BLE001
             logger.error("Erro ao guardar metricas finais: %s", exc)

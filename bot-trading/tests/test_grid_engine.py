@@ -86,6 +86,21 @@ class TestCreateGrid:
         assert len(grid.levels) == 5
         assert grid.total_pnl == 0.0
 
+    def test_grid_can_be_created_in_staging(self, engine: GridEngine):
+        grid = engine.create_grid(
+            symbol="AAPL",
+            center_price=100.0,
+            atr=2.0,
+            regime="BULL",
+            num_levels=5,
+            base_quantity=10,
+            confidence="ALTO",
+            size_multiplier=1.0,
+            status="staging",
+        )
+        assert grid.status == "staging"
+        assert grid.failure_reason is None
+
     def test_grid_levels_prices(self, engine: GridEngine):
         grid = engine.create_grid(
             symbol="AAPL",
@@ -605,6 +620,21 @@ class TestDataclassValidation:
             )
             assert lv.status == status
 
+    def test_grid_valid_statuses(self):
+        for status in _VALID_GRID_STATUSES:
+            grid = Grid(
+                id="test",
+                symbol="AAPL",
+                status=status,
+                regime="BULL",
+                created_at="2024-01-01",
+                center_price=100.0,
+                atr=2.0,
+                spacing=2.0,
+                levels=[],
+            )
+            assert grid.status == status
+
 
 # ===================================================================
 # Tests: get_active_grids, get_grid_by_id
@@ -637,3 +667,45 @@ class TestQueryMethods:
     def test_get_grid_by_id_not_found(self, engine: GridEngine):
         found = engine.get_grid_by_id("nonexistent_id")
         assert found is None
+
+
+class TestLifecycleTransitions:
+    def test_activate_grid_promotes_staging(self, engine: GridEngine):
+        grid = engine.create_grid(
+            symbol="AAPL",
+            center_price=100.0,
+            atr=2.0,
+            regime="BULL",
+            num_levels=3,
+            base_quantity=10,
+            confidence="ALTO",
+            size_multiplier=1.0,
+            status="staging",
+        )
+
+        engine.activate_grid(grid)
+
+        assert grid.status == "active"
+        assert grid.failure_reason is None
+
+    def test_fail_grid_marks_failed_and_preserves_levels(self, engine: GridEngine):
+        grid = engine.create_grid(
+            symbol="AAPL",
+            center_price=100.0,
+            atr=2.0,
+            regime="BULL",
+            num_levels=3,
+            base_quantity=10,
+            confidence="ALTO",
+            size_multiplier=1.0,
+            status="staging",
+        )
+        first_level = grid.levels[0]
+        first_level.buy_order_id = 123
+
+        engine.fail_grid(grid, "initial_order_submission_failed_level_1")
+
+        assert grid.status == "failed"
+        assert grid.failure_reason == "initial_order_submission_failed_level_1"
+        assert first_level.status == "pending"
+        assert first_level.buy_order_id == 123

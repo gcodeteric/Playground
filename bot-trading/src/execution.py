@@ -12,6 +12,7 @@ import asyncio
 import logging
 import sys
 import time
+from collections import defaultdict
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import TYPE_CHECKING, Any
@@ -55,6 +56,12 @@ logger = logging.getLogger(__name__)
 
 _MAX_RETRIES: int = 3
 _RETRY_DELAY_BASE: float = 0.5  # segundos, com backoff exponencial
+_TERMINAL_ORDER_STATUSES = {
+    "Filled",
+    "Cancelled",
+    "ApiCancelled",
+    "Inactive",
+}
 
 
 class OrderStatus(str, Enum):
@@ -78,7 +85,7 @@ class OrderStatus(str, Enum):
 
 @dataclass
 class OrderInfo:
-    """Informacao detalhada de uma ordem individual ou bracket."""
+    """Informacao detalhada de uma ordem individual."""
 
     order_id: int
     grid_id: str
@@ -90,6 +97,8 @@ class OrderInfo:
     price: float         # preco de entrada (limit)
     stop: float          # preco do stop-loss
     target: float        # preco do take-profit
+    logical_trade_key: str = ""
+    leg_type: str = "parent"
     parent_id: int = 0   # ID da ordem-pai (bracket)
     stop_order_id: int = 0
     tp_order_id: int = 0
@@ -101,6 +110,8 @@ class OrderInfo:
         """Converte para dicionario serializavel."""
         return {
             "order_id": self.order_id,
+            "logical_trade_key": self.logical_trade_key,
+            "leg_type": self.leg_type,
             "grid_id": self.grid_id,
             "level": self.level,
             "status": self.status,
@@ -117,6 +128,31 @@ class OrderInfo:
             "filled_quantity": self.filled_quantity,
             "created_at": self.created_at,
         }
+
+
+@dataclass
+class BracketInfo:
+    """Identidade lógica de um bracket completo."""
+
+    logical_trade_key: str
+    grid_id: str
+    level: int
+    action: str
+    quantity: int
+    price: float
+    stop: float
+    target: float
+    parent_order_id: int
+    stop_order_id: int
+    tp_order_id: int
+    created_at: float = field(default_factory=time.time)
+
+    def order_ids(self) -> tuple[int, int, int]:
+        return (
+            self.parent_order_id,
+            self.stop_order_id,
+            self.tp_order_id,
+        )
 
 
 from src.ib_requests import IBRateLimiter, IBRequestExecutor
@@ -154,18 +190,19 @@ class OrderManager:
     """
     Gestor central de ordens para o bot de trading.
 
-    Responsabilidades:
+        Responsabilidades:
     - Submissao de ordens bracket (entrada + stop + take-profit)
     - Cancelamento individual e por grid
     - Modificacao de precos
     - Consulta de posicoes e ordens abertas
     - Rate limiting para respeitar limites do IB API
-    - Retries automaticos com backoff exponencial
+    - Retries automáticos apenas quando a operação é segura para retry
     """
 
     def __init__(self, ib_connection: IBConnection) -> None:
         self.ib: IB = ib_connection.ib
         self._pending_orders: dict[int, OrderInfo] = {}
+        self._brackets_by_key: dict[str, BracketInfo] = {}
         self._rate_limiter: IBRateLimiter = ib_connection.rate_limiter
         self._request_executor: IBRequestExecutor = ib_connection.request_executor
 
@@ -193,9 +230,10 @@ class OrderManager:
                 info.fill_price = trade.orderStatus.avgFillPrice
                 info.filled_quantity = int(trade.orderStatus.filled)
                 logger.info(
-                    "Ordem %d (grid=%s, nivel=%d) PREENCHIDA a %.4f — "
+                    "Ordem %d [%s] (grid=%s, nivel=%d) PREENCHIDA a %.4f — "
                     "quantidade: %d",
                     order_id,
+                    info.leg_type,
                     info.grid_id,
                     info.level,
                     info.fill_price,
@@ -203,15 +241,17 @@ class OrderManager:
                 )
             elif new_status == OrderStatus.CANCELLED:
                 logger.info(
-                    "Ordem %d (grid=%s, nivel=%d) CANCELADA",
+                    "Ordem %d [%s] (grid=%s, nivel=%d) CANCELADA",
                     order_id,
+                    info.leg_type,
                     info.grid_id,
                     info.level,
                 )
             else:
                 logger.debug(
-                    "Ordem %d: estado alterado de %s para %s",
+                    "Ordem %d [%s]: estado alterado de %s para %s",
                     order_id,
+                    info.leg_type,
                     old_status,
                     new_status,
                 )
@@ -287,6 +327,522 @@ class OrderManager:
     # Submissao de ordens
     # ------------------------------------------------------------------
 
+    @staticmethod
+    def _is_terminal_status(status: str) -> bool:
+        return status in _TERMINAL_ORDER_STATUSES
+
+    def _get_active_bracket(self, logical_trade_key: str) -> BracketInfo | None:
+        bracket = self._brackets_by_key.get(logical_trade_key)
+        if bracket is None:
+            return None
+
+        if any(
+            (
+                info := self._pending_orders.get(order_id)
+            ) is not None and not self._is_terminal_status(info.status)
+            for order_id in bracket.order_ids()
+        ):
+            return bracket
+
+        self._brackets_by_key.pop(logical_trade_key, None)
+        return None
+
+    def _sync_bracket_tracking(self, logical_trade_key: str) -> None:
+        if logical_trade_key not in self._brackets_by_key:
+            return
+        self._get_active_bracket(logical_trade_key)
+
+    @staticmethod
+    def build_logical_trade_key(grid_id: str, level: int, action: str = "BUY") -> str:
+        """Constrói a chave lógica estável de um bracket de entrada."""
+        return f"{grid_id}:{level}:{action.upper()}:entry"
+
+    @staticmethod
+    def _rehydrated_leg_status(level_status: str, leg_type: str) -> str:
+        """Infere um estado inicial conservador para tracking reidratado."""
+        if level_status == "bought":
+            if leg_type == "parent":
+                return OrderStatus.FILLED
+            return OrderStatus.SUBMITTED
+        if level_status == "pending":
+            if leg_type == "parent":
+                return OrderStatus.SUBMITTED
+            return OrderStatus.PENDING
+        if level_status == "sold":
+            if leg_type == "tp":
+                return OrderStatus.FILLED
+            return OrderStatus.CANCELLED
+        if level_status == "stopped":
+            if leg_type == "stop":
+                return OrderStatus.FILLED
+            return OrderStatus.CANCELLED
+        return OrderStatus.CANCELLED
+
+    @staticmethod
+    def _normalize_order_ref(order: Any) -> str:
+        """Normaliza orderRef vindo do broker."""
+        return str(getattr(order, "orderRef", "") or "").strip()
+
+    @staticmethod
+    def _parse_logical_trade_key(logical_trade_key: str) -> tuple[str, int, str] | None:
+        """Extrai (grid_id, level, action) de uma chave lógica de bracket."""
+        parts = logical_trade_key.split(":")
+        if len(parts) < 4 or parts[-1] != "entry":
+            return None
+        try:
+            level = int(parts[-3])
+        except ValueError:
+            return None
+        grid_id = ":".join(parts[:-3])
+        action = parts[-2].upper()
+        if not grid_id:
+            return None
+        return grid_id, level, action
+
+    @staticmethod
+    def _trade_leg_type(trade: Trade) -> str:
+        """Classifica a perna de uma trade aberta do broker."""
+        order = trade.order
+        parent_id = int(getattr(order, "parentId", 0) or 0)
+        if parent_id == 0:
+            return "parent"
+        order_type = str(getattr(order, "orderType", "") or "").upper()
+        if order_type in {"STP", "STP LMT", "STOP"}:
+            return "stop"
+        return "tp"
+
+    def _register_bracket_tracking(
+        self,
+        *,
+        logical_trade_key: str,
+        grid_id: str,
+        level: int,
+        action: str,
+        contract: Contract,
+        quantity: int,
+        entry_price: float,
+        stop_price: float,
+        take_profit_price: float,
+        parent_order_id: int,
+        stop_order_id: int,
+        tp_order_id: int,
+        parent_status: str,
+        stop_status: str,
+        tp_status: str,
+        parent_fill_price: float = 0.0,
+        stop_fill_price: float = 0.0,
+        tp_fill_price: float = 0.0,
+        parent_filled_quantity: int = 0,
+        stop_filled_quantity: int = 0,
+        tp_filled_quantity: int = 0,
+    ) -> BracketInfo:
+        """Regista um bracket completo no tracking local."""
+        bracket_info = BracketInfo(
+            logical_trade_key=logical_trade_key,
+            grid_id=grid_id,
+            level=level,
+            action=action.upper(),
+            quantity=quantity,
+            price=entry_price,
+            stop=stop_price,
+            target=take_profit_price,
+            parent_order_id=parent_order_id,
+            stop_order_id=stop_order_id,
+            tp_order_id=tp_order_id,
+        )
+        reverse_action = "SELL" if action.upper() == "BUY" else "BUY"
+
+        parent_info = OrderInfo(
+            order_id=parent_order_id,
+            logical_trade_key=logical_trade_key,
+            leg_type="parent",
+            grid_id=grid_id,
+            level=level,
+            status=parent_status,
+            contract=contract,
+            action=action.upper(),
+            quantity=quantity,
+            price=entry_price,
+            stop=stop_price,
+            target=take_profit_price,
+            parent_id=parent_order_id,
+            stop_order_id=stop_order_id,
+            tp_order_id=tp_order_id,
+            fill_price=parent_fill_price,
+            filled_quantity=parent_filled_quantity,
+        )
+        self._pending_orders[parent_order_id] = parent_info
+
+        if stop_order_id:
+            stop_info = OrderInfo(
+                order_id=stop_order_id,
+                logical_trade_key=logical_trade_key,
+                leg_type="stop",
+                grid_id=grid_id,
+                level=level,
+                status=stop_status,
+                contract=contract,
+                action=reverse_action,
+                quantity=quantity,
+                price=entry_price,
+                stop=stop_price,
+                target=take_profit_price,
+                parent_id=parent_order_id,
+                stop_order_id=stop_order_id,
+                tp_order_id=tp_order_id,
+                fill_price=stop_fill_price,
+                filled_quantity=stop_filled_quantity,
+            )
+            self._pending_orders[stop_order_id] = stop_info
+
+        if tp_order_id:
+            tp_info = OrderInfo(
+                order_id=tp_order_id,
+                logical_trade_key=logical_trade_key,
+                leg_type="tp",
+                grid_id=grid_id,
+                level=level,
+                status=tp_status,
+                contract=contract,
+                action=reverse_action,
+                quantity=quantity,
+                price=entry_price,
+                stop=stop_price,
+                target=take_profit_price,
+                parent_id=parent_order_id,
+                stop_order_id=stop_order_id,
+                tp_order_id=tp_order_id,
+                fill_price=tp_fill_price,
+                filled_quantity=tp_filled_quantity,
+            )
+            self._pending_orders[tp_order_id] = tp_info
+
+        self._brackets_by_key[logical_trade_key] = bracket_info
+        self._sync_bracket_tracking(logical_trade_key)
+        return bracket_info
+
+    def _register_broker_bracket(self, logical_trade_key: str, trades: list[Trade]) -> BracketInfo | None:
+        """Reconstrói um bracket activo a partir das openTrades do broker."""
+        parsed = self._parse_logical_trade_key(logical_trade_key)
+        if parsed is None or not trades:
+            return None
+        grid_id, level, action = parsed
+
+        legs: dict[str, Trade] = {}
+        for trade in trades:
+            legs[self._trade_leg_type(trade)] = trade
+
+        parent_trade = legs.get("parent")
+        child_trade = legs.get("stop") or legs.get("tp")
+        contract = (
+            parent_trade.contract if parent_trade is not None
+            else child_trade.contract if child_trade is not None
+            else None
+        )
+        if contract is None:
+            return None
+
+        parent_order = parent_trade.order if parent_trade is not None else None
+        stop_trade = legs.get("stop")
+        tp_trade = legs.get("tp")
+        stop_order = stop_trade.order if stop_trade is not None else None
+        tp_order = tp_trade.order if tp_trade is not None else None
+
+        quantity = int(
+            getattr(parent_order, "totalQuantity", 0)
+            or getattr(stop_order, "totalQuantity", 0)
+            or getattr(tp_order, "totalQuantity", 0)
+            or 0
+        )
+        entry_price = float(getattr(parent_order, "lmtPrice", 0.0) or 0.0)
+        stop_price = float(getattr(stop_order, "auxPrice", 0.0) or 0.0)
+        take_profit_price = float(getattr(tp_order, "lmtPrice", 0.0) or 0.0)
+        parent_order_id = int(getattr(parent_order, "orderId", 0) or 0)
+        if parent_order_id == 0:
+            parent_order_id = int(
+                getattr(stop_order, "parentId", 0) or getattr(tp_order, "parentId", 0) or 0
+            )
+        if parent_order_id == 0:
+            return None
+
+        return self._register_bracket_tracking(
+            logical_trade_key=logical_trade_key,
+            grid_id=grid_id,
+            level=level,
+            action=action,
+            contract=contract,
+            quantity=quantity,
+            entry_price=entry_price,
+            stop_price=stop_price,
+            take_profit_price=take_profit_price,
+            parent_order_id=parent_order_id,
+            stop_order_id=int(getattr(stop_order, "orderId", 0) or 0),
+            tp_order_id=int(getattr(tp_order, "orderId", 0) or 0),
+            parent_status=(
+                str(parent_trade.orderStatus.status)
+                if parent_trade is not None and parent_trade.orderStatus
+                else OrderStatus.UNKNOWN
+            ),
+            stop_status=(
+                str(stop_trade.orderStatus.status)
+                if stop_trade is not None and stop_trade.orderStatus
+                else OrderStatus.CANCELLED
+            ),
+            tp_status=(
+                str(tp_trade.orderStatus.status)
+                if tp_trade is not None and tp_trade.orderStatus
+                else OrderStatus.CANCELLED
+            ),
+            parent_fill_price=float(
+                getattr(parent_trade.orderStatus, "avgFillPrice", 0.0)
+                if parent_trade is not None and parent_trade.orderStatus else 0.0
+            ),
+            stop_fill_price=float(
+                getattr(stop_trade.orderStatus, "avgFillPrice", 0.0)
+                if stop_trade is not None and stop_trade.orderStatus else 0.0
+            ),
+            tp_fill_price=float(
+                getattr(tp_trade.orderStatus, "avgFillPrice", 0.0)
+                if tp_trade is not None and tp_trade.orderStatus else 0.0
+            ),
+            parent_filled_quantity=int(
+                getattr(parent_trade.orderStatus, "filled", 0)
+                if parent_trade is not None and parent_trade.orderStatus else 0
+            ),
+            stop_filled_quantity=int(
+                getattr(stop_trade.orderStatus, "filled", 0)
+                if stop_trade is not None and stop_trade.orderStatus else 0
+            ),
+            tp_filled_quantity=int(
+                getattr(tp_trade.orderStatus, "filled", 0)
+                if tp_trade is not None and tp_trade.orderStatus else 0
+            ),
+        )
+
+    def _get_broker_bracket(self, logical_trade_key: str) -> BracketInfo | None:
+        """Procura um bracket activo no broker usando orderRef como chave idempotente."""
+        trades = [
+            trade for trade in self.ib.openTrades()
+            if self._normalize_order_ref(trade.order) == logical_trade_key
+        ]
+        if not trades:
+            return None
+        return self._register_broker_bracket(logical_trade_key, trades)
+
+    def sync_tracking_from_open_orders(self, open_orders: list[dict[str, Any]]) -> int:
+        """Sincroniza estados locais com o snapshot actual de ordens abertas do broker."""
+        updated = 0
+        by_ref: dict[str, list[dict[str, Any]]] = defaultdict(list)
+        for order in open_orders:
+            order_ref = str(order.get("order_ref", "") or "").strip()
+            if order_ref:
+                by_ref[order_ref].append(order)
+            order_id = int(order.get("order_id", 0) or 0)
+            info = self._pending_orders.get(order_id)
+            if info is None:
+                continue
+            info.status = str(order.get("status") or info.status)
+            info.fill_price = float(order.get("avg_fill_price", info.fill_price) or info.fill_price)
+            info.filled_quantity = int(order.get("filled", info.filled_quantity) or info.filled_quantity)
+            updated += 1
+
+        for order_ref, orders in by_ref.items():
+            if order_ref in self._brackets_by_key:
+                continue
+            parsed = self._parse_logical_trade_key(order_ref)
+            if parsed is None:
+                continue
+            broker_ids = {int(order.get("order_id", 0) or 0) for order in orders}
+            tracked_ids = broker_ids & set(self._pending_orders.keys())
+            if tracked_ids:
+                parent_order_id = int(
+                    next((o.get("order_id", 0) for o in orders if int(o.get("parent_id", 0) or 0) == 0), 0)
+                    or next((o.get("parent_id", 0) for o in orders if int(o.get("parent_id", 0) or 0) > 0), 0)
+                    or 0
+                )
+                if parent_order_id == 0:
+                    continue
+                self._register_bracket_tracking(
+                    logical_trade_key=order_ref,
+                    grid_id=parsed[0],
+                    level=parsed[1],
+                    action=parsed[2],
+                    contract=self._pending_orders[next(iter(tracked_ids))].contract,
+                    quantity=int(float(orders[0].get("quantity", 0) or 0)),
+                    entry_price=float(orders[0].get("limit_price", 0.0) or 0.0),
+                    stop_price=float(next((o.get("stop_price", 0.0) for o in orders if o.get("stop_price")), 0.0) or 0.0),
+                    take_profit_price=float(
+                        next(
+                            (
+                                o.get("limit_price", 0.0)
+                                for o in orders
+                                if int(o.get("parent_id", 0) or 0) > 0 and not o.get("stop_price")
+                            ),
+                            0.0,
+                        ) or 0.0
+                    ),
+                    parent_order_id=parent_order_id,
+                    stop_order_id=int(next((o.get("order_id", 0) for o in orders if o.get("stop_price")), 0) or 0),
+                    tp_order_id=int(
+                        next(
+                            (
+                                o.get("order_id", 0)
+                                for o in orders
+                                if int(o.get("parent_id", 0) or 0) > 0 and o.get("limit_price") and not o.get("stop_price")
+                            ),
+                            0,
+                        ) or 0
+                    ),
+                    parent_status=str(next((o.get("status") for o in orders if int(o.get("parent_id", 0) or 0) == 0), OrderStatus.UNKNOWN)),
+                    stop_status=str(next((o.get("status") for o in orders if o.get("stop_price")), OrderStatus.CANCELLED)),
+                    tp_status=str(
+                        next(
+                            (
+                                o.get("status")
+                                for o in orders
+                                if int(o.get("parent_id", 0) or 0) > 0 and o.get("limit_price") and not o.get("stop_price")
+                            ),
+                            OrderStatus.CANCELLED,
+                        )
+                    ),
+                )
+                updated += len(orders)
+        return updated
+
+    def rehydrate_grid_orders(self, grid: Any, contract: Contract) -> int:
+        """
+        Reconstroi o tracking mínimo a partir das grids persistidas.
+
+        Esta rotina não recria ordens no broker. Apenas restabelece identidade
+        lógica suficiente para:
+        - impedir re-submissões duplicadas após restart
+        - preservar consulta básica de estado por order_id
+        - permitir monitorização conservadora de grids activas
+        """
+        if getattr(grid, "status", None) == "closed":
+            return 0
+
+        restored = 0
+        for level in getattr(grid, "levels", []):
+            buy_order_id = getattr(level, "buy_order_id", None)
+            if buy_order_id is None:
+                continue
+
+            trade_key = self.build_logical_trade_key(grid.id, level.level, "BUY")
+            if self._get_active_bracket(trade_key) is not None:
+                continue
+            if any(
+                oid is not None and oid in self._pending_orders
+                for oid in (
+                    buy_order_id,
+                    getattr(level, "stop_order_id", None),
+                    getattr(level, "sell_order_id", None),
+                )
+            ):
+                continue
+
+            level_status = str(getattr(level, "status", "pending"))
+            stop_order_id = int(getattr(level, "stop_order_id", None) or 0)
+            tp_order_id = int(getattr(level, "sell_order_id", None) or 0)
+            quantity = int(getattr(level, "quantity", 0) or 0)
+            if quantity <= 0:
+                continue
+
+            bracket_info = BracketInfo(
+                logical_trade_key=trade_key,
+                grid_id=grid.id,
+                level=level.level,
+                action="BUY",
+                quantity=quantity,
+                price=float(level.buy_price),
+                stop=float(level.stop_price),
+                target=float(level.sell_price),
+                parent_order_id=int(buy_order_id),
+                stop_order_id=stop_order_id,
+                tp_order_id=tp_order_id,
+            )
+
+            parent_info = OrderInfo(
+                order_id=int(buy_order_id),
+                logical_trade_key=trade_key,
+                leg_type="parent",
+                grid_id=grid.id,
+                level=level.level,
+                status=self._rehydrated_leg_status(level_status, "parent"),
+                contract=contract,
+                action="BUY",
+                quantity=quantity,
+                price=float(level.buy_price),
+                stop=float(level.stop_price),
+                target=float(level.sell_price),
+                parent_id=int(buy_order_id),
+                stop_order_id=stop_order_id,
+                tp_order_id=tp_order_id,
+                fill_price=(
+                    float(level.buy_price) if level_status in {"bought", "sold", "stopped"} else 0.0
+                ),
+                filled_quantity=quantity if level_status in {"bought", "sold", "stopped"} else 0,
+            )
+            self._pending_orders[parent_info.order_id] = parent_info
+            restored += 1
+
+            if stop_order_id:
+                stop_info = OrderInfo(
+                    order_id=stop_order_id,
+                    logical_trade_key=trade_key,
+                    leg_type="stop",
+                    grid_id=grid.id,
+                    level=level.level,
+                    status=self._rehydrated_leg_status(level_status, "stop"),
+                    contract=contract,
+                    action="SELL",
+                    quantity=quantity,
+                    price=float(level.buy_price),
+                    stop=float(level.stop_price),
+                    target=float(level.sell_price),
+                    parent_id=int(buy_order_id),
+                    stop_order_id=stop_order_id,
+                    tp_order_id=tp_order_id,
+                    fill_price=float(level.stop_price) if level_status == "stopped" else 0.0,
+                    filled_quantity=quantity if level_status == "stopped" else 0,
+                )
+                self._pending_orders[stop_info.order_id] = stop_info
+                restored += 1
+
+            if tp_order_id:
+                tp_info = OrderInfo(
+                    order_id=tp_order_id,
+                    logical_trade_key=trade_key,
+                    leg_type="tp",
+                    grid_id=grid.id,
+                    level=level.level,
+                    status=self._rehydrated_leg_status(level_status, "tp"),
+                    contract=contract,
+                    action="SELL",
+                    quantity=quantity,
+                    price=float(level.buy_price),
+                    stop=float(level.stop_price),
+                    target=float(level.sell_price),
+                    parent_id=int(buy_order_id),
+                    stop_order_id=stop_order_id,
+                    tp_order_id=tp_order_id,
+                    fill_price=float(level.sell_price) if level_status == "sold" else 0.0,
+                    filled_quantity=quantity if level_status == "sold" else 0,
+                )
+                self._pending_orders[tp_info.order_id] = tp_info
+                restored += 1
+
+            self._brackets_by_key[trade_key] = bracket_info
+            self._sync_bracket_tracking(trade_key)
+
+        if restored > 0:
+            logger.info(
+                "Tracking reidratado para grid %s: %d ordem(ns) restaurada(s).",
+                getattr(grid, "id", "unknown"),
+                restored,
+            )
+        return restored
+
     async def submit_bracket_order(
         self,
         contract: Contract,
@@ -297,6 +853,7 @@ class OrderManager:
         take_profit_price: float,
         grid_id: str,
         level: int,
+        logical_trade_key: str | None = None,
     ) -> dict[str, Any] | None:
         """
         Submete uma ordem bracket (entrada limit + stop-loss + take-profit).
@@ -349,6 +906,63 @@ class OrderManager:
             )
             return None
 
+        trade_key = logical_trade_key or self.build_logical_trade_key(
+            grid_id,
+            level,
+            action,
+        )
+        existing_bracket = self._get_active_bracket(trade_key)
+        if existing_bracket is not None:
+            logger.warning(
+                "Bracket duplicado bloqueado para %s (grid=%s, nivel=%d). "
+                "A reutilizar bracket activo existente.",
+                trade_key,
+                grid_id,
+                level,
+            )
+            parent_info = self._pending_orders.get(existing_bracket.parent_order_id)
+            if parent_info is not None:
+                return parent_info.to_dict()
+            return {
+                "order_id": existing_bracket.parent_order_id,
+                "logical_trade_key": trade_key,
+                "grid_id": grid_id,
+                "level": level,
+                "action": action.upper(),
+                "quantity": quantity,
+                "price": entry_price,
+                "stop": stop_price,
+                "target": take_profit_price,
+                "stop_order_id": existing_bracket.stop_order_id,
+                "tp_order_id": existing_bracket.tp_order_id,
+            }
+
+        broker_bracket = self._get_broker_bracket(trade_key)
+        if broker_bracket is not None:
+            logger.warning(
+                "Bracket duplicado bloqueado por ordem já aberta no broker para %s "
+                "(grid=%s, nivel=%d).",
+                trade_key,
+                grid_id,
+                level,
+            )
+            parent_info = self._pending_orders.get(broker_bracket.parent_order_id)
+            if parent_info is not None:
+                return parent_info.to_dict()
+            return {
+                "order_id": broker_bracket.parent_order_id,
+                "logical_trade_key": trade_key,
+                "grid_id": grid_id,
+                "level": level,
+                "action": action.upper(),
+                "quantity": quantity,
+                "price": entry_price,
+                "stop": stop_price,
+                "target": take_profit_price,
+                "stop_order_id": broker_bracket.stop_order_id,
+                "tp_order_id": broker_bracket.tp_order_id,
+            }
+
         reverse_action = "SELL" if action.upper() == "BUY" else "BUY"
 
         async def _submit() -> dict[str, Any]:
@@ -361,6 +975,7 @@ class OrderManager:
                 transmit=False,
             )
             parent.orderId = self.ib.client.getReqId()
+            parent.orderRef = trade_key
 
             stop_order = StopOrder(
                 action=reverse_action,
@@ -370,6 +985,7 @@ class OrderManager:
                 parentId=parent.orderId,
             )
             stop_order.orderId = self.ib.client.getReqId()
+            stop_order.orderRef = trade_key
 
             tp_order = LimitOrder(
                 action=reverse_action,
@@ -379,6 +995,7 @@ class OrderManager:
                 parentId=parent.orderId,
             )
             tp_order.orderId = self.ib.client.getReqId()
+            tp_order.orderRef = trade_key
 
             parent_trade = self.ib.placeOrder(contract, parent)
             self.ib.placeOrder(contract, stop_order)
@@ -387,8 +1004,24 @@ class OrderManager:
             await asyncio.sleep(0.1)
             self.ib.sleep(0)
 
-            order_info = OrderInfo(
+            bracket_info = BracketInfo(
+                logical_trade_key=trade_key,
+                grid_id=grid_id,
+                level=level,
+                action=action.upper(),
+                quantity=quantity,
+                price=entry_price,
+                stop=stop_price,
+                target=take_profit_price,
+                parent_order_id=parent.orderId,
+                stop_order_id=stop_order.orderId,
+                tp_order_id=tp_order.orderId,
+            )
+
+            parent_info = OrderInfo(
                 order_id=parent.orderId,
+                logical_trade_key=trade_key,
+                leg_type="parent",
                 grid_id=grid_id,
                 level=level,
                 status=parent_trade.orderStatus.status
@@ -404,10 +1037,45 @@ class OrderManager:
                 stop_order_id=stop_order.orderId,
                 tp_order_id=tp_order.orderId,
             )
+            stop_info = OrderInfo(
+                order_id=stop_order.orderId,
+                logical_trade_key=trade_key,
+                leg_type="stop",
+                grid_id=grid_id,
+                level=level,
+                status=OrderStatus.PENDING,
+                contract=contract,
+                action=reverse_action,
+                quantity=quantity,
+                price=entry_price,
+                stop=stop_price,
+                target=take_profit_price,
+                parent_id=parent.orderId,
+                stop_order_id=stop_order.orderId,
+                tp_order_id=tp_order.orderId,
+            )
+            tp_info = OrderInfo(
+                order_id=tp_order.orderId,
+                logical_trade_key=trade_key,
+                leg_type="tp",
+                grid_id=grid_id,
+                level=level,
+                status=OrderStatus.PENDING,
+                contract=contract,
+                action=reverse_action,
+                quantity=quantity,
+                price=entry_price,
+                stop=stop_price,
+                target=take_profit_price,
+                parent_id=parent.orderId,
+                stop_order_id=stop_order.orderId,
+                tp_order_id=tp_order.orderId,
+            )
 
-            self._pending_orders[parent.orderId] = order_info
-            self._pending_orders[stop_order.orderId] = order_info
-            self._pending_orders[tp_order.orderId] = order_info
+            self._pending_orders[parent.orderId] = parent_info
+            self._pending_orders[stop_order.orderId] = stop_info
+            self._pending_orders[tp_order.orderId] = tp_info
+            self._brackets_by_key[trade_key] = bracket_info
 
             logger.info(
                 "Ordem bracket submetida com sucesso — "
@@ -426,9 +1094,11 @@ class OrderManager:
                 tp_order.orderId,
             )
 
-            return order_info.to_dict()
+            return parent_info.to_dict()
 
         try:
+            # Contenção de segurança: ordens que criam exposição não fazem retry
+            # automático até existir dedupe/idempotência por trade lógico.
             return await self._request_executor.run(
                 "submit_bracket_order",
                 f"order:{grid_id}:{level}:{action.upper()}",
@@ -436,14 +1106,13 @@ class OrderManager:
                 category="order",
                 request_cost=3,
                 order_messages=3,
-                max_retries=_MAX_RETRIES,
+                max_retries=1,
                 base_delay=_RETRY_DELAY_BASE,
             )
         except Exception:
             logger.error(
-                "Todas as %d tentativas falharam para ordem bracket — "
-                "grid=%s, nivel=%d. Ordem NAO submetida.",
-                _MAX_RETRIES,
+                "Submissão da ordem bracket falhou sem retry automático — "
+                "grid=%s, nivel=%d. Ordem NÃO submetida para evitar duplicação de exposição.",
                 grid_id,
                 level,
             )
@@ -480,7 +1149,9 @@ class OrderManager:
                     "(pode ja ter sido preenchida ou cancelada)",
                     order_id,
                 )
-                self._pending_orders.pop(order_id, None)
+                removed = self._pending_orders.pop(order_id, None)
+                if removed is not None:
+                    self._sync_bracket_tracking(removed.logical_trade_key)
                 return True
 
             self.ib.cancelOrder(target_trade.order)
@@ -494,7 +1165,9 @@ class OrderManager:
                     OrderStatus.API_CANCELLED,
                 ):
                     logger.info("Ordem %d cancelada com sucesso", order_id)
-                    self._pending_orders.pop(order_id, None)
+                    removed = self._pending_orders.pop(order_id, None)
+                    if removed is not None:
+                        self._sync_bracket_tracking(removed.logical_trade_key)
                     return True
 
             raise TimeoutError(
@@ -604,6 +1277,7 @@ class OrderManager:
         contract: Contract,
         quantity: int,
         action: str = "SELL",
+        logical_close_key: str | None = None,
     ) -> bool:
         """
         Fecha uma posicao com ordem de mercado.
@@ -628,11 +1302,24 @@ class OrderManager:
             )
             return False
 
+        close_key = logical_close_key or f"close:{contract.symbol}:{action.upper()}:{quantity}"
+        for trade in self.ib.openTrades():
+            if self._normalize_order_ref(trade.order) != close_key:
+                continue
+            status = str(getattr(trade.orderStatus, "status", "") or "")
+            if not self._is_terminal_status(status):
+                logger.warning(
+                    "Fecho duplicado bloqueado para %s: ordem de flatten já está aberta no broker.",
+                    close_key,
+                )
+                return True
+
         async def _close() -> bool:
             order = MarketOrder(
                 action=action.upper(),
                 totalQuantity=quantity,
             )
+            order.orderRef = close_key
 
             trade = self.ib.placeOrder(contract, order)
 
@@ -656,6 +1343,8 @@ class OrderManager:
             )
 
         try:
+            # Contenção de segurança: ordens de fecho não podem repetir cegamente
+            # até existir idempotência broker-side/local.
             return await self._request_executor.run(
                 "close_position",
                 f"close:{contract.symbol}:{action.upper()}:{quantity}",
@@ -663,14 +1352,13 @@ class OrderManager:
                 category="order",
                 request_cost=1,
                 order_messages=1,
-                max_retries=_MAX_RETRIES,
+                max_retries=1,
                 base_delay=_RETRY_DELAY_BASE,
             )
         except Exception:
             logger.error(
-                "Todas as %d tentativas de fecho de posicao falharam — "
-                "contrato=%s. ATENCAO: posicao pode continuar aberta!",
-                _MAX_RETRIES,
+                "Fecho de posição falhou sem retry automático — "
+                "contrato=%s. ATENÇÃO: posição pode continuar aberta e requer validação explícita.",
                 contract,
             )
             return False
@@ -887,6 +1575,8 @@ class OrderManager:
 
                 order_dict: dict[str, Any] = {
                     "order_id": order.orderId,
+                    "parent_id": int(getattr(order, "parentId", 0) or 0),
+                    "order_ref": self._normalize_order_ref(order),
                     "contract": str(trade.contract),
                     "symbol": trade.contract.symbol,
                     "action": order.action,
@@ -909,6 +1599,8 @@ class OrderManager:
                     info = self._pending_orders[order.orderId]
                     order_dict["grid_id"] = info.grid_id
                     order_dict["level"] = info.level
+                    order_dict["logical_trade_key"] = info.logical_trade_key
+                    order_dict["leg_type"] = info.leg_type
 
                 result.append(order_dict)
 
@@ -952,13 +1644,8 @@ class OrderManager:
         """Retorna o numero de ordens-pai unicas no tracking."""
         unique_parents: set[int] = set()
         for info in self._pending_orders.values():
-            if info.status not in (
-                OrderStatus.FILLED,
-                OrderStatus.CANCELLED,
-                OrderStatus.API_CANCELLED,
-                OrderStatus.INACTIVE,
-            ):
-                unique_parents.add(info.parent_id)
+            if not self._is_terminal_status(info.status):
+                unique_parents.add(info.parent_id or info.order_id)
         return len(unique_parents)
 
     def cleanup_completed(self) -> int:
@@ -970,20 +1657,19 @@ class OrderManager:
         int
             Numero de entradas removidas.
         """
-        terminal_states = {
-            OrderStatus.FILLED,
-            OrderStatus.CANCELLED,
-            OrderStatus.API_CANCELLED,
-            OrderStatus.INACTIVE,
-        }
         to_remove = [
             oid
             for oid, info in self._pending_orders.items()
-            if info.status in terminal_states
+            if self._is_terminal_status(info.status)
         ]
 
+        affected_keys: set[str] = set()
         for oid in to_remove:
-            del self._pending_orders[oid]
+            info = self._pending_orders.pop(oid)
+            affected_keys.add(info.logical_trade_key)
+
+        for trade_key in affected_keys:
+            self._sync_bracket_tracking(trade_key)
 
         if to_remove:
             logger.info(

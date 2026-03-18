@@ -48,6 +48,9 @@ class TradeLogger:
         "pnl",
         "regime",
         "signal_confidence",
+        "logical_trade_key",
+        "order_ref",
+        "order_leg",
     ]
 
     def __init__(self, data_dir: str = "data") -> None:
@@ -101,7 +104,8 @@ class TradeLogger:
         Regista um trade no ficheiro de log (append-only).
 
         Campos esperados: timestamp, symbol, side, price, quantity,
-        order_id, grid_id, level, pnl, regime, signal_confidence.
+        order_id, grid_id, level, pnl, regime, signal_confidence,
+        logical_trade_key, order_ref, order_leg.
         Campos em falta ficam com valor ``None``.
         Entradas existentes NUNCA sao apagadas ou modificadas.
         """
@@ -119,12 +123,14 @@ class TradeLogger:
         self._write_trades_file(data)
 
         logger.info(
-            "Trade registado: %s %s %s @ %.4f  pnl=%.2f",
+            "Trade registado: %s %s %s @ %.4f  pnl=%.2f key=%s leg=%s",
             record.get("side", "?"),
             record.get("quantity", 0),
             record.get("symbol", "?"),
             record.get("price", 0) or 0,
             record.get("pnl", 0) or 0,
+            record.get("logical_trade_key", "-"),
+            record.get("order_leg", "-"),
         )
 
     # ------------------------------------------------------------------
