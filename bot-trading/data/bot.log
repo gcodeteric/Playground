@@ -1724,3 +1724,123 @@
 2026-03-18 02:25:05 | DEBUG    | main                 | --- Fim de ciclo ---
 2026-03-18 02:25:05 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
 2026-03-18 02:25:05 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-18 02:30:05 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-18 02:30:05 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-18 02:30:05 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-18 02:30:05 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-18 02:30:05 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-18 02:30:05 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-18 02:30:05 | INFO     | main                 | Sessao fechada para AAPL (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:30:05 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-18 02:30:05 | INFO     | main                 | Sessao fechada para SPY (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:30:05 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-18 02:30:05 | INFO     | main                 | Sessao fechada para QQQ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:30:05 | DEBUG    | main                 | A processar simbolo: XLU
+2026-03-18 02:30:05 | INFO     | main                 | Sessao fechada para XLU (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:30:05 | DEBUG    | main                 | A processar simbolo: GDXJ
+2026-03-18 02:30:05 | INFO     | main                 | Sessao fechada para GDXJ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:30:05 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-18 02:30:05 | INFO     | main                 | Sessao fechada para VIX (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:30:06 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-18 02:30:06 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-18 02:30:06 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-18 02:35:05 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-18 02:35:06 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-18 02:35:06 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-18 02:35:06 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-18 02:35:06 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-18 02:35:06 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-18 02:35:06 | INFO     | main                 | Sessao fechada para AAPL (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:35:06 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-18 02:35:06 | INFO     | main                 | Sessao fechada para SPY (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:35:06 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-18 02:35:06 | INFO     | main                 | Sessao fechada para QQQ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:35:06 | DEBUG    | main                 | A processar simbolo: XLU
+2026-03-18 02:35:06 | INFO     | main                 | Sessao fechada para XLU (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:35:06 | DEBUG    | main                 | A processar simbolo: GDXJ
+2026-03-18 02:35:06 | INFO     | main                 | Sessao fechada para GDXJ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:35:06 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-18 02:35:07 | INFO     | main                 | Sessao fechada para VIX (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:35:07 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-18 02:35:07 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-18 02:35:07 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-18 02:40:07 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-18 02:40:07 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-18 02:40:07 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-18 02:40:07 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-18 02:40:07 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-18 02:40:07 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-18 02:40:07 | INFO     | main                 | Sessao fechada para AAPL (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:40:07 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-18 02:40:07 | INFO     | main                 | Sessao fechada para SPY (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:40:07 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-18 02:40:07 | INFO     | main                 | Sessao fechada para QQQ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:40:07 | DEBUG    | main                 | A processar simbolo: XLU
+2026-03-18 02:40:07 | INFO     | main                 | Sessao fechada para XLU (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:40:07 | DEBUG    | main                 | A processar simbolo: GDXJ
+2026-03-18 02:40:08 | INFO     | main                 | Sessao fechada para GDXJ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:40:08 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-18 02:40:08 | INFO     | main                 | Sessao fechada para VIX (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:40:08 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-18 02:40:08 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-18 02:40:08 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-18 02:45:08 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-18 02:45:08 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-18 02:45:08 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-18 02:45:08 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-18 02:45:08 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-18 02:45:08 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-18 02:45:08 | INFO     | main                 | Sessao fechada para AAPL (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:45:08 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-18 02:45:08 | INFO     | main                 | Sessao fechada para SPY (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:45:08 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-18 02:45:08 | INFO     | main                 | Sessao fechada para QQQ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:45:08 | DEBUG    | main                 | A processar simbolo: XLU
+2026-03-18 02:45:08 | INFO     | main                 | Sessao fechada para XLU (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:45:08 | DEBUG    | main                 | A processar simbolo: GDXJ
+2026-03-18 02:45:09 | INFO     | main                 | Sessao fechada para GDXJ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:45:09 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-18 02:45:09 | INFO     | main                 | Sessao fechada para VIX (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:45:09 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-18 02:45:09 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-18 02:45:09 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-18 02:50:09 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-18 02:50:09 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-18 02:50:09 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-18 02:50:09 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-18 02:50:09 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-18 02:50:09 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-18 02:50:09 | INFO     | main                 | Sessao fechada para AAPL (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:50:09 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-18 02:50:09 | INFO     | main                 | Sessao fechada para SPY (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:50:09 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-18 02:50:09 | INFO     | main                 | Sessao fechada para QQQ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:50:09 | DEBUG    | main                 | A processar simbolo: XLU
+2026-03-18 02:50:09 | INFO     | main                 | Sessao fechada para XLU (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:50:09 | DEBUG    | main                 | A processar simbolo: GDXJ
+2026-03-18 02:50:10 | INFO     | main                 | Sessao fechada para GDXJ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:50:10 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-18 02:50:10 | INFO     | main                 | Sessao fechada para VIX (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:50:10 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-18 02:50:10 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-18 02:50:10 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-18 02:55:10 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-18 02:55:10 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-18 02:55:10 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-18 02:55:10 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-18 02:55:10 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 0.00 (0.00%) | Limite: 10.00%.
+2026-03-18 02:55:10 | DEBUG    | main                 | A processar simbolo: AAPL
+2026-03-18 02:55:10 | INFO     | main                 | Sessao fechada para AAPL (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:55:10 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-18 02:55:10 | INFO     | main                 | Sessao fechada para SPY (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:55:10 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-18 02:55:10 | INFO     | main                 | Sessao fechada para QQQ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:55:10 | DEBUG    | main                 | A processar simbolo: XLU
+2026-03-18 02:55:10 | INFO     | main                 | Sessao fechada para XLU (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:55:10 | DEBUG    | main                 | A processar simbolo: GDXJ
+2026-03-18 02:55:11 | INFO     | main                 | Sessao fechada para GDXJ (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:55:11 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-18 02:55:11 | INFO     | main                 | Sessao fechada para VIX (ANTES_ABERTURA) — sem novas entradas.
+2026-03-18 02:55:11 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-18 02:55:11 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
+2026-03-18 02:55:11 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
