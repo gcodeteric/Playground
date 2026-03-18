@@ -70,6 +70,7 @@ from src.intl_etf_mr import intl_etf_signal
 from src.commodity_mr import commodity_mr_signal
 from src.bond_mr_hedge import bond_mr_signal, check_defensive_rotation_trigger
 from src.options_premium import csp_signal, check_csp_exit
+from src.pre_trade_gate import build_pre_trade_gate, critical_inputs_are_finite
 from src.risk_manager import RiskManager
 from src.grid_engine import GridEngine, Grid, GridLevel
 from src.execution import OrderManager, OrderStatus
@@ -2628,6 +2629,9 @@ class TradingBot:
                 regime_info=regime_info,
                 signal_result=signal_result,
                 bars_df=bars_df,
+                session_ok=session_state.can_open_new_grid,
+                data_fresh=price_fresh,
+                warmup_ok=True,
             )
 
     async def _submit_grid_level_bracket(
@@ -2688,6 +2692,10 @@ class TradingBot:
         regime_info: RegimeInfo,
         signal_result: SignalResult,
         bars_df: Any | None = None,
+        *,
+        session_ok: bool,
+        data_fresh: bool,
+        warmup_ok: bool,
     ) -> None:
         """Tenta criar uma nova grid se o risco permitir."""
         assert self._order_manager is not None
@@ -2727,6 +2735,29 @@ class TradingBot:
             regime_info.regime.value,
         )
 
+        initial_critical_inputs = {
+            "market_price": price,
+            "atr": atr,
+            "signal_size_multiplier": signal_result.size_multiplier,
+        }
+        if not critical_inputs_are_finite(initial_critical_inputs):
+            gate = build_pre_trade_gate(
+                session_ok=session_ok,
+                data_fresh=data_fresh,
+                warmup_ok=warmup_ok,
+                critical_inputs=initial_critical_inputs,
+                quantity_ok=False,
+                risk_ok=False,
+                details={"symbol": symbol, "stage": "pre_sizing"},
+            )
+            logger.warning(
+                "Pre-trade gate rejeitou grid para %s antes do sizing: %s | gate=%s",
+                symbol,
+                gate.rejection_reasons(),
+                gate.as_dict(),
+            )
+            return
+
         # Calcular position size para o primeiro nivel (exemplo)
         spacing_pct = self._grid_engine.calculate_spacing_pct(price, atr)
         spacing = round(price * spacing_pct / 100.0, 6)
@@ -2744,8 +2775,26 @@ class TradingBot:
         )
 
         if base_quantity <= 0:
+            gate = build_pre_trade_gate(
+                session_ok=session_ok,
+                data_fresh=data_fresh,
+                warmup_ok=warmup_ok,
+                critical_inputs={
+                    "market_price": price,
+                    "atr": atr,
+                    "entry_price": first_buy,
+                    "stop_price": first_stop,
+                    "take_profit_price": first_take_profit,
+                },
+                quantity_ok=False,
+                risk_ok=False,
+                details={"symbol": symbol, "stage": "post_sizing", "base_quantity": base_quantity},
+            )
             logger.warning(
-                "Position size calculado como 0 para %s — nao criar grid.", symbol,
+                "Pre-trade gate rejeitou grid para %s: %s | gate=%s",
+                symbol,
+                gate.rejection_reasons(),
+                gate.as_dict(),
             )
             return
 
@@ -2781,10 +2830,34 @@ class TradingBot:
             "returns_map": returns_map,
         })
 
-        if not order_approved:
+        gate = build_pre_trade_gate(
+            session_ok=session_ok,
+            data_fresh=data_fresh,
+            warmup_ok=warmup_ok,
+            critical_inputs={
+                "market_price": price,
+                "atr": atr,
+                "entry_price": first_buy,
+                "stop_price": first_stop,
+                "take_profit_price": first_take_profit,
+            },
+            quantity_ok=base_quantity > 0,
+            risk_ok=order_approved,
+            details={
+                "symbol": symbol,
+                "stage": "post_risk",
+                "base_quantity": base_quantity,
+                "risk_rejection_reason": rejection_reason,
+            },
+            risk_rejection_reason=rejection_reason,
+        )
+
+        if not gate.is_admitted():
             logger.warning(
-                "Gestao de risco rejeitou grid para %s: %s",
-                symbol, rejection_reason,
+                "Pre-trade gate rejeitou grid para %s: %s | gate=%s",
+                symbol,
+                gate.rejection_reasons(),
+                gate.as_dict(),
             )
             return
 

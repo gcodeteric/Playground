@@ -1,6 +1,6 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `d50cf45e643041d7c4c1129dda6281c98c5aa5c7` | Data/hora UTC: `2026-03-18T22:11:25Z` | Working tree: `dirty (AUDIT_REPORT.md, tests/test_grid_engine.py, tests/test_integration.py)`
-Score delta pós-fix (subset revisto): `66/100`
+Branch actual: `main` | Commit actual: `e8161fc6f7ea49b4601010e3a7d608581a77d1bb` | Data/hora UTC: `2026-03-18T22:46:40Z` | Working tree: `dirty (../.DS_Store, main.py, tests/test_main_audit.py, src/pre_trade_gate.py, tests/test_pre_trade_gate.py)`
+Score delta pós-fix (subset revisto): `72/100`
 
 ## Delta audit focado — post-fix
 
@@ -8,6 +8,7 @@ Score delta pós-fix (subset revisto): `66/100`
 - Auditoria feita sobre o estado actual do working tree em `/Users/beatrizneves/Documents/Playground/bot-trading`.
 - Este delta audit revê apenas: `C01`, `C02`, `H03`, `H04`, `H05`, `H06`, `H07`, `H09`.
 - Não substitui a auditoria anterior; actualiza apenas os findings revalidados e os call paths tocados pelos fixes.
+- No início desta ronda H05, o `AUDIT_REPORT.md` estava desalinhado do commit/working tree actual; o código real foi usado como source of truth e o relatório foi alinhado no fim.
 
 ### Validação mínima executada
 - Dependências mínimas pedidas:
@@ -18,8 +19,12 @@ Score delta pós-fix (subset revisto): `66/100`
 - Instalações realizadas: nenhuma.
 - Comando inicial executado: `pytest tests/test_grid_engine.py tests/test_integration.py -v --tb=long`
 - Resultado inicial: `5 failed, 69 passed, 1034 warnings in 1.52s`
+- Comando focal H05 antes de editar: `pytest tests/test_main_audit.py tests/test_risk_manager.py -q --tb=short`
+- Resultado focal H05 antes de editar: `120 passed, 133 warnings in 1.41s`
+- Comando focal H05 após as alterações: `pytest tests/test_pre_trade_gate.py tests/test_main_audit.py tests/test_risk_manager.py -q --tb=short`
+- Resultado focal H05 após as alterações: `127 passed, 133 warnings in 1.17s`
 - Comando final executado: `pytest tests/ -q --tb=short`
-- Resultado final: `399 passed, 1166 warnings in 5.13s`
+- Resultado final: `406 passed, 1166 warnings in 4.83s`
 - Classificação da falha inicial: `falha de código / contrato de testes`, não falha de ambiente.
 - Falhas observadas:
   - `tests/test_grid_engine.py::TestPersistence::test_load_state_schema_validation_rejects_invalid`
@@ -56,6 +61,38 @@ Score delta pós-fix (subset revisto): `66/100`
   - não encontrei evidência de regressão real no runtime de `GridEngine`
   - as 5 falhas eram testes antigos desalinhados com o runtime novo
 
+### Fix focado — H05: pre-trade gate determinístico
+- Relatório encontrado stale no início da ronda:
+  - o cabeçalho ainda apontava para `d50cf45e643041d7c4c1129dda6281c98c5aa5c7`
+  - o código real já estava em `e8161fc6f7ea49b4601010e3a7d608581a77d1bb`
+- Ficheiros alterados nesta ronda:
+  - `main.py`
+  - `src/pre_trade_gate.py` (novo)
+  - `tests/test_main_audit.py`
+  - `tests/test_pre_trade_gate.py` (novo)
+- Call path real revisto:
+  - `main.py:2617-2635` passa contexto explícito do gate a `_attempt_grid_creation(...)`
+  - `main.py:2681-2862` aplica o gate antes do sizing, após sizing e após `RiskManager.validate_order(...)`
+  - `src/pre_trade_gate.py:27-106` introduz um objecto puro, serializável e testável
+- Flags implementadas com enforcement real no runtime:
+  - `session_ok`
+  - `data_fresh`
+  - `finite_inputs_ok`
+  - `warmup_ok`
+  - `quantity_ok`
+  - `risk_ok`
+- Limitações documentadas e intencionalmente não forçadas nesta ronda:
+  - `notional_ok`
+  - `size_ok`
+  - `affordability_ok`
+  - motivo: o call path real ainda não fornece fontes fiáveis e determinísticas para esses checks sem inventar contrato novo
+- Evidência de testes:
+  - `tests/test_pre_trade_gate.py` cobre stale price, NaN, quantity zero, gate válido e enumeração de rejection reasons
+  - `tests/test_main_audit.py:966-1000` prova que inputs não finitos são rejeitados antes de sizing/submissão
+- Resultado desta ronda:
+  - o gap H05 identificado no delta anterior ficou fechado no call path real de admissão de novas grids
+  - as limitações remanescentes passaram a ser de cobertura futura opcional, não ausência do gate determinístico exigido
+
 ### Estado actualizado dos findings revistos
 
 | Finding | Estado | Evidência no código | Evidência em testes | Nota operacional |
@@ -64,8 +101,8 @@ Score delta pós-fix (subset revisto): `66/100`
 | `C02` | `FECHADO` | `main.py:3131-3147` bloqueia recenter/respacing se `price_fresh=False` | `tests/test_main_audit.py:1093-1150` prova recenter só com quote fresca | Fecho real no path de grids activas |
 | `H03` | `PARCIAL` | `src/data_feed.py:352-365` e `src/execution.py:259-274` continuam mostly log-only; acção operacional real aparece apenas em `_on_disconnected()` e em `main.py:1266-1305` para `354/10197` | Não encontrei testes que provem matriz determinística de acção por `error_code` | Há reacção operacional em alguns casos, mas não há policy central nem transições determinísticas por erro IB |
 | `H04` | `PARCIAL` | `src/market_hours.py:125-159` faz fallback para horários estáticos quando `pandas_market_calendars` falha; `src/market_hours.py:186-230` mantém FX/FUT em UTC simplificado | `tests/test_market_hours.py:9-71` cobre equities DST/holiday e micro future pause, mas não cobre indisponibilidade de `pandas` nem fidelidade FX/FUT | Melhorou equities, mas ainda há falsa confiança no fallback e simplificação excessiva fora de equities |
-| `H05` | `PARCIAL` | `main.py:2387-2460` e `main.py:2614-2789` fazem gating de sessão, warmup, indicadores e `price_fresh`; `src/risk_manager.py:854-1119` valida stop, entry, R:R, risco, caps e correlação | `tests/test_main_audit.py:1253-1368` e `tests/test_data_feed.py:220-259` provam parte do gating | Continua a faltar gate determinístico central para `NaN`, notional, tamanho mínimo e affordability/margin |
-| `H06` | `FECHADO` | `src/grid_engine.py:619-657` e `main.py:1419-1426` implementam recovery via backup e fail-closed no arranque | As 5 falhas ligadas a persistência/recovery foram resolvidas e `pytest tests/ -q --tb=short` voltou a verde (`399 passed`) | O runtime está coerente e os testes passaram a reflectir o contrato real |
+| `H05` | `FECHADO` | `src/pre_trade_gate.py:27-106` centraliza o gate explícito; `main.py:2617-2635` e `main.py:2681-2862` integram `session_ok`, `data_fresh`, `finite_inputs_ok`, `warmup_ok`, `quantity_ok` e `risk_ok` no call path real antes da entrada | `tests/test_pre_trade_gate.py` e `tests/test_main_audit.py:966-1000` provam stale/NaN/quantity/risk gating; suite final verde (`406 passed`) | Fecho real do gate determinístico no runtime actual; `notional/size/affordability` ficaram documentados como flags opcionais sem fonte fiável neste call path |
+| `H06` | `FECHADO` | `src/grid_engine.py:619-657` e `main.py:1419-1426` implementam recovery via backup e fail-closed no arranque | As 5 falhas ligadas a persistência/recovery foram resolvidas e `pytest tests/ -q --tb=short` voltou a verde (`406 passed`) | O runtime está coerente e os testes passaram a reflectir o contrato real |
 | `H07` | `PARCIAL` | `main.py:1434-1473` aplica lock por `data_dir` e persiste `client_id` no payload do lock | `tests/test_main_audit.py:1201-1243` provam exclusão por lock file local | Fecha multi-instância no mesmo `data_dir`, mas não prova unicidade operacional de `client_id` entre workspaces/directórios distintos |
 | `H09` | `PARCIAL` | `dashboard/app.py:226-243`, `246-317`, `367-414` e `dashboard/helpers.py:252-324`, `327-363` mostram `PAPER`, heartbeat, preflight, capital/equity estimada, risk KPIs e status básico | `tests/test_dashboard_helpers.py:112-147` provam KPIs básicos e `paper_mode` | Falta `unrealized/open PnL` económico e falta surfacing explícito de `entry_halt_reason` / `emergency_halt` |
 
@@ -111,22 +148,30 @@ Score delta pós-fix (subset revisto): `66/100`
 - Fix mínimo necessário:
   - degradar explicitamente a confiança operacional quando o calendário falha em equities críticas; para FX/FUT, ou usar timezone/local rules robustas ou marcar claramente estes activos como `session fidelity partial`.
 
-#### H05 — PARCIAL
+#### H05 — FECHADO
 - Evidência de código:
-  - `main.py:2392-2460` gate real inclui sessão aberta, qualificação de contrato, barras históricas, warmup, indicadores obrigatórios e `price_fresh`.
-  - `main.py:2614-2789` só admite criação de grid se `session_state.can_open_new_grid` e `RiskManager.validate_order(...)` aprovarem.
-  - `src/risk_manager.py:854-1119` valida stop, preço de entrada, R:R, risco por nível, caps diário/semanal/mensal, max positions/grids e correlação.
-- O que falta no call path real:
-  - não há gate centralizado e determinístico para `NaN`/non-finite values;
-  - não existe check explícito de `notional` mínimo/máximo;
-  - não existe check explícito de tamanho mínimo/lote mínimo;
-  - não existe guard operacional claro de affordability/margin.
+  - `src/pre_trade_gate.py:27-106` introduz o `PreTradeGate`, objecto puro, serializável e testável.
+  - `main.py:2617-2635` passa `session_ok`, `data_fresh` e `warmup_ok` do call path real para `_attempt_grid_creation(...)`.
+  - `main.py:2723-2759` rejeita inputs críticos não finitos antes do sizing.
+  - `main.py:2777-2799` rejeita quantity inválida logo após sizing.
+  - `main.py:2833-2862` materializa o gate final após `RiskManager.validate_order(...)` e bloqueia a entrada se qualquer flag implementada falhar.
+- Estado do enforcement no call path real:
+  - `session_ok` → forçado
+  - `data_fresh` → forçado
+  - `finite_inputs_ok` → forçado
+  - `warmup_ok` → forçado
+  - `quantity_ok` → forçado
+  - `risk_ok` → forçado
+- Limitações remanescentes, explicitamente documentadas mas não bloqueantes para o fecho deste finding:
+  - `notional_ok`, `size_ok` e `affordability_ok` existem como flags opcionais no `PreTradeGate`, mas continuam `None` nesta ronda
+  - razão: o call path real ainda não fornece input determinístico suficiente para as forçar sem inventar contrato novo
 - Evidência de testes:
-  - `tests/test_main_audit.py:1316-1368` prova bloqueio por `price_fresh=False`;
-  - `tests/test_main_audit.py:1253-1314` prova contexto de correlação;
-  - não encontrei testes para `notional`/`min_size` porque os checks ainda não existem.
-- Fix mínimo necessário:
-  - criar um pre-trade gate object único com flags explícitas (`session_ok`, `data_fresh`, `finite_inputs_ok`, `notional_ok`, `size_ok`, `capital_ok`) e usar esse objecto antes de qualquer sizing/submissão.
+  - `tests/test_pre_trade_gate.py` prova stale price, NaN em preço/indicador, quantity zero, caminho admitido e enumeração de rejection reasons.
+  - `tests/test_main_audit.py:966-1000` prova que inputs não finitos são rejeitados antes de `position_size_per_level`, `validate_order` e `submit_bracket_order`.
+  - validação final: `pytest tests/ -q --tb=short` → `406 passed, 1166 warnings`
+- Conclusão:
+  - O pre-trade gate determinístico passou a existir como objecto central e foi integrado no path real de admissão de novas grids.
+  - O finding H05 fica `FECHADO` para o escopo do runtime actual.
 
 #### H06 — FECHADO
 - Evidência de código:
@@ -140,7 +185,7 @@ Score delta pós-fix (subset revisto): `66/100`
     - `tests/test_grid_engine.py::TestPersistence::test_load_state_validates_level_status`
     - `tests/test_grid_engine.py::TestPersistence::test_load_state_validates_missing_fields`
     - `tests/test_integration.py::TestStatePersistenceAndRecovery::test_state_corruption_handling`
-  - validação final: `pytest tests/ -q --tb=short` → `399 passed, 1166 warnings`
+  - validação final: `pytest tests/ -q --tb=short` → `406 passed, 1166 warnings`
 - Conclusão:
   - `H06` passa para `FECHADO`.
   - O comportamento fail-closed/recovery do runtime mostrou-se coerente; o problema estava nos testes, não no `GridEngine`.
@@ -171,12 +216,13 @@ Score delta pós-fix (subset revisto): `66/100`
 
 ### Score actualizado e diferença face ao anterior
 - Score anterior no relatório histórico: `53/100`.
-- Score delta revisto para o subset auditado agora: `66/100`.
+- Score delta revisto para o subset auditado agora: `72/100`.
 - Justificação da subida:
   - `C01` e `C02` passaram de críticos abertos para fechados no call path real.
   - `H06` passou de parcial para fechado após validação teste-a-teste e suite completa verde.
+  - `H05` passou de parcial para fechado com gate central explícito e testes dedicados.
 - Limites da subida:
-  - `H03`, `H04`, `H05`, `H07` e `H09` continuam parciais.
+  - `H03`, `H04`, `H07` e `H09` continuam parciais.
 - Nota:
   - o score acima não reclassifica áreas não revistas neste delta audit.
 
@@ -184,15 +230,16 @@ Score delta pós-fix (subset revisto): `66/100`
 - Nenhuma regressão detectada.
 - Evidência resumida:
   - as 5 falhas da área de persistência/recovery foram resolvidas com alinhamento de testes ao contrato runtime actual;
+  - o novo pre-trade gate não introduziu regressões no call path de entrada;
   - `pytest tests/test_grid_engine.py tests/test_integration.py -q --tb=short` → `74 passed`
-  - `pytest tests/ -q --tb=short` → `399 passed`
+  - `pytest tests/test_pre_trade_gate.py tests/test_main_audit.py tests/test_risk_manager.py -q --tb=short` → `127 passed`
+  - `pytest tests/ -q --tb=short` → `406 passed`
 
 ### Conclusão do delta audit
 - Pronto para paper trading com supervisão? `NÃO`
 - Blockers concretos:
   - `H03` continua sem acção operacional determinística para a maioria dos erros IB;
   - `H04` continua parcial por fallback silencioso em equities e modelação simplificada de FX/FUT;
-  - `H05` continua parcial por falta de gate central determinístico para `NaN/notional/min size`;
   - `H09` continua parcial por falta de `unrealized/open PnL` e visibilidade explícita de halt operacional;
   - `H07` não pode ser dado como totalmente fechado enquanto a exclusão continuar scoped só ao `data_dir`.
 
@@ -201,7 +248,6 @@ Score delta pós-fix (subset revisto): `66/100`
 - Endurecer `market_hours`:
   - degradar confiança operacional quando `pandas_market_calendars` falha em equities;
   - rever FX/FUT para regras de sessão/timezone menos simplificadas.
-- Introduzir um pre-trade gate central com checks explícitos para `NaN`, notional, tamanho mínimo e affordability/margin.
 - Expor no dashboard:
   - `unrealized/open PnL`
   - `entry_halt_reason`

@@ -889,6 +889,9 @@ async def test_attempt_grid_creation_activates_grid_only_after_all_levels_submit
         atr=2.0,
         regime_info=_build_regime_info(),
         signal_result=_build_signal_result(),
+        session_ok=True,
+        data_fresh=True,
+        warmup_ok=True,
     )
 
     assert len(bot._grid_engine.grids) == 1
@@ -943,6 +946,9 @@ async def test_attempt_grid_creation_marks_failed_on_partial_submission(tmp_path
         atr=2.0,
         regime_info=_build_regime_info(),
         signal_result=_build_signal_result(),
+        session_ok=True,
+        data_fresh=True,
+        warmup_ok=True,
     )
 
     assert len(bot._grid_engine.grids) == 1
@@ -954,6 +960,50 @@ async def test_attempt_grid_creation_marks_failed_on_partial_submission(tmp_path
         for call in bot._order_manager.cancel_order.await_args_list
     }
     assert cancelled_ids == {1001, 2001, 3001, 1002, 2002, 3002}
+
+
+@pytest.mark.asyncio
+async def test_attempt_grid_creation_gate_rejects_non_finite_inputs(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = SimpleNamespace(
+        data_dir=tmp_path,
+        ib=SimpleNamespace(paper_trading=True),
+        risk=SimpleNamespace(stop_atr_mult=1.0, tp_atr_mult=2.5),
+    )
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    bot._orphan_positions = {}
+    bot._trade_logger = SimpleNamespace(calculate_metrics=MagicMock(return_value={}))
+    bot._period_pnl = {"daily": 0.0, "weekly": 0.0, "monthly": 0.0}
+    bot._dynamic_win_rate = 0.5
+    bot._risk_manager = SimpleNamespace(
+        check_max_grids=MagicMock(return_value=True),
+        calculate_stop_loss=MagicMock(return_value=98.8),
+        calculate_take_profit=MagicMock(return_value=103.0),
+        position_size_per_level=MagicMock(return_value=10),
+        validate_order=MagicMock(return_value=(True, "")),
+    )
+    bot._order_manager = SimpleNamespace(
+        submit_bracket_order=AsyncMock(),
+        cancel_order=AsyncMock(return_value=True),
+    )
+
+    await TradingBot._attempt_grid_creation(
+        bot,
+        spec=parse_watchlist_entry("AAPL"),
+        contract=MagicMock(symbol="AAPL"),
+        price=float("nan"),
+        atr=2.0,
+        regime_info=_build_regime_info(),
+        signal_result=_build_signal_result(),
+        session_ok=True,
+        data_fresh=True,
+        warmup_ok=True,
+    )
+
+    assert bot._grid_engine.grids == []
+    bot._risk_manager.position_size_per_level.assert_not_called()
+    bot._risk_manager.validate_order.assert_not_called()
+    bot._order_manager.submit_bracket_order.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1306,6 +1356,9 @@ async def test_attempt_grid_creation_passes_correlation_context_to_risk_manager(
         regime_info=_build_regime_info(),
         signal_result=_build_signal_result(),
         bars_df=bars_df,
+        session_ok=True,
+        data_fresh=True,
+        warmup_ok=True,
     )
 
     order_payload = bot._risk_manager.validate_order.call_args.args[0]
