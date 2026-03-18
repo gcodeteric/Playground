@@ -17,8 +17,10 @@ Logs e comentarios em portugues (PT-PT). Nomes de variaveis e funcoes em ingles.
 from __future__ import annotations
 
 import asyncio
+import atexit
 import json
 import logging
+import math
 import os
 import signal
 import sys
@@ -110,6 +112,8 @@ _DATA_FILE_DEFAULTS: dict[str, dict[str, Any] | str] = {
 }
 _RECONCILIATION_FETCH_ATTEMPTS = 3
 _RECONCILIATION_FETCH_DELAY_SECONDS = 5
+_INSTANCE_LOCK_FILENAME = "bot.instance.lock"
+_EQUITY_BASELINE_KEYS = ("daily", "weekly", "monthly")
 
 
 @dataclass(slots=True)
@@ -575,6 +579,10 @@ class TradingBot:
             "weekly": 0.0,
             "monthly": 0.0,
         }
+        self._equity_baselines: dict[str, dict[str, Any]] = {}
+        self._last_equity_snapshot: float | None = None
+        self._instance_lock_fd: int | None = None
+        self._instance_lock_path: Path = config.data_dir / _INSTANCE_LOCK_FILENAME
 
         # --- Watchlist ---
         self._watchlist: list[InstrumentSpec] = get_watchlist_specs()
@@ -755,6 +763,193 @@ class TradingBot:
         self._period_pnl = self._calculate_period_pnl(now=now)
         return dict(self._period_pnl)
 
+    @staticmethod
+    def _get_equity_period_ids(now: datetime | None = None) -> dict[str, str]:
+        """Calcula identificadores estÃ¡veis para os baselines diÃ¡rio/semanal/mensal."""
+        now_utc = (
+            now.astimezone(timezone.utc)
+            if now is not None else datetime.now(timezone.utc)
+        )
+        day_start = now_utc.replace(hour=0, minute=0, second=0, microsecond=0)
+        week_start = day_start - timedelta(days=day_start.weekday())
+        return {
+            "daily": day_start.date().isoformat(),
+            "weekly": week_start.date().isoformat(),
+            "monthly": day_start.strftime("%Y-%m"),
+        }
+
+    @staticmethod
+    def _is_valid_equity_baseline(
+        entry: Any,
+        *,
+        expected_period: str | None = None,
+    ) -> bool:
+        """Valida um baseline persistido sem assumir que o ficheiro estÃ¡ intacto."""
+        if not isinstance(entry, dict):
+            return False
+
+        period = entry.get("period")
+        if not isinstance(period, str) or not period:
+            return False
+        if expected_period is not None and period != expected_period:
+            return False
+
+        try:
+            equity = float(entry.get("equity"))
+        except (TypeError, ValueError):
+            return False
+
+        return math.isfinite(equity) and equity > 0
+
+    def _load_equity_baselines_from_snapshot(
+        self,
+        snapshot: dict[str, Any],
+    ) -> dict[str, dict[str, Any]]:
+        """Extrai baselines vÃ¡lidos do snapshot de mÃ©tricas persistido."""
+        baselines: dict[str, dict[str, Any]] = {}
+        raw = snapshot.get("equity_baselines")
+        if not isinstance(raw, dict):
+            return baselines
+
+        for key in _EQUITY_BASELINE_KEYS:
+            entry = raw.get(key)
+            if self._is_valid_equity_baseline(entry):
+                baselines[key] = {
+                    "period": str(entry["period"]),
+                    "equity": round(float(entry["equity"]), 4),
+                }
+            elif isinstance(entry, dict):
+                baselines[key] = dict(entry)
+            elif entry is not None:
+                baselines[key] = {"period": None, "equity": entry}
+        return baselines
+
+    def _persist_runtime_metrics_snapshot(self) -> None:
+        """Persiste o estado runtime crÃ­tico sem recalcular toda a telemetria."""
+        try:
+            metrics_snapshot = self._load_metrics_snapshot()
+            metrics_snapshot.pop("last_updated", None)
+            self._trade_logger.save_metrics(
+                self._build_metrics_payload(metrics_snapshot)
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Falha ao persistir snapshot runtime em metrics.json: %s", exc)
+
+    def _sync_equity_baselines(
+        self,
+        current_equity: float,
+        *,
+        now: datetime | None = None,
+    ) -> bool:
+        """
+        Inicializa/roda os baselines por perÃ­odo.
+
+        Se existir um baseline para o perÃ­odo actual mas estiver corrompido,
+        o bot entra em fail-safe em vez de continuar com divisÃµes inseguras.
+        """
+        if not math.isfinite(current_equity) or current_equity <= 0:
+            return False
+
+        period_ids = self._get_equity_period_ids(now)
+        changed = False
+
+        for key, period_id in period_ids.items():
+            entry = self._equity_baselines.get(key)
+
+            if entry is None:
+                self._equity_baselines[key] = {
+                    "period": period_id,
+                    "equity": round(current_equity, 4),
+                }
+                changed = True
+                continue
+
+            if not self._is_valid_equity_baseline(entry):
+                logger.critical(
+                    "Baseline de equity %s invÃƒÂ¡lido/corrompido: %s",
+                    key,
+                    entry,
+                )
+                return False
+
+            if entry.get("period") != period_id:
+                self._equity_baselines[key] = {
+                    "period": period_id,
+                    "equity": round(current_equity, 4),
+                }
+                changed = True
+                continue
+
+            if False:
+                logger.critical(
+                    "Baseline de equity %s invÃ¡lido para o perÃ­odo %s: %s",
+                    key,
+                    period_id,
+                    entry,
+                )
+                return False
+
+        if changed:
+            logger.info(
+                "Baselines de equity actualizados: %s",
+                {
+                    key: self._equity_baselines[key]["period"]
+                    for key in _EQUITY_BASELINE_KEYS
+                    if key in self._equity_baselines
+                },
+            )
+            self._persist_runtime_metrics_snapshot()
+
+        return True
+
+    def _equity_delta_since_baseline(
+        self,
+        period_key: str,
+        current_equity: float,
+    ) -> float | None:
+        """Calcula o delta de equity face ao baseline do perÃ­odo activo."""
+        entry = self._equity_baselines.get(period_key)
+        if not self._is_valid_equity_baseline(entry):
+            return None
+        baseline_equity = float(entry["equity"])
+        return current_equity - baseline_equity
+
+    @staticmethod
+    def _equity_loss_ratio(
+        baseline_equity: float,
+        current_equity: float,
+    ) -> float | None:
+        """Calcula perda relativa desde o baseline sem permitir divisÃµes invÃ¡lidas."""
+        if (
+            not math.isfinite(baseline_equity)
+            or not math.isfinite(current_equity)
+            or baseline_equity <= 0
+            or current_equity <= 0
+        ):
+            return None
+        return abs(min((current_equity - baseline_equity) / baseline_equity, 0.0))
+
+    async def _fetch_current_equity_snapshot(self) -> float | None:
+        """ObtÃ©m a equity actual do broker via NetLiquidation (ou equivalente)."""
+        try:
+            account_values = await self._connection.request_executor.run(
+                "account_values",
+                "account_values:risk",
+                self._connection.ib.accountValues,
+                request_cost=1,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.error("Falha ao obter snapshot de equity do broker: %s", exc)
+            return None
+
+        equity = self._extract_account_equity(account_values)
+        if equity is None or not math.isfinite(equity) or equity <= 0:
+            logger.error("Snapshot de equity invÃ¡lido/indisponÃ­vel: %s", equity)
+            return None
+
+        self._last_equity_snapshot = float(equity)
+        return self._last_equity_snapshot
+
     async def _on_ib_disconnected(self) -> None:
         """Notifica a perda de ligacao ao IB."""
         logger.warning("IB desconectado. Aguardar sequencia de reconexao.")
@@ -910,6 +1105,9 @@ class TradingBot:
 
         broker_capital = self._extract_account_equity(account_values)
         metrics_snapshot = self._load_metrics_snapshot()
+        self._equity_baselines = self._load_equity_baselines_from_snapshot(
+            metrics_snapshot
+        )
         metrics_capital = self._coerce_float(metrics_snapshot.get("capital"))
         metrics_peak = self._coerce_float(metrics_snapshot.get("peak_equity"))
 
@@ -934,6 +1132,7 @@ class TradingBot:
             source = "trade_log"
 
         self._capital = restored_capital
+        self._last_equity_snapshot = restored_capital
         self._risk_manager.update_capital(self._capital)
 
         if metrics_peak is not None:
@@ -956,6 +1155,14 @@ class TradingBot:
         payload["capital"] = round(self._capital, 4)
         payload["initial_capital"] = round(self._risk_manager.initial_capital, 4)
         payload["peak_equity"] = round(self._risk_manager.peak_equity, 4)
+        payload["equity_baselines"] = {
+            key: {
+                "period": str(entry.get("period")),
+                "equity": round(float(entry.get("equity")), 4),
+            }
+            for key, entry in self._equity_baselines.items()
+            if self._is_valid_equity_baseline(entry)
+        }
         return payload
 
     def _rehydrate_order_tracking(self) -> int:
@@ -1206,6 +1413,90 @@ class TradingBot:
             self._telegram.notify_reconnect_resumed(datetime.now(timezone.utc).isoformat())
             if self._telegram else None
         )
+
+    def _load_persisted_grids_or_fail_closed(self) -> None:
+        """Carrega o estado persistido ou aborta o arranque se nÃ£o houver recovery seguro."""
+        try:
+            self._grid_engine.load_state()
+        except Exception as exc:
+            message = (
+                "Estado persistido de grids indisponÃ­vel/corrompido. "
+                "Arranque abortado em fail-closed."
+            )
+            logger.critical("%s Detalhe: %s", message, exc)
+            raise RuntimeError(message) from exc
+
+        logger.info(
+            "Estado de grids carregado â€” %d grid(s) existente(s).",
+            len(self._grid_engine.grids),
+        )
+
+    def _acquire_instance_lock(self) -> None:
+        """Impede mÃºltiplas instÃ¢ncias activas sobre o mesmo data_dir."""
+        if self._instance_lock_fd is not None:
+            return
+
+        lock_path = self._instance_lock_path
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+
+        try:
+            fd = os.open(
+                lock_path,
+                os.O_CREAT | os.O_EXCL | os.O_RDWR,
+            )
+        except FileExistsError as exc:
+            raise RuntimeError(
+                f"Outra instÃ¢ncia parece activa para {lock_path.parent} "
+                f"(lock: {lock_path.name})."
+            ) from exc
+
+        try:
+            payload = json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "client_id": self._config.ib.client_id,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                },
+                indent=2,
+                ensure_ascii=False,
+            ).encode("utf-8")
+            os.write(fd, payload)
+        except Exception:
+            os.close(fd)
+            try:
+                lock_path.unlink()
+            except OSError:
+                pass
+            raise
+
+        self._instance_lock_fd = fd
+        atexit.register(self._release_instance_lock)
+        logger.info("Lock de instÃ¢ncia adquirido: %s", lock_path)
+
+    def _release_instance_lock(self) -> None:
+        """Liberta o lock de instÃ¢ncia de forma idempotente."""
+        fd = getattr(self, "_instance_lock_fd", None)
+        lock_path = getattr(self, "_instance_lock_path", None)
+
+        if fd is not None:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            self._instance_lock_fd = None
+
+        try:
+            atexit.unregister(self._release_instance_lock)
+        except Exception:
+            pass
+
+        if isinstance(lock_path, Path):
+            try:
+                lock_path.unlink()
+            except FileNotFoundError:
+                pass
+            except OSError as exc:
+                logger.warning("Falha ao remover lock de instÃ¢ncia %s: %s", lock_path, exc)
 
     # ------------------------------------------------------------------
     # Tratamento de sinais do sistema operativo
@@ -1956,6 +2247,8 @@ class TradingBot:
             )
 
         # --- Carregar estado persistido ---
+        self._acquire_instance_lock()
+        self._load_persisted_grids_or_fail_closed()
         try:
             self._grid_engine.load_state()
             num_grids = len(self._grid_engine.grids)
@@ -2021,7 +2314,10 @@ class TradingBot:
                     pass
 
         finally:
-            await self._graceful_shutdown()
+            try:
+                await self._graceful_shutdown()
+            finally:
+                self._release_instance_lock()
 
     # ------------------------------------------------------------------
     # Ciclo principal — um passo
@@ -2832,64 +3128,80 @@ class TradingBot:
 
         # Verificar se o preco saiu da grid → recentrar
         contract = build_contract(spec)
-        current_price = await self._data_feed.get_current_price(contract)
+        price_snapshot = await self._data_feed.get_current_price_details(contract)
+        current_price = price_snapshot.get("price")
+        price_source = str(price_snapshot.get("source") or "unknown")
+        price_fresh = bool(price_snapshot.get("fresh"))
 
-        if current_price is not None:
-            if not session_state.can_open_new_grid:
-                return
+        if current_price is None:
+            return
 
-            bars_df = await self._data_feed.get_historical_bars(
-                contract, duration="1 Y", bar_size="1 day",
+        if not price_fresh:
+            logger.warning(
+                "Grid %s: ajustamento dinamico ignorado por preco stale "
+                "(source=%s, price=%s).",
+                grid.id,
+                price_source,
+                current_price,
             )
-            if bars_df.empty:
-                return
+            return
 
-            indicators = self._data_feed.get_market_data(contract, bars_df)
-            new_atr = indicators.get("atr14") or grid.atr
-            should_recenter = self._grid_engine.should_recenter(grid, current_price)
-            should_respace = self._grid_engine.should_respace(
+        if not session_state.can_open_new_grid:
+            return
+
+        bars_df = await self._data_feed.get_historical_bars(
+            contract, duration="1 Y", bar_size="1 day",
+        )
+        if bars_df.empty:
+            return
+
+        indicators = self._data_feed.get_market_data(contract, bars_df)
+        new_atr = indicators.get("atr14") or grid.atr
+        current_price = float(current_price)
+        should_recenter = self._grid_engine.should_recenter(grid, current_price)
+        should_respace = self._grid_engine.should_respace(
+            grid,
+            current_price,
+            float(new_atr),
+        )
+
+        if should_recenter or should_respace:
+            logger.info(
+                "Grid %s: ajustamento dinamico activado "
+                "(recenter=%s, respace=%s) para preco %.4f.",
+                grid.id,
+                should_recenter,
+                should_respace,
+                current_price,
+            )
+            # Cancelar ordens pendentes antes de recentrar
+            await self._cancel_pending_entry_orders(grid)
+
+            self._grid_engine.recenter_grid(
                 grid,
                 current_price,
                 float(new_atr),
+                stop_atr_mult=self._config.risk.stop_atr_mult,
+                tp_atr_mult=self._config.risk.tp_atr_mult,
+                respaced_at=now_iso,
             )
+            self._grid_engine.save_state()
 
-            if should_recenter or should_respace:
-                logger.info(
-                    "Grid %s: ajustamento dinamico activado "
-                    "(recenter=%s, respace=%s) para preco %.4f.",
-                    grid.id,
-                    should_recenter,
-                    should_respace,
-                    current_price,
-                )
-                # Cancelar ordens pendentes antes de recentrar
-                await self._cancel_pending_entry_orders(grid)
-
-                self._grid_engine.recenter_grid(
-                    grid,
-                    current_price,
-                    float(new_atr),
-                    stop_atr_mult=self._config.risk.stop_atr_mult,
-                    tp_atr_mult=self._config.risk.tp_atr_mult,
-                    respaced_at=now_iso,
-                )
-                self._grid_engine.save_state()
-
-                # Colocar novas ordens para niveis pendentes
-                for level in grid.levels:
-                    if level.status == "pending":
-                        submitted = await self._submit_grid_level_bracket(
-                            contract=contract,
-                            grid=grid,
-                            level=level,
-                        )
-                        if not submitted:
-                            logger.error(
+            # Colocar novas ordens para niveis pendentes
+            for level in grid.levels:
+                if level.status == "pending":
+                    submitted = await self._submit_grid_level_bracket(
+                        contract=contract,
+                        grid=grid,
+                        level=level,
+                    )
+                    if not submitted:
+                        logger.error(
                                 "Grid %s: falha ao repor bracket do nivel %d após recentragem.",
-                                grid.id,
-                                level.level,
-                            )
-                            break
+                            grid.id,
+                            level.level,
+                        )
+                        break
 
     # ------------------------------------------------------------------
     # Verificacao de limites de risco
@@ -2906,16 +3218,54 @@ class TradingBot:
             return True
 
         self._entry_halt_reason = None
-        period_pnl = self._refresh_period_pnl()
-        daily_pnl = period_pnl["daily"]
-        weekly_pnl = period_pnl["weekly"]
-        monthly_pnl = period_pnl["monthly"]
-        daily_loss = abs(min(daily_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
-        weekly_loss = abs(min(weekly_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
-        monthly_loss = abs(min(monthly_pnl / self._capital, 0.0)) if self._capital > 0 else 0.0
+        current_equity = await self._fetch_current_equity_snapshot()
+        if current_equity is None:
+            logger.critical(
+                "Snapshot de equity indisponivel. Entradas bloqueadas em fail-safe."
+            )
+            self._entry_halt_reason = "equity_snapshot_unavailable"
+            for grid in self._grid_engine.get_active_grids():
+                await self._cancel_pending_entry_orders(grid)
+            return True
+
+        now_utc = datetime.now(timezone.utc)
+        self._capital = current_equity
+        self._risk_manager.update_capital(current_equity)
+        if hasattr(self._risk_manager, "update_peak_equity"):
+            self._risk_manager.update_peak_equity(current_equity)
+
+        period_pnl = self._refresh_period_pnl(now=now_utc)
+        if not self._sync_equity_baselines(current_equity, now=now_utc):
+            logger.critical(
+                "Baselines de equity invalidos/corrompidos. Entradas bloqueadas em fail-safe."
+            )
+            self._entry_halt_reason = "equity_baseline_invalid"
+            for grid in self._grid_engine.get_active_grids():
+                await self._cancel_pending_entry_orders(grid)
+            return True
+
+        daily_baseline = float(self._equity_baselines["daily"]["equity"])
+        weekly_baseline = float(self._equity_baselines["weekly"]["equity"])
+        monthly_baseline = float(self._equity_baselines["monthly"]["equity"])
+        daily_pnl = self._equity_delta_since_baseline("daily", current_equity)
+        weekly_pnl = self._equity_delta_since_baseline("weekly", current_equity)
+        monthly_pnl = self._equity_delta_since_baseline("monthly", current_equity)
+
+        if daily_pnl is None or weekly_pnl is None or monthly_pnl is None:
+            logger.critical(
+                "Nao foi possivel calcular drawdown por equity. Entradas bloqueadas."
+            )
+            self._entry_halt_reason = "equity_baseline_invalid"
+            for grid in self._grid_engine.get_active_grids():
+                await self._cancel_pending_entry_orders(grid)
+            return True
+
+        daily_loss = self._equity_loss_ratio(daily_baseline, current_equity) or 0.0
+        weekly_loss = self._equity_loss_ratio(weekly_baseline, current_equity) or 0.0
+        monthly_loss = self._equity_loss_ratio(monthly_baseline, current_equity) or 0.0
 
         # Verificar limite diario (3%)
-        daily_ok = self._risk_manager.check_daily_limit(daily_pnl, self._capital)
+        daily_ok = self._risk_manager.check_daily_limit(daily_pnl, daily_baseline)
         if daily_loss >= 0.70 * self._config.risk.daily_loss_limit:
             self._schedule_telegram(
                 self._telegram.kill_switch_warning(
@@ -2930,7 +3280,7 @@ class TradingBot:
                 "LIMITE DIARIO ATINGIDO — P&L do dia: %.2f (%.2f%% do capital). "
                 "Novas entradas bloqueadas ate novo reset diário.",
                 daily_pnl,
-                (daily_pnl / self._capital * 100) if self._capital > 0 else 0,
+                daily_loss * 100,
             )
             self._entry_halt_reason = "daily_limit"
             for grid in self._grid_engine.get_active_grids():
@@ -2945,7 +3295,7 @@ class TradingBot:
             return True
 
         # Verificar limite semanal (6%)
-        weekly_ok = self._risk_manager.check_weekly_limit(weekly_pnl, self._capital)
+        weekly_ok = self._risk_manager.check_weekly_limit(weekly_pnl, weekly_baseline)
         if weekly_loss >= 0.70 * self._config.risk.weekly_loss_limit:
             self._schedule_telegram(
                 self._telegram.kill_switch_warning(
@@ -2960,7 +3310,7 @@ class TradingBot:
                 "LIMITE SEMANAL ATINGIDO — P&L da semana: %.2f (%.2f%% do capital). "
                 "Novas entradas bloqueadas até nova semana.",
                 weekly_pnl,
-                (weekly_pnl / self._capital * 100) if self._capital > 0 else 0,
+                weekly_loss * 100,
             )
             self._entry_halt_reason = "weekly_limit"
             for grid in self._grid_engine.get_active_grids():
@@ -2985,7 +3335,7 @@ class TradingBot:
                 ) if self._telegram else None
             )
         monthly_ok = self._risk_manager.check_kill_switch(
-            monthly_pnl, self._capital,
+            monthly_pnl, monthly_baseline,
         )
         if not monthly_ok:
             logger.critical(
@@ -3120,6 +3470,7 @@ class TradingBot:
         if self._telegram is not None:
             await asyncio.sleep(1)
 
+        self._release_instance_lock()
         logger.info("Bot encerrado com sucesso.")
 
 

@@ -576,6 +576,46 @@ class GridEngine:
                 pass
             raise
 
+    def _load_state_payload(self, path: Path) -> dict[str, Any]:
+        """Lê e valida o payload cru do ficheiro de estado."""
+        try:
+            raw_payload = path.read_text(encoding="utf-8")
+        except OSError as exc:
+            logger.error("Erro ao ler ficheiro de estado %s: %s", path, exc)
+            raise
+
+        if not raw_payload.strip():
+            raise ValueError(f"Ficheiro de estado vazio: {path}")
+
+        try:
+            data = json.loads(raw_payload)
+        except json.JSONDecodeError as exc:
+            logger.error("Erro ao ler ficheiro de estado %s: %s", path, exc)
+            raise
+
+        self._validate_state_schema(data)
+        return data
+
+    def _restore_state_backup(self, backup_path: Path, state_path: Path) -> dict[str, Any]:
+        """Recupera o estado a partir do backup e reescreve o primário."""
+        data = self._load_state_payload(backup_path)
+        try:
+            shutil.copy2(str(backup_path), str(state_path))
+        except OSError as exc:
+            logger.warning(
+                "Estado recuperado de %s mas falhou a reposicao do primario %s: %s",
+                backup_path,
+                state_path,
+                exc,
+            )
+        else:
+            logger.warning(
+                "Estado recuperado de backup %s para %s.",
+                backup_path,
+                state_path,
+            )
+        return data
+
     def load_state(self) -> None:
         """
         Carrega o estado das grids a partir do ficheiro JSON.
@@ -584,6 +624,7 @@ class GridEngine:
         Se o ficheiro nao existir, inicia com lista vazia.
         """
         state_path = self._data_dir / _STATE_FILENAME
+        backup_path = self._data_dir / (_STATE_FILENAME + _BACKUP_SUFFIX)
 
         if not state_path.exists():
             logger.info(
@@ -594,16 +635,26 @@ class GridEngine:
             return
 
         try:
-            with state_path.open("r", encoding="utf-8") as f:
-                data = json.load(f)
-        except (json.JSONDecodeError, OSError) as exc:
-            logger.error(
-                "Erro ao ler ficheiro de estado %s: %s", state_path, exc,
-            )
-            raise
-
-        # Validacao de esquema
-        self._validate_state_schema(data)
+            data = self._load_state_payload(state_path)
+        except (json.JSONDecodeError, OSError, ValueError) as primary_exc:
+            if backup_path.exists():
+                logger.warning(
+                    "Estado primario %s indisponivel/corrompido (%s). "
+                    "A tentar recovery via backup %s.",
+                    state_path,
+                    primary_exc,
+                    backup_path,
+                )
+                try:
+                    data = self._restore_state_backup(backup_path, state_path)
+                except (json.JSONDecodeError, OSError, ValueError) as backup_exc:
+                    raise RuntimeError(
+                        "Nenhum estado integro disponivel para recovery."
+                    ) from backup_exc
+            else:
+                raise RuntimeError(
+                    "Estado primario corrompido e sem backup valido."
+                ) from primary_exc
 
         # Desserializar grids
         grids: list[Grid] = []

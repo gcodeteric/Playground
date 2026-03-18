@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -518,6 +519,98 @@ class TestPersistence:
         assert loaded_grid.levels[0].pnl == pytest.approx(
             (grid.levels[0].sell_price - grid.levels[0].buy_price) * grid.levels[0].quantity
         )
+
+    def test_load_state_recovers_from_invalid_primary_using_backup(self, tmp_data_dir: str):
+        engine = GridEngine(data_dir=tmp_data_dir)
+        engine.create_grid(
+            symbol="AAPL", center_price=100.0, atr=2.0,
+            regime="BULL", num_levels=1, base_quantity=10,
+            confidence="ALTO", size_multiplier=1.0,
+        )
+        engine.save_state()
+
+        state_path = Path(tmp_data_dir) / "grids_state.json"
+        backup_path = Path(tmp_data_dir) / "grids_state.json.bak"
+        shutil.copy2(state_path, backup_path)
+        state_path.write_text("{invalid json", encoding="utf-8")
+
+        restored = GridEngine(data_dir=tmp_data_dir)
+        restored.load_state()
+
+        assert len(restored.grids) == 1
+        reloaded = json.loads(state_path.read_text(encoding="utf-8"))
+        assert reloaded["grids"][0]["symbol"] == "AAPL"
+
+    def test_load_state_recovers_from_empty_primary_using_backup(self, tmp_data_dir: str):
+        engine = GridEngine(data_dir=tmp_data_dir)
+        engine.create_grid(
+            symbol="AAPL", center_price=100.0, atr=2.0,
+            regime="BULL", num_levels=1, base_quantity=10,
+            confidence="ALTO", size_multiplier=1.0,
+        )
+        engine.save_state()
+
+        state_path = Path(tmp_data_dir) / "grids_state.json"
+        backup_path = Path(tmp_data_dir) / "grids_state.json.bak"
+        shutil.copy2(state_path, backup_path)
+        state_path.write_text("", encoding="utf-8")
+
+        restored = GridEngine(data_dir=tmp_data_dir)
+        restored.load_state()
+
+        assert len(restored.grids) == 1
+
+    def test_load_state_raises_when_primary_and_backup_are_invalid(self, tmp_data_dir: str):
+        os.makedirs(tmp_data_dir, exist_ok=True)
+        state_path = Path(tmp_data_dir) / "grids_state.json"
+        backup_path = Path(tmp_data_dir) / "grids_state.json.bak"
+        state_path.write_text("{invalid json", encoding="utf-8")
+        backup_path.write_text("{also invalid", encoding="utf-8")
+
+        engine = GridEngine(data_dir=tmp_data_dir)
+        with pytest.raises(RuntimeError, match="Nenhum estado integro"):
+            engine.load_state()
+
+    def test_load_state_preserves_backward_compatible_schema(self, tmp_data_dir: str):
+        os.makedirs(tmp_data_dir, exist_ok=True)
+        state_path = Path(tmp_data_dir) / "grids_state.json"
+        legacy_payload = {
+            "version": 1,
+            "grids": [
+                {
+                    "id": "grid_AAPL_20240101_0001",
+                    "symbol": "AAPL",
+                    "status": "active",
+                    "regime": "BULL",
+                    "created_at": "2024-01-01T10:00:00+00:00",
+                    "center_price": 100.0,
+                    "atr": 2.0,
+                    "spacing": 1.2,
+                    "levels": [
+                        {
+                            "level": 1,
+                            "buy_price": 100.0,
+                            "sell_price": 105.0,
+                            "stop_price": 98.0,
+                            "status": "pending",
+                            "quantity": 10,
+                        }
+                    ],
+                    "total_pnl": 0.0,
+                    "confidence": "ALTO",
+                    "size_multiplier": 1.0,
+                }
+            ],
+        }
+        state_path.write_text(json.dumps(legacy_payload), encoding="utf-8")
+
+        engine = GridEngine(data_dir=tmp_data_dir)
+        engine.load_state()
+
+        loaded_grid = engine.grids[0]
+        assert loaded_grid.spacing_pct == pytest.approx(1.2)
+        assert loaded_grid.last_respaced_at == "2024-01-01T10:00:00+00:00"
+        assert loaded_grid.reconciliation_state == "unknown"
 
 
 # ===================================================================

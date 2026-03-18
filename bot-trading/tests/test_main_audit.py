@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 import pathlib
@@ -17,6 +18,7 @@ from main import (
 )
 from src.contracts import parse_watchlist_entry
 from src.grid_engine import GridEngine
+from src.risk_manager import RiskManager
 from src.signal_engine import Confianca, Regime, RegimeInfo, SignalResult, TrendHorizon
 
 
@@ -42,6 +44,10 @@ def _build_bot_stub() -> TradingBot:
     bot._running = True
     bot._shutdown_event = asyncio.Event()
     bot._capital = 100_000.0
+    bot._equity_baselines = {}
+    bot._last_equity_snapshot = None
+    bot._instance_lock_fd = None
+    bot._instance_lock_path = pathlib.Path.cwd() / "bot.instance.lock"
     bot._risk_manager = SimpleNamespace(
         update_capital=MagicMock(),
         peak_equity=100_000.0,
@@ -49,6 +55,8 @@ def _build_bot_stub() -> TradingBot:
     )
     bot._trade_logger = SimpleNamespace(
         calculate_metrics=MagicMock(return_value={"total_pnl": 0.0, "num_trades": 0}),
+        get_trades=MagicMock(return_value=[]),
+        save_metrics=MagicMock(),
     )
     return bot
 
@@ -83,6 +91,28 @@ def _build_signal_result() -> SignalResult:
         bb_lower=95.0,
         volume_ratio=1.2,
     )
+
+
+def _build_runtime_config(tmp_path):
+    return SimpleNamespace(
+        data_dir=tmp_path,
+        ib=SimpleNamespace(paper_trading=True, client_id=7),
+        risk=SimpleNamespace(
+            daily_loss_limit=0.03,
+            weekly_loss_limit=0.06,
+            monthly_dd_limit=0.10,
+            stop_atr_mult=1.0,
+            tp_atr_mult=2.5,
+        ),
+    )
+
+
+def _seed_equity_baselines(bot: TradingBot, now: datetime) -> None:
+    period_ids = TradingBot._get_equity_period_ids(now)
+    bot._equity_baselines = {
+        key: {"period": period_id, "equity": 100_000.0}
+        for key, period_id in period_ids.items()
+    }
 
 
 def test_first_run_files_are_created(tmp_path):
@@ -564,7 +594,11 @@ async def test_daily_limit_cancels_only_pending_entry_orders(tmp_path):
     bot._refresh_period_pnl = MagicMock(
         return_value={"daily": -4_000.0, "weekly": 0.0, "monthly": 0.0},
     )
+    bot._fetch_current_equity_snapshot = AsyncMock(return_value=96_000.0)
+    _seed_equity_baselines(bot, datetime(2026, 3, 18, tzinfo=timezone.utc))
     bot._risk_manager = SimpleNamespace(
+        update_capital=MagicMock(),
+        update_peak_equity=MagicMock(),
         check_daily_limit=MagicMock(return_value=False),
         check_weekly_limit=MagicMock(return_value=True),
         check_kill_switch=MagicMock(return_value=True),
@@ -620,7 +654,11 @@ async def test_monthly_kill_switch_initiates_broker_flatten(tmp_path):
     bot._refresh_period_pnl = MagicMock(
         return_value={"daily": 0.0, "weekly": 0.0, "monthly": -11_000.0},
     )
+    bot._fetch_current_equity_snapshot = AsyncMock(return_value=89_000.0)
+    _seed_equity_baselines(bot, datetime(2026, 3, 18, tzinfo=timezone.utc))
     bot._risk_manager = SimpleNamespace(
+        update_capital=MagicMock(),
+        update_peak_equity=MagicMock(),
         check_daily_limit=MagicMock(return_value=True),
         check_weekly_limit=MagicMock(return_value=True),
         check_kill_switch=MagicMock(return_value=False),
@@ -655,6 +693,158 @@ async def test_monthly_kill_switch_initiates_broker_flatten(tmp_path):
     assert grid.status == "active"
     assert grid.reconciliation_state == "flattening"
     bot._order_manager.close_position.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_unrealized_equity_loss_triggers_daily_halt(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    bot._order_manager = SimpleNamespace(cancel_order=AsyncMock(return_value=True))
+    bot._risk_manager = RiskManager(
+        capital=100_000.0,
+        daily_loss_limit=0.03,
+        weekly_loss_limit=0.06,
+        monthly_dd_limit=0.10,
+    )
+    bot._refresh_period_pnl = MagicMock(
+        return_value={"daily": 0.0, "weekly": 0.0, "monthly": 0.0},
+    )
+    bot._fetch_current_equity_snapshot = AsyncMock(return_value=96_000.0)
+    _seed_equity_baselines(bot, datetime(2026, 3, 18, tzinfo=timezone.utc))
+
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=2,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    pending_level = grid.levels[0]
+    pending_level.status = "pending"
+    pending_level.buy_order_id = 101
+    pending_level.stop_order_id = 102
+    pending_level.sell_order_id = 103
+    bought_level = grid.levels[1]
+    bought_level.status = "bought"
+    bought_level.stop_order_id = 202
+
+    should_block = await TradingBot._check_risk_limits(bot)
+
+    assert should_block is True
+    assert bot._entry_halt_reason == "daily_limit"
+    cancelled_ids = {
+        call.args[0]
+        for call in bot._order_manager.cancel_order.await_args_list
+    }
+    assert cancelled_ids == {101, 102, 103}
+    assert 202 not in cancelled_ids
+
+
+@pytest.mark.asyncio
+async def test_invalid_equity_baseline_fails_safe_without_division(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    bot._order_manager = SimpleNamespace(cancel_order=AsyncMock(return_value=True))
+    bot._risk_manager = RiskManager(
+        capital=100_000.0,
+        daily_loss_limit=0.03,
+        weekly_loss_limit=0.06,
+        monthly_dd_limit=0.10,
+    )
+    bot._refresh_period_pnl = MagicMock(
+        return_value={"daily": 0.0, "weekly": 0.0, "monthly": 0.0},
+    )
+    bot._fetch_current_equity_snapshot = AsyncMock(return_value=95_000.0)
+    _seed_equity_baselines(bot, datetime(2026, 3, 18, tzinfo=timezone.utc))
+    bot._equity_baselines["daily"]["equity"] = 0.0
+
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=1,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    grid.levels[0].buy_order_id = 101
+    grid.levels[0].stop_order_id = 102
+    grid.levels[0].sell_order_id = 103
+
+    should_block = await TradingBot._check_risk_limits(bot)
+
+    assert should_block is True
+    assert bot._entry_halt_reason == "equity_baseline_invalid"
+    cancelled_ids = {
+        call.args[0]
+        for call in bot._order_manager.cancel_order.await_args_list
+    }
+    assert cancelled_ids == {101, 102, 103}
+
+
+@pytest.mark.asyncio
+async def test_missing_equity_snapshot_blocks_entries(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    bot._order_manager = SimpleNamespace(cancel_order=AsyncMock(return_value=True))
+    bot._risk_manager = RiskManager(capital=100_000.0)
+    bot._fetch_current_equity_snapshot = AsyncMock(return_value=None)
+
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=1,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    grid.levels[0].buy_order_id = 101
+    grid.levels[0].stop_order_id = 102
+    grid.levels[0].sell_order_id = 103
+
+    should_block = await TradingBot._check_risk_limits(bot)
+
+    assert should_block is True
+    assert bot._entry_halt_reason == "equity_snapshot_unavailable"
+    cancelled_ids = {
+        call.args[0]
+        for call in bot._order_manager.cancel_order.await_args_list
+    }
+    assert cancelled_ids == {101, 102, 103}
+
+
+def test_equity_baselines_roll_over_by_period(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+
+    start = datetime(2026, 3, 18, 10, tzinfo=timezone.utc)
+    assert TradingBot._sync_equity_baselines(bot, 100_000.0, now=start) is True
+    assert bot._equity_baselines["daily"]["equity"] == 100_000.0
+    assert bot._equity_baselines["weekly"]["equity"] == 100_000.0
+    assert bot._equity_baselines["monthly"]["equity"] == 100_000.0
+
+    next_day = datetime(2026, 3, 19, 10, tzinfo=timezone.utc)
+    assert TradingBot._sync_equity_baselines(bot, 99_000.0, now=next_day) is True
+    assert bot._equity_baselines["daily"]["equity"] == 99_000.0
+    assert bot._equity_baselines["weekly"]["equity"] == 100_000.0
+    assert bot._equity_baselines["monthly"]["equity"] == 100_000.0
+
+    next_week = datetime(2026, 3, 23, 10, tzinfo=timezone.utc)
+    assert TradingBot._sync_equity_baselines(bot, 98_000.0, now=next_week) is True
+    assert bot._equity_baselines["weekly"]["equity"] == 98_000.0
+
+    next_month = datetime(2026, 4, 1, 10, tzinfo=timezone.utc)
+    assert TradingBot._sync_equity_baselines(bot, 97_000.0, now=next_month) is True
+    assert bot._equity_baselines["monthly"]["equity"] == 97_000.0
 
 
 @pytest.mark.asyncio
@@ -839,6 +1029,225 @@ async def test_partial_fill_pauses_grid_and_trips_emergency_halt(tmp_path):
     assert bot._emergency_halt is True
     assert grid.status == "paused"
     assert grid.reconciliation_state == "partial_fill"
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("source", ["close", "yfinance"])
+async def test_monitor_single_grid_skips_dynamic_adjustments_on_stale_sources(
+    tmp_path,
+    monkeypatch,
+    source,
+):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    spec = parse_watchlist_entry("AAPL")
+    bot._get_instrument_spec = MagicMock(return_value=spec)
+    bot._cancel_pending_entry_orders = AsyncMock(return_value=0)
+    bot._submit_grid_level_bracket = AsyncMock(return_value=True)
+    bot._order_manager = SimpleNamespace(
+        get_order_info=MagicMock(return_value=None),
+        get_order_status=MagicMock(return_value=None),
+        cancel_all_grid_orders=AsyncMock(return_value=0),
+    )
+    bot._data_feed = SimpleNamespace(
+        get_current_price_details=AsyncMock(
+            return_value={"price": 101.0, "source": source, "fresh": False},
+        ),
+        get_historical_bars=AsyncMock(),
+        get_market_data=MagicMock(return_value={"atr14": 2.0}),
+    )
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=1,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    bot._grid_engine.should_recenter = MagicMock(return_value=True)
+    bot._grid_engine.should_respace = MagicMock(return_value=True)
+    bot._grid_engine.recenter_grid = MagicMock()
+    bot._grid_engine.save_state = MagicMock()
+
+    monkeypatch.setattr(
+        "main.get_session_state",
+        lambda _spec: SimpleNamespace(
+            is_pre_close=False,
+            can_open_new_grid=True,
+            status="ABERTA",
+        ),
+    )
+    monkeypatch.setattr("main.build_contract", lambda _spec: MagicMock(symbol="AAPL"))
+
+    await TradingBot._monitor_single_grid(bot, grid)
+
+    bot._data_feed.get_historical_bars.assert_not_awaited()
+    bot._grid_engine.recenter_grid.assert_not_called()
+    bot._submit_grid_level_bracket.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_monitor_single_grid_recenters_only_with_fresh_quote(tmp_path, monkeypatch):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    spec = parse_watchlist_entry("AAPL")
+    bot._get_instrument_spec = MagicMock(return_value=spec)
+    bot._cancel_pending_entry_orders = AsyncMock(return_value=1)
+    bot._submit_grid_level_bracket = AsyncMock(return_value=True)
+    bot._order_manager = SimpleNamespace(
+        get_order_info=MagicMock(return_value=None),
+        get_order_status=MagicMock(return_value=None),
+        cancel_all_grid_orders=AsyncMock(return_value=0),
+    )
+    bars_df = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=30, freq="B"),
+            "open": [100.0] * 30,
+            "high": [101.0] * 30,
+            "low": [99.0] * 30,
+            "close": [100.0] * 30,
+            "volume": [1000.0] * 30,
+        }
+    )
+    bot._data_feed = SimpleNamespace(
+        get_current_price_details=AsyncMock(
+            return_value={"price": 104.5, "source": "ib", "fresh": True},
+        ),
+        get_historical_bars=AsyncMock(return_value=bars_df),
+        get_market_data=MagicMock(return_value={"atr14": 2.4}),
+    )
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=1,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    bot._grid_engine.should_recenter = MagicMock(return_value=True)
+    bot._grid_engine.should_respace = MagicMock(return_value=False)
+    bot._grid_engine.recenter_grid = MagicMock()
+    bot._grid_engine.save_state = MagicMock()
+
+    monkeypatch.setattr(
+        "main.get_session_state",
+        lambda _spec: SimpleNamespace(
+            is_pre_close=False,
+            can_open_new_grid=True,
+            status="ABERTA",
+        ),
+    )
+    monkeypatch.setattr("main.build_contract", lambda _spec: MagicMock(symbol="AAPL"))
+
+    await TradingBot._monitor_single_grid(bot, grid)
+
+    bot._grid_engine.recenter_grid.assert_called_once()
+    bot._submit_grid_level_bracket.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_monitor_single_grid_ignores_partial_snapshot(tmp_path, monkeypatch):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    spec = parse_watchlist_entry("AAPL")
+    bot._get_instrument_spec = MagicMock(return_value=spec)
+    bot._cancel_pending_entry_orders = AsyncMock(return_value=0)
+    bot._submit_grid_level_bracket = AsyncMock(return_value=True)
+    bot._order_manager = SimpleNamespace(
+        get_order_info=MagicMock(return_value=None),
+        get_order_status=MagicMock(return_value=None),
+        cancel_all_grid_orders=AsyncMock(return_value=0),
+    )
+    bot._data_feed = SimpleNamespace(
+        get_current_price_details=AsyncMock(return_value={"source": "ib"}),
+        get_historical_bars=AsyncMock(),
+        get_market_data=MagicMock(return_value={"atr14": 2.0}),
+    )
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=1,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    bot._grid_engine.recenter_grid = MagicMock()
+
+    monkeypatch.setattr(
+        "main.get_session_state",
+        lambda _spec: SimpleNamespace(
+            is_pre_close=False,
+            can_open_new_grid=True,
+            status="ABERTA",
+        ),
+    )
+    monkeypatch.setattr("main.build_contract", lambda _spec: MagicMock(symbol="AAPL"))
+
+    await TradingBot._monitor_single_grid(bot, grid)
+
+    bot._data_feed.get_historical_bars.assert_not_awaited()
+    bot._grid_engine.recenter_grid.assert_not_called()
+
+
+def test_instance_lock_prevents_second_instance(tmp_path):
+    bot_a = _build_bot_stub()
+    bot_a._config = _build_runtime_config(tmp_path)
+    bot_a._instance_lock_path = tmp_path / "bot.instance.lock"
+
+    bot_b = _build_bot_stub()
+    bot_b._config = _build_runtime_config(tmp_path)
+    bot_b._instance_lock_path = bot_a._instance_lock_path
+
+    TradingBot._acquire_instance_lock(bot_a)
+    try:
+        with pytest.raises(RuntimeError):
+            TradingBot._acquire_instance_lock(bot_b)
+    finally:
+        TradingBot._release_instance_lock(bot_a)
+        TradingBot._release_instance_lock(bot_b)
+
+
+@pytest.mark.asyncio
+async def test_graceful_shutdown_releases_instance_lock(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._instance_lock_path = tmp_path / "bot.instance.lock"
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    bot._connection = SimpleNamespace(disconnect=AsyncMock())
+    bot._telegram_poll_task = None
+    bot._trade_logger = SimpleNamespace(
+        calculate_metrics=MagicMock(return_value={}),
+        save_metrics=MagicMock(),
+        get_trades=MagicMock(return_value=[]),
+    )
+    TradingBot._acquire_instance_lock(bot)
+
+    await TradingBot._graceful_shutdown(bot)
+
+    other_bot = _build_bot_stub()
+    other_bot._config = _build_runtime_config(tmp_path)
+    other_bot._instance_lock_path = bot._instance_lock_path
+    try:
+        TradingBot._acquire_instance_lock(other_bot)
+    finally:
+        TradingBot._release_instance_lock(other_bot)
+
+
+def test_load_persisted_grids_fail_closed_on_corruption(tmp_path):
+    bot = _build_bot_stub()
+    bot._grid_engine = SimpleNamespace(load_state=MagicMock(side_effect=RuntimeError("bad state")))
+
+    with pytest.raises(RuntimeError, match="fail-closed"):
+        TradingBot._load_persisted_grids_or_fail_closed(bot)
 
 
 @pytest.mark.asyncio
