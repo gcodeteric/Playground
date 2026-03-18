@@ -1,965 +1,459 @@
-# AUDIT_REPORT.md
-# Data: 2026-03-18
-# Versão: v7
-# Repo: gcodeteric/Playground
-# Subdiretoria: bot-trading
-# Commit auditado: e04725c7e6852173fe646c510a3e49a36061e125
+# AUDIT REPORT — bot-trading
+Commit: `aa9af81ccab7f96b46dc9d5097c51977faa94525` (diverge do ref. `a90d6bd89bcc0fdd04c6c05e62dc7bcdc2ff2936`) | Data: `2026-03-18` | Score: `53/100`
 
-Esta auditoria foi executada sobre o commit exacto `e04725c7e6852173fe646c510a3e49a36061e125`, usando um snapshot isolado do tree para evitar contaminação por HEAD, branch actual ou alterações futuras.
+Nota operacional:
+- `git` CLI não estava disponível; o commit foi resolvido via `.git/HEAD`.
+- `python -m py_compile` passou em `main.py` e `src/*.py`.
+- `python -m pytest`, `python -m mypy` e `pip-audit` não puderam validar o ambiente actual porque `pytest`/`mypy` não estão instalados e `pip-audit` não conseguiu ser instalado neste workspace.
 
-Comandos de validação executados no snapshot:
-- `pytest tests -q --tb=short`
-- `python3 tools/smoke_test.py`
-- leitura forense dirigida de `main.py`, `config.py`, `src/data_feed.py`, `src/execution.py`, `src/grid_engine.py`, `src/risk_manager.py`, `src/contracts.py`, `src/market_hours.py`, `src/logger.py`, módulos de estratégia, `dashboard/` e `tests/`
+## Sumário executivo
+O repositório já tem módulos separados, testes úteis e algumas protecções reais, mas ainda falha em propriedades de segurança financeira fundamentais: kill switches baseados em equity, gestão de preços stale em grids activas, recuperação de estado corrompido e exclusão de multi-instância.
 
-Resultado factual dos comandos:
-- `347 passed, 1124 warnings in 5.22s`
-- `tools/smoke_test.py` -> `Resultado: 10/10`
+Os problemas mais perigosos não estão na geração de sinal; estão no controlo operacional: o bot pode continuar a aceitar risco quando as perdas ainda são só unrealized, pode recentrar grids com preços de fallback stale, e pode arrancar “sem grids” depois de corrupção de estado local.
 
-# 1. Resumo Executivo
+Em paper trading, o sistema ainda exige supervisão humana contínua. Para live trading, este estado continua bloqueado.
 
-Avaliação geral: este sistema não demonstra garantias suficientes para controlar capital real. O código já não é um protótipo puro, mas também não é um sistema de trading robusto. É um protótipo endurecido por camadas de patches, com alguma cobertura útil e observabilidade razoável, mas ainda com falhas estruturais graves nos caminhos de execução, kill switches, segregação paper/live, tracking de bracket orders e recovery.
+## TOP 5 FIXES URGENTES
+- `C01` — [`main.py`](C:\Users\bernardovicente\Desktop\Bernardo\Material Suporte\PESSOAL\Playground\bot-trading\main.py):709: kill switches devem usar `NetLiquidation`/equity baseline, não só `trades_log`.
+- `C02` — [`main.py`](C:\Users\bernardovicente\Desktop\Bernardo\Material Suporte\PESSOAL\Playground\bot-trading\main.py):2833: grids activas só podem recentrar com `price_fresh=True`.
+- `H06` — [`src/grid_engine.py`](C:\Users\bernardovicente\Desktop\Bernardo\Material Suporte\PESSOAL\Playground\bot-trading\src\grid_engine.py):596: recuperação automática de `grids_state.json.bak` e fail-closed no arranque.
+- `H07` — [`config.py`](C:\Users\bernardovicente\Desktop\Bernardo\Material Suporte\PESSOAL\Playground\bot-trading\config.py):77: lock de instância + `client_id` único + lock do state file.
+- `H04` — [`src/market_hours.py`](C:\Users\bernardovicente\Desktop\Bernardo\Material Suporte\PESSOAL\Playground\bot-trading\src\market_hours.py):17: remover fallback silencioso e substituir janelas FX/FUT em UTC por horários em timezone local do mercado.
 
-Score de readiness para paper (0-10): `4/10`  
-Score de readiness para live (0-10): `1/10`
+## Estatísticas
+- Linhas código: `13325` | Linhas teste: `5484` | Ratio: `0.412`
+- Problemas: 🔴`2` 🟠`9` 🟡`9` 🟢`2` = `22`
+- Cenários Fase 12 cobertos/parcialmente cobertos: `8/23`
+- Ficheiros >300 linhas: `main.py`, `src/execution.py`, `src/risk_manager.py`, `src/data_feed.py`, `src/logger.py`, `src/grid_engine.py`, `src/signal_engine.py`
 
-Principais blockers:
-- `PAPER_TRADING=true` não impede arranque ligado a conta live.
-- Kill switches diário, semanal e mensal têm semântica operacional financeiramente errada.
-- Existe um caminho de execução fora da state machine principal de grids.
-- O tracking local de parent, stop e take-profit está estruturalmente corrompido.
-- O capital de risco é reinicializado do `.env` após restart.
+## Problemas por severidade
 
-Principais riscos sistémicos:
-- falsa sensação de segurança em paper mode
-- divergência entre estado local e broker
-- retries de ordens sem idempotência
-- recovery inseguro após crash/restart
-- testes que passam sem provar as propriedades operacionais críticas
-
-Conclusão curta e direta: o commit auditado pode ser usado para paper trading apenas com supervisão humana contínua e com reservas sérias. Para live trading, está bloqueado.
-
-# 2. Mapa da Arquitetura Real
-
-## 2.1 Componentes
-
-- `main.py`
-  - Orquestrador dominante.
-  - Faz bootstrap, preflight, reconciliação, loop principal, routing de estratégias, grid lifecycle, command queue, heartbeat e shutdown.
-- `config.py`
-  - Carrega configuração com Pydantic.
-  - Junta defaults, `.env`, pathing e validações.
-- `src/data_feed.py`
-  - Liga ao IB, gere reconnect, histórico, snapshots, pacing, cache e fallback Yahoo.
-- `src/execution.py`
-  - Gera e submete ordens, rastreia estado local de brackets e faz cancelamentos/fechos.
-- `src/grid_engine.py`
-  - Mantém o modelo de grid, níveis, serialização e reload.
-- `src/risk_manager.py`
-  - Sizing, caps, R:R, kill switches teóricos, correlação utilitária.
-- `src/contracts.py`
-  - Traduz watchlist para contratos IB.
-- `src/market_hours.py`
-  - Decide abertura/fecho por asset class.
-- `src/logger.py`
-  - Trade log, métricas e Telegram.
-- `dashboard/`
-  - Camada de observabilidade e command channel por ficheiros.
-
-## 2.2 Fluxo de arranque
-
-1. `main()` cria `TradingBot`, valida config e faz `asyncio.run(bot.run())`.
-2. `TradingBot.run()` carrega estado persistido de grids.
-3. `preflight_check()` liga ao IB, valida contas/dados, inicializa `OrderManager`, envia Telegram e grava `preflight_state.json`.
-4. `run()` executa reconciliação de arranque.
-5. Entra no loop principal assíncrono.
-
-## 2.3 Fluxo operacional
-
-1. Processa comandos em `data/commands/`.
-2. Se `manual_pause` estiver activo, aborta o resto do ciclo.
-3. Garante conectividade IB.
-4. Actualiza métricas agregadas.
-5. Corre `_check_risk_limits()`.
-6. Percorre watchlist e chama `_process_symbol()`.
-7. Monitoriza grids activas.
-8. Actualiza heartbeat, relatórios e housekeeping.
-
-## 2.4 Fluxo de risco e execução
-
-1. `DataFeed` produz barras históricas e snapshot actual.
-2. `signal_engine` e módulos novos geram sinais.
-3. `RiskManager` valida sizing, R:R, limites e caps.
-4. `main.py` decide entre:
-   - caminho grid-driven
-   - caminho multi-módulo directo
-5. `OrderManager.submit_bracket_order()` submete parent, stop e target.
-
-## 2.5 Persistência e recovery
-
-- `GridEngine.save_state()` persiste grids e backup.
-- `TradeLogger` persiste trades e métricas.
-- `main.py` grava `heartbeat.json`, `preflight_state.json`, `snapshot.json`.
-- Recovery de arranque reconcilia posições e ordens com estado local.
-
-## 2.6 Superfícies de falha
-
-- `main.py` concentra demasiada lógica crítica.
-- A state machine global não é explícita.
-- Existem dois modelos de posição:
-  - grids persistidas
-  - trades multi-módulo directos
-- Kill switches operam parcialmente sobre estado local e parcialmente sobre ordens.
-- Tracking local de brackets não representa correctamente as pernas reais.
-- Restart e reconciliação assentam em assunções frágeis.
-
-# 3. Inventário de Ficheiros Relevantes
-
-| Ficheiro | Papel real | Criticidade | Observações |
-|---|---|---:|---|
-| `main.py` | Orquestração principal | Muito alta | State machine difusa e responsabilidades misturadas |
-| `config.py` | Config runtime | Alta | Defaults razoáveis, enforcement fraco de paper/live |
-| `src/data_feed.py` | Ligação IB, dados, reconnect | Muito alta | Mistura demasiadas responsabilidades |
-| `src/execution.py` | Submission e tracking local de ordens | Muito alta | Bracket semantics frágeis |
-| `src/grid_engine.py` | Modelo/persistência de grids | Muito alta | Melhor persistência, mas depende de orquestração correcta |
-| `src/risk_manager.py` | Sizing e caps | Muito alta | Risco teórico melhor do que integração real |
-| `src/contracts.py` | Contratos IB | Alta | Roll de futuros é heurístico |
-| `src/market_hours.py` | Sessões e horários | Alta | Equities melhoradas; outros activos continuam heurísticos |
-| `src/logger.py` | Logging, metrics, Telegram | Alta | Útil, mas insuficiente para incident response sério |
-| `src/signal_engine.py` | Estratégia core Kotegawa | Alta | Menos grave que execução/recovery |
-| `src/sector_rotation.py` | Módulo novo | Média | Ainda parcialmente integrado |
-| `src/options_premium.py` | Módulo novo | Média | Comentários mostram modo auditável/faseado |
-| `src/bond_mr_hedge.py` | Módulo novo | Média | Usa `VIX` proxy e regime |
-| `src/intl_etf_mr.py` | Módulo novo | Média | Único sítio com check de correlação efectivo |
-| `dashboard/app.py` | Dashboard | Média | Observabilidade útil; não resolve core risk |
-| `dashboard/helpers.py` | Parsing/KPI/command channel | Média | Boa separação local |
-| `tests/test_execution.py` | Testes de ordens | Alta | Happy-path bias e semântica perigosa codificada |
-| `tests/test_integration.py` | Integração lógica | Alta | Falta broker simulation séria |
-| `tests/test_main_audit.py` | Flags e persistência do main | Alta | Prova ficheiros, não prova segurança operacional |
-| `tests/test_data_feed.py` | Dados/reconnect/fallbacks | Alta | Não prova freshness nem concorrência séria |
-| `README.md` | Documento operativo | Média | Promete mais do que o código prova |
-| `data/bot.log` | Artefacto operacional versionado | Média | Mistura runs antigos com estado actual |
-| `dashboard 2/app.py` | Código legado | Baixa | Lixo operacional no repo |
-| `CODEX_IMPLEMENTATION_BRIEF_FINAL.md` | Documento de implementação | Baixa | Arqueologia de patching |
-| `CODEX_IMPLEMENTATION_BRIEF_FINAL 2.md` | Documento duplicado | Baixa | Redundância que aumenta ruído |
-
-# 4. Tabela Mestre de Findings
-
-| ID | Severidade | Categoria | Ficheiro | Linhas | Título | Impacto curto | Confiança | Status recomendado |
-|---|---|---|---|---|---|---|---|---|
-| F-001 | S5 | Paper/Live segregation | `main.py` | 771-775, 927-935 | Paper mode não é enforcement | Pode enviar ordens reais com `PAPER_TRADING=true` | Alta | Bloquear arranque |
-| F-002 | S5 | Kill switch / execution | `main.py` | 2641-2669 | Kill switch mensal fecha grids locais sem flatten broker-side | Divergência crítica local vs broker | Alta | Reescrever kill switch |
-| F-003 | S5 | Kill switch / execution | `main.py`, `src/execution.py` | 2588-2621; 523-573 | Kill switch diário/semanal cancela protecções | Pode deixar posição nua | Alta | Reescrever kill switch |
-| F-004 | S5 | Order lifecycle | `main.py` | 1930-2068 | Ordens multi-módulo bypassam grid engine | Posições sem recovery normal | Alta | Desactivar ou integrar |
-| F-005 | S5 | Order tracking | `src/execution.py` | 182-204, 390-410, 776-816 | Parent, stop e TP partilham o mesmo estado | Tracking por perna corrompido | Alta | Refactor estrutural |
-| F-006 | S4 | Risk state / recovery | `main.py` | 369-379, 543-585, 1604-1619 | Restart repõe capital do `.env` | Sizing e drawdown errados após restart | Alta | Persistir/restaurar equity |
-| F-007 | S4 | Idempotência | `src/execution.py`, `src/ib_requests.py` | 354-441; 161-234 | Retries de bracket não são idempotentes | Duplicação de ordens | Alta | Introduzir dedupe |
-| F-008 | S4 | Atomicidade | `main.py` | 2197-2245 | Criação de grid não é atómica | Grid activa pode não refletir broker | Alta | Staging + rollback |
-| F-009 | S4 | Lifecycle / operations | `main.py` | 1680-1685 | `manual_pause` pára monitorização | Estado local deixa de acompanhar broker | Alta | Separar pause de monitorização |
-| F-010 | S4 | Reconciliation | `main.py` | 807-815, 1289-1365 | Reconciliação age sobre leituras vazias transitórias | Self-inflicted damage | Média | Fail-closed |
-| F-011 | S3 | Market data staleness | `src/data_feed.py` | 842-847, 1239-1265 | `current_price` pode ser só o último close | Sinais com preço stale | Alta | Freshness policy |
-| F-012 | S3 | Async / reconnect | `src/data_feed.py` | 311-324, 350-423 | `ensure_connected()` e `_auto_reconnect()` podem sobrepor-se | Corridas de reconnect | Média | Lock de ligação |
-| F-013 | S3 | Caching / correctness | `src/data_feed.py` | 693, 808, 914 | Cache keys fracas | Contaminação entre instrumentos | Média | Chaves compostas |
-| F-014 | S3 | Contracts / roll | `src/contracts.py` | 254-271 | Roll de futuros é heurístico | Pode negociar o mês errado | Média | Resolver front month dinamicamente |
-| F-015 | S2 | Risk integration | `main.py`, `src/risk_manager.py`, `src/intl_etf_mr.py` | 391-404, 1949-1970; 102-173; 68-76 | Correlação não é guardrail central | Concentração escapa ao risco | Alta | Integrar no `RiskManager` central |
-| F-016 | S2 | Test realism | `tests/test_execution.py`, `tests/test_integration.py`, `tests/test_main_audit.py` | 262-295; 712-749; 187-202 | Testes codificam semântica insegura | Falsa confiança de readiness | Alta | Reescrever testes críticos |
-
-# 5. Findings Detalhados
-
-## [F-001] Paper mode não é enforcement, é só intenção
-
-**Severidade:** S5  
-**Categoria:** Paper/Live segregation  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`  
-**Linha(s):** 771-775, 927-935, 968-985
-
-### Facto observado
-`_infer_account_mode()` trata qualquer conta não iniciada por `DU` como live. Em `preflight_check()`, quando `PAPER_TRADING=true` mas a conta parece live, o código emite warning e continua. Só há bloqueio duro no caso oposto: `PAPER_TRADING=false` com conta paper.
-
-### Inferência
-O sistema não isola paper/live. Tem apenas um aviso textual baseado num heurístico superficial.
-
-### Porque isto é perigoso
-O operador pode acreditar que está protegido por `PAPER_TRADING=true`. Não está.
-
-### Cenário de falha
-TWS live aberta na porta configurada, `.env` com paper activado, sessão autenticada na conta errada. O bot continua e submete ordens reais.
-
-### Impacto operacional
-Quebra total da promessa de paper-only.
-
-### Impacto financeiro
-Execução real não intencional.
-
-### Correção recomendada
-Abortar o arranque em qualquer mismatch entre modo configurado e modo detectado.
-
-### Patch suggestion
+### 🔴 CRÍTICO (2)
+#### C01 — Kill switches usam PnL realizado, não equity
+- **Ficheiro:** `main.py:709`, `main.py:2898`
+- **Código:**
 ```python
-if configured_paper and detected_mode != "PAPER":
-    logger.critical("Conta live detectada com PAPER_TRADING=true. Arranque bloqueado.")
-    raise SystemExit(1)
+def _calculate_period_pnl(...):
+    for trade in self._trade_logger.get_trades():
+        pnl_raw = trade.get("pnl")
+        ...
+        if timestamp >= month_start:
+            period_pnl["monthly"] += pnl
+
+async def _check_risk_limits(self) -> bool:
+    period_pnl = self._refresh_period_pnl()
+    daily_pnl = period_pnl["daily"]
+    weekly_pnl = period_pnl["weekly"]
+    monthly_pnl = period_pnl["monthly"]
 ```
-
-### Testes obrigatórios
-- teste de preflight que falha com `paper=True` e conta live
-- teste de reconnect que revalida a conta
-- teste de startup que nunca chama execução após mismatch
-
-## [F-002] Kill switch mensal fecha grids locais sem flatten broker-side
-
-**Severidade:** S5  
-**Categoria:** Kill switch / execution  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`, `src/execution.py`  
-**Linha(s):** 2641-2669; 523-573, 602-676
-
-### Facto observado
-O kill switch mensal chama cancelamento de ordens da grid e `close_grid()` local. Não existe flatten confirmado de posições reais antes de remover a grid do estado.
-
-### Inferência
-O motor pode concluir “posição resolvida” apenas porque fechou o estado local.
-
-### Porque isto é perigoso
-Um kill switch que não actua no broker é operacionalmente falso.
-
-### Cenário de falha
-Drawdown mensal atinge o limite. O bot limpa a grid do JSON e sai. A posição continua aberta no broker.
-
-### Impacto operacional
-Recovery posterior arranca sem memória local da posição que continua exposta.
-
-### Impacto financeiro
-Exposição viva precisamente no momento em que o sistema decidiu que já perdeu demasiado.
-
-### Correção recomendada
-Primeiro fechar posição real, depois cancelar restos, depois só então encerrar a grid local.
-
-### Patch suggestion
-- `close_position(symbol, qty)` com confirmação broker-side
-- `await cancel_all_grid_orders(...)`
-- apenas após confirmação, `grid_engine.close_grid(grid)`
-
-### Testes obrigatórios
-- teste de kill switch mensal com posição broker aberta
-- teste que prova flatten antes do close local
-- teste de restart depois do kill switch
-
-## [F-003] Kill switch diário/semanal cancela protecções e deixa exposição nua
-
-**Severidade:** S5  
-**Categoria:** Kill switch / execution  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`, `src/execution.py`  
-**Linha(s):** 2588-2621; 523-573
-
-### Facto observado
-Nos limites diário e semanal, o código chama `cancel_all_grid_orders()` para todas as grids activas. Esse método cancela todas as ordens não terminadas da grid, incluindo stop-loss e take-profit das posições já abertas.
-
-### Inferência
-O kill switch remove os mecanismos de protecção das posições activas.
-
-### Porque isto é perigoso
-Isto é o inverso de controlo de risco.
-
-### Cenário de falha
-Há uma posição comprada com stop e target activos. O limite diário dispara. O sistema cancela o stop e o target, mas não fecha a posição.
-
-### Impacto operacional
-O bot entra em “protecção” removendo a protecção.
-
-### Impacto financeiro
-Perda potencial acima do desenho do sistema.
-
-### Correção recomendada
-Separar cancelamento de entradas pendentes de cancelamento de protecções. Kill switch deve flatten ou manter protecção até flatten.
-
-### Patch suggestion
+- **Risco:** perdas abertas relevantes não entram no halt; o bot pode continuar a abrir grids enquanto a carteira já ultrapassou os 3/6/10% em `NetLiquidation`.
+- **Cenário:** 5 grids abertas acumulam -9% unrealized, mas nenhuma trade fechou ainda.
+- **Fix:**
 ```python
-cancel_pending_entries(grid_id)
-if position_open:
-    await flatten_position(...)
+async def _current_net_liquidation(self) -> float | None:
+    account_values = await self._connection.request_executor.run(
+        "account_values",
+        "account_values:risk",
+        self._connection.ib.accountValues,
+        request_cost=1,
+    )
+    return self._extract_account_equity(account_values)
+
+def _loss_since(self, baseline: float, current: float) -> float:
+    if baseline <= 0:
+        return 1.0
+    return abs(min((current - baseline) / baseline, 0.0))
+
+async def _check_risk_limits(self) -> bool:
+    current_equity = await self._current_net_liquidation()
+    if current_equity is None:
+        self._entry_halt_reason = "equity_snapshot_unavailable"
+        return True
+    daily_loss = self._loss_since(self._equity_baselines["daily"], current_equity)
+    weekly_loss = self._loss_since(self._equity_baselines["weekly"], current_equity)
+    monthly_loss = self._loss_since(self._equity_baselines["monthly"], current_equity)
 ```
+- **Cross-refs:** agravado por FASE 10.1
 
-### Testes obrigatórios
-- teste com child orders activos
-- teste que garante que posição aberta nunca fica sem stop após kill switch
-- teste de integração com broker fake
-
-## [F-004] Ordens multi-módulo bypassam a state machine de grids
-
-**Severidade:** S5  
-**Categoria:** Order lifecycle  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`  
-**Linha(s):** 1930-2068, 2285-2465
-
-### Facto observado
-Para sinais de módulos novos, `main.py` pode chamar `submit_bracket_order()` directamente com `grid_id` sintético `multi_*`, sem criar grid persistida nem entrar na monitorização padrão.
-
-### Inferência
-Existe um segundo sistema de execução dentro do mesmo bot, sem recovery simétrico.
-
-### Porque isto é perigoso
-Posições podem existir no broker sem objecto persistido equivalente no motor.
-
-### Cenário de falha
-Uma ordem de `forex_breakout` ou `commodity_mr` entra. O processo reinicia. A posição aberta não pertence a nenhuma grid persistida.
-
-### Impacto operacional
-Reconciliação e dashboard ficam incompletos.
-
-### Impacto financeiro
-Posições órfãs escapam à gestão normal.
-
-### Correção recomendada
-Desactivar este caminho até haver um modelo persistente equivalente, ou integrá-lo numa state machine única.
-
-### Patch suggestion
-- criar `StrategyTradeRecord`
-- persistir e reconciliar trades não-grid
-- monitorização específica ou unificação com grids
-
-### Testes obrigatórios
-- teste de restart com trade multi-módulo aberto
-- teste de kill switch sobre trade não-grid
-- teste de reconciliação para `multi_*`
-
-## [F-005] Parent, stop e TP partilham o mesmo `OrderInfo`
-
-**Severidade:** S5  
-**Categoria:** Order tracking  
-**Confiança:** Alta  
-**Ficheiro(s):** `src/execution.py`, `main.py`  
-**Linha(s):** 182-204, 390-410, 776-816; 2304-2407
-
-### Facto observado
-`submit_bracket_order()` regista o mesmo objecto `OrderInfo` sob os três order IDs do bracket. `_on_order_status()` actualiza esse objecto único conforme chegam callbacks. `main.py` depois consulta o estado por `buy_order_id`, `sell_order_id` e `stop_order_id` como se fossem independentes.
-
-### Inferência
-O último callback recebido contamina o estado reportado das outras pernas.
-
-### Porque isto é perigoso
-O bot não sabe de forma fiável qual perna mudou de estado.
-
-### Cenário de falha
-O parent enche, depois o TP recebe `Submitted`. O estado global passa a `Submitted`, apagando a percepção de fill do parent.
-
-### Impacto operacional
-Monitorização de grids não consegue inferir correctamente nível `bought`, `sold` ou `stopped`.
-
-### Impacto financeiro
-Possibilidade de duplicate bookkeeping, fechos errados e perda de controlo sobre a posição.
-
-### Correção recomendada
-Estado por perna independente, com agregação por `bracket_id`.
-
-### Patch suggestion
+#### C02 — Gestão de grids activas actua sobre preço stale/fallback
+- **Ficheiro:** `main.py:2833`, `src/data_feed.py:836`
+- **Código:**
 ```python
-pending[parent_id] = ParentOrderInfo(...)
-pending[stop_id] = StopOrderInfo(...)
-pending[tp_id] = TargetOrderInfo(...)
-brackets[bracket_id] = BracketInfo(parent_id, stop_id, tp_id, ...)
+contract = build_contract(spec)
+current_price = await self._data_feed.get_current_price(contract)
+
+if current_price is not None:
+    ...
+    should_recenter = self._grid_engine.should_recenter(grid, current_price)
 ```
+```python
+if _valid_price(ticker.close):
+    snapshot = {"price": price, "source": "close", "fresh": False}
+...
+snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
+```
+- **Risco:** grids podem ser recentradas, respaced e reenviadas com `close` antiga ou preço de `yfinance`, gerando ordens fora do mercado real.
+- **Cenário:** IB fica sem `last/bid/ask`, o código cai para `close` ou `yfinance` e recenteriza uma grid ainda activa.
+- **Fix:**
+```python
+price_snapshot = await self._data_feed.get_current_price_details(contract)
+if not price_snapshot.get("fresh"):
+    logger.warning(
+        "Grid %s: ajustamento dinâmico ignorado por preço stale (%s).",
+        grid.id,
+        price_snapshot.get("source"),
+    )
+    return
+current_price = float(price_snapshot["price"])
+```
+- **Cross-refs:** agravado por FASE 11 e FASE 12
+
+### 🟠 ALTO (9)
+#### H01 — Dependências não reproduzíveis e ambiente actual incompleto
+- **Ficheiro:** `requirements.txt:1`
+- **Código:**
+```text
+ib_insync>=0.9.86
+pandas>=2.0.0
+...
+pytest>=7.0.0
+yfinance>=0.2.0
+```
+- **Risco:** deploys diferentes activam caminhos diferentes; neste ambiente faltam `ib_insync`, `yfinance`, `pytest` e `mypy`, e a validação pedida não é repetível.
+- **Cenário:** o bot arranca num venv “quase igual”, mas com pacote ausente ou versão major diferente.
+- **Fix:**
+```bash
+python -m pip install ib_insync==0.9.86 yfinance==0.2.66 pytest==8.4.2 pytest-asyncio==1.2.0 pytest-timeout==2.4.0 mypy==1.18.2
+python -m pip freeze > requirements.lock
+python -c "import ib_insync, yfinance, pandas_market_calendars, pytest"
+```
+- **Cross-refs:** H04
+
+#### H02 — Pacing violation espera 60 s; IB pede backoff muito mais conservador
+- **Ficheiro:** `src/ib_requests.py:200`
+- **Código:**
+```python
+if self._is_pacing_violation(exc):
+    delay = 60.0
+    self._logger.warning(
+        "Violacao de pacing do IB detectada em %s. Espera forcada de 60 s antes do retry.",
+        operation_name,
+    )
+```
+- **Risco:** depois de error 162 o processo pode continuar a insistir cedo demais e contaminar o resto do dia com rate limiting.
+- **Cenário:** vários `reqHistoricalData` seguidos batem no limite e o loop volta a pedir dados um minuto depois.
+- **Fix:**
+```python
+if self._is_pacing_violation(exc):
+    delay = 600.0
+    self._logger.warning(
+        "Pacing violation em %s. Cooldown forçado de 600 s antes do retry.",
+        operation_name,
+    )
+```
+- **Cross-refs:** FASE 12.1
+
+#### H03 — Mapeamento de erros IB é parcial e mostly log-only
+- **Ficheiro:** `src/data_feed.py:352`
+- **Código:**
+```python
+if error_code in {1100, 1102, 2104, 2106, 354, 10197, _IB_PACING_ERROR_CODE}:
+    logger.warning("Codigo IB %d: %s", error_code, error_string)
+```
+- **Risco:** restauro de conectividade, `order rejected`, `not connected` e `orderId in use` não mudam estado nem activam safe mode.
+- **Cenário:** TWS perde sessão e volta com `1101`; o bot não força resubscribe/reconcile completo.
+- **Fix:**
+```python
+IB_ERROR_ACTIONS = {
+    1100: "safe_mode",
+    1101: "resubscribe_and_reconcile",
+    1102: "verify_and_resume",
+    162: "cooldown",
+    200: "skip_symbol",
+    201: "mark_grid_failed",
+    202: "sync_cancelled",
+    502: "retry_not_connected",
+    504: "retry_not_connected",
+    10147: "idempotency_violation",
+}
+action = IB_ERROR_ACTIONS.get(error_code)
+if action is not None:
+    self._handle_ib_error_action(action, error_code, error_string)
+```
+- **Cross-refs:** H06, H07
+
+#### H04 — Market-hours ainda depende de fallback perigoso e janelas FX/FUT em UTC fixo
+- **Ficheiro:** `src/market_hours.py:17`, `src/market_hours.py:186`
+- **Código:**
+```python
+try:
+    from pandas_market_calendars import get_calendar
+except ImportError:
+    get_calendar = None
+
+SCHEDULES = {
+    "FOREX": (None, "22:00", "22:00"),
+    "FUT": (None, "23:00", "22:00"),
+}
+```
+- **Risco:** qualquer drift de ambiente activa fallback silencioso; além disso, FX/FUT continuam dependentes de UTC hardcoded em vez de timezone/local session rules.
+- **Cenário:** manutenção/deploy sem `pandas_market_calendars`, ou mudança de DST/pausa CME.
+- **Fix:**
+```python
+from zoneinfo import ZoneInfo
+
+if get_calendar is None:
+    raise RuntimeError("pandas_market_calendars é obrigatório para session gating")
+
+_CT = ZoneInfo("America/Chicago")
+now_ct = now.astimezone(_CT)
+maintenance_start = time(17, 0)
+maintenance_end = time(18, 0)
+```
+- **Cross-refs:** H01
+
+#### H05 — Pre-trade gate não valida sessão, frescura, NaN, notional nem margem
+- **Ficheiro:** `src/risk_manager.py:854`
+- **Código:**
+```python
+symbol: str = order_params.get("symbol", "UNKNOWN")
+entry_price: float = order_params.get("entry_price", 0.0)
+stop_price: float | None = order_params.get("stop_price", None)
+...
+current_grids: int = order_params.get("current_grids", 0)
+```
+- **Risco:** uma ordem pode ser aprovada com dados stale, preço não finito, símbolo fora da watchlist ou notional acima do pretendido.
+- **Cenário:** `entry_price=float("nan")` ou `session_ok=False` entram em `order_params`, mas não são rejeitados explicitamente aqui.
+- **Fix:**
+```python
+if not bool(order_params.get("session_ok", False)):
+    rejection_reasons.append("sessao_nao_elegivel")
+if not bool(order_params.get("data_fresh", False)):
+    rejection_reasons.append("dados_stale")
+if not math.isfinite(entry_price) or entry_price <= 0:
+    rejection_reasons.append("preco_invalido")
+notional = entry_price * max(position_size, 0)
+if notional > float(order_params.get("max_notional", float("inf"))):
+    rejection_reasons.append("notional_excedido")
+```
+- **Cross-refs:** C02
+
+#### H06 — Estado corrompido não recupera do `.bak` e o arranque continua vazio
+- **Ficheiro:** `src/grid_engine.py:528`, `src/grid_engine.py:596`, `main.py:1958`
+- **Código:**
+```python
+if state_path.exists():
+    shutil.copy2(str(state_path), str(backup_path))
+...
+except (json.JSONDecodeError, OSError) as exc:
+    logger.error("Erro ao ler ficheiro de estado %s: %s", state_path, exc)
+    raise
+```
+```python
+except Exception as exc:
+    logger.error("Erro ao carregar estado de grids: %s — a iniciar sem grids.", exc)
+```
+- **Risco:** um `grids_state.json` truncado perde tracking local; o bot prossegue desalinhado do broker.
+- **Cenário:** disco cheio ou crash a meio de escrita deixa JSON inválido e o processo recomeça “sem grids”.
+- **Fix:**
+```python
+except (json.JSONDecodeError, OSError) as exc:
+    if backup_path.exists():
+        logger.warning("Estado corrompido; a recuperar de %s", backup_path)
+        shutil.copy2(str(backup_path), str(state_path))
+        with state_path.open("r", encoding="utf-8") as f:
+            data = json.load(f)
+    else:
+        raise
+```
+```python
+except Exception as exc:
+    logger.critical("Falha ao carregar estado persistido: %s", exc)
+    raise
+```
+- **Cross-refs:** agravado por FASE 12.4
+
+#### H07 — Falta exclusão mútua de instância e `client_id` default é partilhado
+- **Ficheiro:** `config.py:77`
+- **Código:**
+```python
+client_id: int = Field(
+    default=1,
+    description="ID do cliente para a ligacao IB",
+)
+```
+- **Risco:** duas instâncias podem partilhar `clientId` e ficheiros de estado/log, causando disconnects silenciosos e corrupção cruzada.
+- **Cenário:** o operador arranca uma segunda cópia no mesmo host para “testar” um ajuste.
+- **Fix:**
+```python
+import os
+
+lock_path = self._config.data_dir / "bot.lock"
+self._lock_fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+os.write(self._lock_fd, str(self._config.ib.client_id).encode("utf-8"))
+```
+- **Cross-refs:** agravado por FASE 12.4
+
+#### H08 — A suite de testes não é executável no ambiente auditado
+- **Ficheiro:** `requirements.txt:9`
+- **Código:**
+```text
+pytest>=7.0.0
+pytest-asyncio>=0.23.0
+pytest-timeout>=2.2.0
+```
+- **Risco:** cobertura existe em disco, mas não pôde ser validada; isso reduz a confiança em qualquer release/local debug.
+- **Cenário:** um bug regressa e ninguém repara porque o CI/local nem sequer consegue recolher testes.
+- **Fix:**
+```bash
+python -m pip install pytest pytest-asyncio pytest-timeout
+python -m pytest --collect-only
+python -m pytest -q
+```
+- **Cross-refs:** M08
+
+#### H09 — Dashboard mostra equity “estimada” sem unrealized e sem comando de emergência
+- **Ficheiro:** `dashboard/helpers.py:254`, `dashboard/app.py:249`, `dashboard/app.py:392`
+- **Código:**
+```python
+estimated_equity = capital if capital is not None else None
+if estimated_equity is None and metrics.get("initial_capital") is not None:
+    estimated_equity = float(metrics["initial_capital"]) + total_pnl
+```
+```python
+metrics[1].metric("Equity estimada", _fmt_eur(kpis.get("estimated_equity")))
+...
+["pause", "resume", "reconcile_now", "export_snapshot"]
+```
+- **Risco:** a UI pode parecer saudável enquanto a carteira tem perdas abertas; além disso, não há botão de `emergency_stop`/`reduce_only`.
+- **Cenário:** realized PnL positivo, unrealized PnL fortemente negativo, operador confia no painel.
+- **Fix:**
+```python
+unrealized_pnl = float(metrics.get("unrealized_pnl") or 0.0)
+estimated_equity = (capital + unrealized_pnl) if capital is not None else None
+return {
+    ...,
+    "unrealized_pnl": unrealized_pnl,
+    "estimated_equity": estimated_equity,
+}
+```
+```python
+metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
+```
+- **Cross-refs:** C01
+
+### 🟡 MÉDIO (9)
+| ID | Ficheiro:Linha | Problema | Fix |
+|---|---|---|---|
+| M01 | `requirements.txt:9` | Gate de type-check não existe na prática; `mypy` não corre neste ambiente. | Instalar `mypy`, adicionar job de CI e bloquear merge se `python -m mypy src main.py --ignore-missing-imports` falhar. |
+| M02 | `src/risk_manager.py:67` | `datetime.utcnow` em defaults de dataclass cria timestamps naive/deprecated. | Trocar por `datetime.now(timezone.utc)` em todos os defaults/now calls de risco. |
+| M03 | `src/risk_manager.py:102` | Só há limite de correlação; falta cap de gross exposure/concentração/notional agregado. | Adicionar `max_gross_notional`, `max_symbol_notional`, `max_sector_notional` no pre-trade gate. |
+| M04 | `src/signal_engine.py:73` | Não existe contrato de sinal único para todos os módulos. | Introduzir `SignalPayload`/Pydantic único e validar todos os módulos contra esse schema. |
+| M05 | `main.py:2292` | Estratégias multi-instrumento ficam em modo auditável e emitem payloads incompatíveis com brackets (`SELL_PUT`, preços 0). | Separar “audit-only” de “executable”, ou normalizar para um contrato próprio de execução. |
+| M06 | `src/grid_engine.py:32` | Estado/reconciliação é stringly-typed e sem ORPHANED explícito. | Criar enums formais para `grid_status` e `reconciliation_state`, com tabela de transições. |
+| M07 | `src/grid_engine.py:533` | Há `version: 1`, mas não há migração formal entre schemas antigos/novos. | Introduzir `SCHEMA_VERSION`, `migrate_state()` e testes de backward compatibility. |
+| M08 | `main.py:299` | `bot.log` não roda e o heartbeat é só local-file; sem dead-man switch externo. | Usar `RotatingFileHandler`/retenção e expor heartbeat para watchdog externo. |
+| M09 | `main.py:2898` | Faltam regressões para drawdown unrealized, recenter stale, recovery `.bak` e spread/gap guards. | Acrescentar testes dedicados nesses quatro paths antes de qualquer uso prolongado em paper. |
+
+### 🟢 BAIXO (2)
+| ID | Ficheiro:Linha | Problema | Fix |
+|---|---|---|---|
+| L01 | `src/execution.py:1112` | `except Exception`/`except BaseException` reduzem granularidade de triage, apesar de falharem fechado na maioria dos casos. | Capturar excepções específicas (`TimeoutError`, `OSError`, erros IB) e manter logs distintos. |
+| L02 | `dashboard/app.py:1`, `dashboard 2/app.py:1` | Há duas árvores de dashboard no repo, o que convida drift e dúvidas operacionais. | Eleger uma única fonte de verdade e arquivar/remover a duplicada. |
+
+## Resiliência (Fase 12)
+| Cenário | Coberto? | Notas |
+|---|---|---|
+| TWS crasha a meio do dia | Parcial | Há reconnect, mas faltam acções explícitas para 1101/2110 e resubscribe completo. |
+| Internet cai 5 min e volta | Parcial | `ensure_connected()` ajuda, mas não há reconciliação total garantida em todos os paths. |
+| Internet cai 2 horas | Não | Sem política de safe mode prolongado/flatten/replay. |
+| Disco enche | Não | Escritas de estado/log podem falhar; não há verificação prévia de espaço. |
+| Processo OOM killed | Não | Sem supervisor/dead-man switch externo. |
+| Clock adianta 5 min | Não | Não há detecção de drift/NTP health. |
+| DNS falha parcial (IB ok, yfinance falha) | Parcial | Existe fallback, mas sem health gate por provider. |
+| IB retorna 0 barras | Sim | Símbolo é saltado quando `bars_df.empty`. |
+| Barras com volume = 0 | Não | Sem guard clause forte antes de indicadores/sinais. |
+| Quote com bid=0 ask=0 | Parcial | Pode cair para `close`/`yfinance`; isso agrava `C02`. |
+| Spread > 5% do preço | Não | Não existe spread guard explícito no pre-trade gate. |
+| yfinance retorna dados de outro símbolo | Não | Sem verificação de source/symbol integrity. |
+| Historical bars adjusted vs unadjusted mismatch | Não | Sem normalização/corporate actions awareness. |
+| Circuit breaker (Level 1/2/3) | Não | Sem path de halt/circuit breaker. |
+| Trading halt num símbolo | Não | Não há mapeamento de halt para bloquear gestão/execução. |
+| Gap overnight > 10% | Não | Sem guard específico para gap extremo. |
+| Stock split executado | Não | Sem detecção de split para limpar sinais/ATR/kill switch. |
+| Flash crash (5% em 1 min, recupera) | Não | Sem circuit breaker interno por volatilidade extrema. |
+| State file = 0 bytes | Não | `load_state()` levanta e o arranque continua “sem grids”. |
+| State file JSON inválido | Não | Mesmo problema; `.bak` é ignorado no load. |
+| State file de versão anterior | Parcial | Só existem defaults mínimos, não migração real. |
+| Grid no state que IB não conhece | Parcial | Há `orphan/mismatch`, mas sem enum/repair loop forte. |
+| Duas instâncias com mesmo state file | Não | Sem lock de processo nem lock do ficheiro. |
+
+## Testes em falta
+- `P0` — Kill switch baseado em equity/unrealized e baselines diário/semanal/mensal.
+- `P0` — Recenter/respacing de grid com `price_fresh=False`, `source=close` e `source=yfinance`.
+- `P0` — Recovery de `grids_state.json.bak` após JSON inválido / ficheiro 0 bytes.
+- `P1` — Spread guard, gap guard, halt/circuit-breaker e corporate action/split.
+- `P1` — Multi-instância (`client_id` duplicado e state-file lock).
+- `P1` — Backward compatibility de schema com `migrate_state()`.
+- `P2` — Dashboard: unrealized PnL e comandos de emergência.
+
+## Plano de acção
+### P0 — Antes de QUALQUER execução
+- Corrigir `C01`: kill switches por equity real (`NetLiquidation`) com baselines por período.
+- Corrigir `C02`: grids activas só podem reagir a quotes `fresh=True`.
+- Corrigir `H06`: recuperar de `.bak` e falhar fechado se o estado persistido estiver corrompido.
+- Corrigir `H07`: lock de instância + `client_id` único + state-file lock.
+
+### P1 — Antes de paper trading validado
+- Corrigir `H03` e `H04`: mapping completo de erros IB e market-hours fail-closed.
+- Corrigir `H05`: pre-trade gate determinístico com sessão, staleness, NaN/notional/margem.
+- Corrigir `H09`: dashboard com unrealized PnL e comando de emergência.
+- Tornar a suite executável no ambiente alvo e adicionar regressões `P0`.
+
+### P2 — Durante paper trading (1 mês)
+- Formalizar enums/transições da state machine.
+- Adicionar migração de schema e testes de restart/kill -9.
+- Adicionar caps de concentração/gross exposure.
+- Implementar rotação de logs, watchdog externo e alarmes de heartbeat stale.
+
+### P3 — Critérios para live trading
+- [ ] Zero CRÍTICOS
+- [ ] Kill switches testados em paper com unrealized PnL real
+- [ ] Reconciliação testada com crash simulado e recovery por `.bak`
+- [ ] DST / holidays / FX / futures testados em datas de transição reais
+- [ ] State persistence validado (`kill -9` + restart)
+- [ ] Heartbeat activo com monitor externo
+- [ ] 30+ dias paper sem duplicação nem state drift
+- [ ] Score ≥ 70/100
+- [ ] `LIVE_TRADING_CONFIRMED` com guard multi-layer
+- [ ] Regulatory basics implementados
+
+## Score
+| Área | Peso | Resultado |
+|---|---|---|
+| Problemas CRÍTICOS | 25 | `15/25` |
+| Testes | 15 | `12/15` |
+| Separação responsabilidades | 10 | `7/10` |
+| Risk controls | 15 | `6/15` |
+| Market hours DST | 10 | `0/10` |
+| Logging | 8 | `6/8` |
+| Resiliência Fase 12 | 10 | `3/10` |
+| Integridade numérica | 7 | `4/7` |
+| **Total** | **100** | **53/100** |
+
+## Self-check
+- [x] Fase 1: Inventário, deps, imports, leitura core, types, dead code, configs
+- [x] Fase 2: Contracts, price, staleness, rate limits, async, reconnect, fallback, concurrency, corporate actions
+- [x] Fase 3: UTC/DST, sessões, holidays, forex/futures, arranque, edge cases temporais
+- [x] Fase 4: Kill switches, Kelly, state machine, pre-order, resets, paper/live, exposure
+- [x] Fase 5: Contrato, confidence, preços, context, registry, watchlist, end-to-end, incompletas
+- [x] Fase 6: Bracket, state machine, IDs, persistência, reconciliação, IB status, races, backward compat
+- [x] Fase 7: Loop, lógica, config, logging, memory, heartbeat, multi-instância
+- [x] Fase 8: Cobertura, testes em falta, qualidade
+- [x] Fase 9: Credenciais, live guard, errors, shutdown, deployment, disk
+- [x] Fase 10: Dashboard
+- [x] Fase 11: Numérica, data flow, error propagation, timezones
+- [x] Fase 12: Infra, dados, mercado, estado (chaos scenarios)
+- [x] Fase 13: PDT, wash sale, margin, short
+- [x] Fase 14: Scoring, relatório
 
-### Testes obrigatórios
-- callbacks fora de ordem por perna
-- fill do parent com children ainda `Submitted`
-- TP fill sem contaminar parent
-
-## [F-006] Restart repõe capital do `.env` e apaga equity real
-
-**Severidade:** S4  
-**Categoria:** Risk state / recovery  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`  
-**Linha(s):** 369-379, 543-585, 1604-1619, 2385-2443
-
-### Facto observado
-`_capital` nasce do capital inicial configurado. Em runtime é ajustado por P&L realizado, mas no arranque não é reconstruído a partir de métricas, trade log ou broker equity.
-
-### Inferência
-Após restart, o sizing regressa ao capital inicial configurado.
-
-### Porque isto é perigoso
-O motor de risco deixa de reflectir a realidade da conta.
-
-### Cenário de falha
-A conta perdeu 8%. O processo reinicia. O bot volta a dimensionar como se nada tivesse acontecido.
-
-### Impacto operacional
-Kill switches, sizing e métricas tornam-se inconsistentes.
-
-### Impacto financeiro
-Oversizing em drawdown e risco agregado acima do esperado.
-
-### Correção recomendada
-Restaurar equity/capital de uma fonte fiável no arranque, preferencialmente do broker.
-
-### Patch suggestion
-- ler `NetLiquidation` do broker no preflight
-- fallback para `metrics.json` validado
-- último fallback: recomputar de `trades_log.json`
-
-### Testes obrigatórios
-- restart com P&L acumulado
-- sizing após restart
-- kill switch pós-restart
-
-## [F-007] Retries de submissão de bracket não são idempotentes
-
-**Severidade:** S4  
-**Categoria:** Idempotência  
-**Confiança:** Alta  
-**Ficheiro(s):** `src/execution.py`, `src/ib_requests.py`, `tests/test_execution.py`  
-**Linha(s):** 354-441; 161-234; 262-295
-
-### Facto observado
-O executor reexecuta a submissão inteira em caso de excepção. O submit gera novos order IDs e faz novos `placeOrder()`. Os testes aceitam como normal múltiplas chamadas de `placeOrder()` antes do “sucesso”.
-
-### Inferência
-Se a primeira tentativa foi parcialmente aceite pelo broker, o retry pode duplicar ordens.
-
-### Porque isto é perigoso
-Falhas transitórias em ordens são precisamente onde a idempotência é obrigatória.
-
-### Cenário de falha
-Parent e stop enviados, exception antes do target. Retry cria outro parent/stop/target.
-
-### Impacto operacional
-O tracking local já é fraco; com retries deixa de ter relação unívoca com o broker.
-
-### Impacto financeiro
-Exposição duplicada ou sobreposta.
-
-### Correção recomendada
-Introduzir chave idempotente por símbolo/grid/nível e consultar broker state antes de reemitir.
-
-### Patch suggestion
-- persistir `submission_key`
-- antes de retry, procurar ordens abertas correspondentes
-- só reemitir se não houver evidência de submissão parcial já aceite
-
-### Testes obrigatórios
-- exception após parent enviado
-- retry com ordem já existente
-- garantia de no máximo um bracket vivo por nível
-
-## [F-008] Criação de grid não é atómica
-
-**Severidade:** S4  
-**Categoria:** Atomicidade  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`  
-**Linha(s):** 2197-2245
-
-### Facto observado
-A grid é criada e persistida antes de todas as submissões de níveis. Em falha intermédia, a grid continua activa com níveis sem ordens reais.
-
-### Inferência
-Há estados intermédios que o sistema trata como válidos.
-
-### Porque isto é perigoso
-O estado local deixa de corresponder à exposição real.
-
-### Cenário de falha
-Níveis 1-2 submetidos, nível 3 falha, grid continua `active` com 5 níveis.
-
-### Impacto operacional
-Recentring, monitorização e métricas trabalham sobre uma grid incompleta.
-
-### Impacto financeiro
-Risco agregado real diferente do risco modelado.
-
-### Correção recomendada
-Staging + commit ou rollback integral.
-
-### Patch suggestion
-- `status="staging"` no create
-- rollback das ordens já emitidas se falhar um nível crítico
-- promover a `active` só depois da fase de submit
-
-### Testes obrigatórios
-- falha no nível intermédio
-- rollback integral
-- restart com grid em staging/falhada
-
-## [F-009] `manual_pause` pára monitorização e risco, não só entradas
-
-**Severidade:** S4  
-**Categoria:** Lifecycle / operations  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`  
-**Linha(s):** 1680-1685
-
-### Facto observado
-Quando `_manual_pause` está activo, `_main_cycle()` retorna logo no início do ciclo.
-
-### Inferência
-Durante a pausa o bot deixa de fazer mais do que processar comandos.
-
-### Porque isto é perigoso
-Pausa segura deveria bloquear novas entradas, não desligar a vigilância do estado existente.
-
-### Cenário de falha
-Grid já aberta recebe fill num child enquanto o bot está pausado. O estado local não acompanha.
-
-### Impacto operacional
-Estado local e broker divergem progressivamente.
-
-### Impacto financeiro
-Risco real segue vivo, mas o motor local não reage.
-
-### Correção recomendada
-Permitir pause apenas para criação de novas posições. Monitorização, heartbeat, reconciliação e kill switches têm de continuar.
-
-### Patch suggestion
-- mover o guard de pause para os pontos de entrada de novos trades
-- manter `_monitor_active_grids()` e `_check_risk_limits()` activos
-
-### Testes obrigatórios
-- pause com grid aberta
-- zero novas entradas durante pause
-- heartbeat e monitorização continuam durante pause
-
-## [F-010] Reconciliação age sobre leituras vazias transitórias
-
-**Severidade:** S4  
-**Categoria:** Reconciliation  
-**Confiança:** Média  
-**Ficheiro(s):** `main.py`  
-**Linha(s):** 807-815, 1289-1365
-
-### Facto observado
-`_fetch_positions_with_retry()` pode terminar devolvendo uma lista vazia. A reconciliação trata `qty == 0` como facto e marca grids como `ghost`, pausando-as e cancelando ordens.
-
-### Inferência
-Uma leitura inconclusiva pode disparar acções destrutivas.
-
-### Porque isto é perigoso
-Reconciliation should fail closed. Aqui falha destrutivamente.
-
-### Cenário de falha
-IB está lento, responde vazio a três tentativas. O bot apaga/pausa estado válido.
-
-### Impacto operacional
-Self-inflicted mismatches.
-
-### Impacto financeiro
-Pode remover gestão activa de posições reais.
-
-### Correção recomendada
-Distinguir “sem posições confirmadas” de “não consegui observar posições”.
-
-### Patch suggestion
-- `positions_status = confirmed | unknown | failed`
-- acções destrutivas só em `confirmed`
-
-### Testes obrigatórios
-- retries vazios transitórios
-- reconciliação com estado `unknown`
-- zero cancelamentos quando a leitura é inconclusiva
-
-## [F-011] `current_price` “live” pode ser apenas o último close
-
-**Severidade:** S3  
-**Categoria:** Market data staleness  
-**Confiança:** Alta  
-**Ficheiro(s):** `src/data_feed.py`  
-**Linha(s):** 842-847, 1239-1265
-
-### Facto observado
-`get_current_price()` aceita `ticker.close` como valor actual quando `last` falha. O fallback final ainda pode usar `last_close`.
-
-### Inferência
-O nome da função promete mais do que entrega.
-
-### Porque isto é perigoso
-Preço stale pode alimentar regime, sinal e sizing.
-
-### Cenário de falha
-Mercado moveu fortemente, snapshot falhou, `ticker.close` da sessão anterior é tratado como preço actual.
-
-### Impacto operacional
-Logs e métricas parecem live quando não são.
-
-### Impacto financeiro
-Entradas e stops desfasados do mercado real.
-
-### Correção recomendada
-Separar `price_source` e bloquear novas entradas quando a fonte não for fresca.
-
-### Patch suggestion
-- `current_price`, `price_source`, `price_timestamp`
-- se `price_source in {"close", "last_close"}` -> não abrir novas posições
-
-### Testes obrigatórios
-- snapshot com só `close`
-- bid/ask válidos sem `last`
-- bloqueio de entrada por stale source
-
-## [F-012] `ensure_connected()` e `_auto_reconnect()` podem sobrepor-se
-
-**Severidade:** S3  
-**Categoria:** Async / reconnect  
-**Confiança:** Média  
-**Ficheiro(s):** `src/data_feed.py`  
-**Linha(s):** 311-324, 350-423
-
-### Facto observado
-Disconnect callback agenda `_auto_reconnect()`. Em paralelo, o loop chama `ensure_connected()` e este também pode chamar `connect()`.
-
-### Inferência
-Há concorrência não serializada na gestão da ligação IB.
-
-### Porque isto é perigoso
-Estados de ligação concorrentes são difíceis de reproduzir e devastadores em produção.
-
-### Cenário de falha
-Disconnect chega no meio do ciclo; `_auto_reconnect()` e `ensure_connected()` tentam reconectar quase em simultâneo.
-
-### Impacto operacional
-Client state, callbacks e `OrderManager` podem divergir.
-
-### Impacto financeiro
-Janela de execução com percepção errada de conectividade e risco de replay/retry inadequado.
-
-### Correção recomendada
-Serializar qualquer `connect()` com um lock único e state machine explícita.
-
-### Patch suggestion
-- `self._connect_lock = asyncio.Lock()`
-- `connection_state = DISCONNECTED | CONNECTING | CONNECTED | RECONNECTING`
-
-### Testes obrigatórios
-- callback de disconnect + ensure_connected concorrentes
-- reconnect interrompido por shutdown
-- reconnect repetido com lock
-
-## [F-013] Cache keys fracas podem contaminar instrumentos
-
-**Severidade:** S3  
-**Categoria:** Caching / correctness  
-**Confiança:** Média  
-**Ficheiro(s):** `src/data_feed.py`  
-**Linha(s):** 693, 808, 914
-
-### Facto observado
-As chaves de cache usam essencialmente o símbolo e poucos parâmetros.
-
-### Inferência
-Instrumentos homónimos em secTypes/exchanges distintos podem partilhar dados em cache.
-
-### Porque isto é perigoso
-Erro silencioso e plausível, difícil de detectar.
-
-### Cenário de falha
-Mesmo símbolo em stock e noutro instrumento reutiliza cache.
-
-### Impacto operacional
-Diagnóstico difícil e decisões aparentemente consistentes mas erradas.
-
-### Impacto financeiro
-Sinais e sizing sobre instrumento economicamente incorrecto.
-
-### Correção recomendada
-Usar chave composta por contrato qualificado completo.
-
-### Patch suggestion
-`f"{secType}:{symbol}:{exchange}:{currency}:{duration}:{bar_size}:{what_to_show}:{use_rth}"`
-
-### Testes obrigatórios
-- símbolos homónimos em secTypes diferentes
-- cache separada por `whatToShow`
-- cache separada por exchange
-
-## [F-014] Roll de futuros é heurístico e não exchange-correct
-
-**Severidade:** S3  
-**Categoria:** Contracts / roll  
-**Confiança:** Média  
-**Ficheiro(s):** `src/contracts.py`  
-**Linha(s):** 254-271
-
-### Facto observado
-`_next_futures_expiry()` usa listas fixas de meses e heurística de data.
-
-### Inferência
-O contrato seleccionado não é necessariamente o front month real nem o mais líquido.
-
-### Porque isto é perigoso
-Produtos diferentes rolam por regras diferentes.
-
-### Cenário de falha
-Na janela de rollover, o bot escolhe um contrato já seco ou demasiado perto da expiração.
-
-### Impacto operacional
-Qualificação, dados e fills degradam.
-
-### Impacto financeiro
-Pior execução ou trading no contrato errado.
-
-### Correção recomendada
-Resolver front month por `reqContractDetails` e liquidez observada.
-
-### Patch suggestion
-- listar contract details válidos
-- escolher expiração futura com melhor volume/open interest
-
-### Testes obrigatórios
-- datas em rollover
-- regras diferentes por produto
-- expiração futura válida
-
-## [F-015] Correlação não é guardrail central de portfolio
-
-**Severidade:** S2  
-**Categoria:** Risk integration  
-**Confiança:** Alta  
-**Ficheiro(s):** `main.py`, `src/risk_manager.py`, `src/intl_etf_mr.py`  
-**Linha(s):** 391-404, 1949-1970; 102-173; 68-76
-
-### Facto observado
-`check_correlation_limit()` existe, mas o risco central no caminho dos novos módulos não o usa; `risk_mgr` é mesmo descartado num dos fluxos.
-
-### Inferência
-A correlação é um check local, não um cap global consistente.
-
-### Porque isto é perigoso
-O portfolio pode concentrar risco económico equivalente por estratégias diferentes.
-
-### Cenário de falha
-Uma estratégia já expôs o portfolio a equities US. Outra abre nova posição correlacionada sem barreira central.
-
-### Impacto operacional
-Relatório de risco aparenta ser melhor do que é.
-
-### Impacto financeiro
-Drawdowns sincronizados mais fortes.
-
-### Correção recomendada
-Aplicar correlação na validação central de ordens.
-
-### Patch suggestion
-- integrar returns map/open positions em `validate_order_full()`
-- chamar check central para todos os módulos relevantes
-
-### Testes obrigatórios
-- estratégias diferentes com activos correlacionados
-- rejeição central por correlação
-- regressão do módulo `intl_etf_mr`
-
-## [F-016] A suite passa enquanto assume semântica insegura
-
-**Severidade:** S2  
-**Categoria:** Test realism  
-**Confiança:** Alta  
-**Ficheiro(s):** `tests/test_execution.py`, `tests/test_integration.py`, `tests/test_main_audit.py`  
-**Linha(s):** 262-295; 712-749; 187-202, 234-338
-
-### Facto observado
-Há testes que aceitam retries com múltiplas chamadas de submissão como normais, testes que tratam “kill switch = fechar grids localmente” como sucesso, e testes de `pause` que não verificam semântica operacional.
-
-### Inferência
-O CI está a validar vários comportamentos errados como corretos.
-
-### Porque isto é perigoso
-Passar testes deixa de ser um sinal fiável de segurança.
-
-### Cenário de falha
-Uma mudança que preserva estas semânticas inseguras passa a suite sem resistência.
-
-### Impacto operacional
-Decisão de go/no-go fica contaminada.
-
-### Impacto financeiro
-Falhas mais caras não são interceptadas antes da produção.
-
-### Correção recomendada
-Reescrever testes em torno de invariantes operacionais reais, não de flags ou estados locais superficiais.
-
-### Patch suggestion
-- harness de broker fake com parent/child/partial fill/reconnect
-- matar testes que equiparam kill switch a “close local”
-
-### Testes obrigatórios
-- retry idempotente
-- kill switch com flatten broker-side
-- pause sem parar monitorização
-
-# 6. Contradições entre Documentação, Configuração e Código
-
-- `README.md` apresenta o sistema como “100% autónomo” e “sem intervenção humana”. O código contém módulos explicitamente faseados, integrações auditáveis e caminhos ainda incompletos.
-- A configuração `PAPER_TRADING=true` não impede arranque em contexto live. O nome é tranquilizador; o enforcement não existe.
-- `src/grid_engine.py` documenta `BEAR: 8 | SIDEWAYS: 7` em comentário/docstring, mas a implementação activa usa `BEAR: 4 | SIDEWAYS: 8`.
-- Os artefactos versionados em `data/bot.log` mostram execuções antigas com `Max grids: 5 | Posicoes max: 10`, enquanto a configuração actual usa outros valores. A repo mistura runtime history com código actual.
-- `get_current_price_live()` pode devolver `ticker.close` ou `last_close`. O nome promete preço live; a semântica real é degradada.
-- “Kill switch” sugere corte de risco. Os caminhos reais podem remover stops ou fechar apenas estado local.
-- A existência de `dashboard/` e `dashboard 2/` denuncia código legado não limpo.
-- A coexistência de múltiplos briefs finais duplicados (`CODEX_IMPLEMENTATION_BRIEF_FINAL*.md`) é sinal de patch archaeology, não de hardening limpo.
-
-# 7. Failure Modes Financeiros
-
-| Failure mode | Trigger | Impacto | Severidade | Deteção | Mitigação |
-|---|---|---|---|---|---|
-| Ordem real em contexto “paper” | Conta live ligada com `PAPER_TRADING=true` | Execução real não intencional | S5 | Hard check de conta no preflight | Bloqueio total em mismatch |
-| Kill switch mensal fecha só local | Drawdown mensal >= limite | Posição fica aberta no broker sem estado local | S5 | Reconciliar logo após kill switch | Flatten broker-side antes do close local |
-| Kill switch remove stop/tp | Limite diário/semanal com posições abertas | Exposição fica nua | S5 | Inspeção de open orders após kill switch | Cancelar só entradas ou flatten imediato |
-| Parent enviado sem children fiáveis | Exception/retry a meio do bracket | Posição sem protecção garantida | S5 | Simulação broker-side e verificação por perna | Idempotência + confirmação de children |
-| Tracking partilhado entre pernas | Callbacks fora de ordem | Estado local errado | S5 | Testes por perna/orderId | Modelo independente por perna |
-| Retry duplica bracket | Falha parcial na submissão | Exposição duplicada | S4 | Dedupe por broker/local key | Idempotência operacional |
-| Grid activa sem ordens completas | Falha num nível intermédio | Estado local não corresponde ao broker | S4 | Auditoria de níveis/order IDs | Staging + rollback |
-| Restart com capital antigo | Processo reinicia após perdas/ganhos | Sizing e kill switches errados | S4 | Comparar capital runtime vs broker | Restaurar equity real |
-| Pause interrompe vigilância | `manual_pause` com posições abertas | Local deixa de acompanhar fills | S4 | Heartbeat sem mudança + posições abertas | Pausa só em novas entradas |
-| Reconciliação destrutiva sobre dados vazios | IB lento devolve `[]` | Grids válidas marcadas ghost | S4 | Estado `unknown` separado | Fail-closed |
-| Preço stale gera sinal | Snapshot falha e cai para close | Regime, entry e sizing errados | S3 | `price_source` no payload | Bloquear novas entradas sem frescura |
-| Futuros no mês errado | Rollover e heurística fraca | Liquidez/fills degradados | S3 | Contract details/volume | Resolver front month dinamicamente |
-| Cache cruza instrumentos | Símbolos homónimos | Dados plausíveis mas errados | S3 | Testes por contrato qualificado | Chaves compostas |
-| Exposure leak entre estratégias | Correlação não central | Portfolio excessivamente concentrado | S2 | Agregação central de risco | Correlação no `RiskManager` |
-| Falha silenciosa com loop vivo | Logs e heartbeats continuam, sem garantias | Operador pensa que está tudo normal | S4 | Invariantes e alarmes por degraded mode | Estado operacional explícito |
-
-# 8. Gaps de Testes
-
-## unit
-
-- falta teste de tracking independente para parent, stop e target
-- falta teste de freshness/source do preço actual
-- falta teste de cache key por contrato qualificado
-- falta teste de account-mode mismatch bloqueante
-
-## integration
-
-- falta teste de kill switch com posição real aberta
-- falta teste de trade multi-módulo no restart
-- falta teste de pause com monitorização activa
-- falta teste de capital restaurado após restart
-
-## recovery
-
-- falta teste de crash a meio da criação de grid
-- falta teste de crash entre parent e children
-- falta teste de restart com estado parcial de ordens
-
-## broker simulation
-
-- falta simulação séria de partial fills
-- falta simulação de callbacks fora de ordem
-- falta simulação de reconnect a meio de bracket
-- falta simulação de cancel/replace
-
-## risk
-
-- falta teste central de correlação
-- falta teste de kill switch sem perda de protecção
-- falta teste de sizing após equity alterada e restart
-
-## persistence
-
-- falta teste de corrupção parcial de JSONs críticos
-- falta teste de escrita interrompida por crash
-- falta teste de schema drift no reload
-
-## concurrency
-
-- falta teste concorrente `ensure_connected()` vs `_auto_reconnect()`
-- falta teste de queue com comandos simultâneos
-- falta teste de shutdown com tarefas Telegram em curso
-
-# 9. Go-Live Blockers
-
-- `main.py:771-775, 927-935`  
-  `PAPER_TRADING=true` não bloqueia arranque ligado a conta live.
-
-- `main.py:2588-2621` e `src/execution.py:523-573`  
-  Kill switches diário e semanal podem cancelar stop-loss e take-profit sem flatten.
-
-- `main.py:2641-2669`  
-  Kill switch mensal fecha grids localmente sem prova de fecho broker-side.
-
-- `main.py:1930-2068`  
-  Ordens multi-módulo bypassam a state machine central e o recovery normal.
-
-- `src/execution.py:182-204, 390-410, 776-816`  
-  Tracking por perna do bracket é estruturalmente inválido.
-
-- `src/execution.py:354-441` e `src/ib_requests.py:161-234`  
-  Retries de submissão não são idempotentes.
-
-- `main.py:369-379, 543-585`  
-  Restart repõe capital do `.env`, não da equity real.
-
-# 10. Plano de Remediação Priorizado
-
-## imediato (24h)
-
-- bloquear arranque em qualquer mismatch paper/live
-- reescrever kill switches para actuarem sobre posições reais do broker
-- desactivar o caminho multi-módulo directo até ter persistência/recovery equivalentes
-- refactor do tracking de brackets para estado independente por perna
-- adicionar testes críticos para os quatro pontos acima
-
-## curto prazo
-
-- restaurar capital/equity real no arranque
-- introduzir idempotência operacional nas submissões
-- tornar a criação de grids atómica
-- separar `manual_pause` de monitorização/heartbeat/kill switches
-- endurecer reconciliação para leituras inconclusivas
-
-## médio prazo
-
-- suportar partial fills de forma real
-- serializar reconnect com lock e state machine explícita
-- enriquecer `current_price` com `price_source` e freshness
-- corrigir cache keys por contrato completo
-- substituir heurística de roll de futuros por resolução real do front month
-
-## obrigatório antes de live
-
-- harness de broker fake com parent/child/partial fill/reconnect
-- runbooks de incident response e recovery
-- reconciliação de arranque provada por teste
-- kill switches provados por teste end-to-end
-- remover todos os S5 e os S4 com impacto directo em ordens/risco
-
-## melhoria não bloqueante
-
-- limpar `dashboard 2/` e documentação duplicada
-- remover artefactos operacionais versionados em `data/`
-- reduzir warnings e deprecations para melhorar sinal forense
-- enriquecer heartbeat e dashboard com modos degradados explícitos
-
-# 11. Veredito Final
-
-**BLOQUEADO para live até correções obrigatórias**
-
-Justificação:
-- o sistema ainda não provou segregação paper/live
-- os kill switches não demonstram segurança financeira real
-- o tracking de bracket orders está estruturalmente errado
-- a submissão de ordens não é idempotente
-- o recovery de risco após restart não preserva equity real
-
-Em linguagem directa: isto ainda é um sistema que pode parecer robusto em demonstração e em CI, mas falhar exactamente nos incidentes que mais custam dinheiro real: mismatch de conta, reconnect no momento errado, kill switch mal implementado, retry parcial, e restart com estado financeiro errado.
-
-**Classificação operacional:**
-- Paper trading: **Apto para paper com reservas**
-- Live trading: **Não apto para live**
-
-## Checklist de Segurança para Avançar
-
-- [ ] reconciliação inicial com broker validada
-- [ ] kill switches provados por teste
-- [ ] bracket/stop/tp provados por teste
-- [ ] persistência crash-safe
-- [ ] recovery após restart validado
-- [ ] partial fills reconciliados corretamente
-- [ ] duplicate order prevention provada
-- [ ] market hours corretas por asset class
-- [ ] stale/NaN/incomplete data bloqueados
-- [ ] paper/live segregation inequívoca
-- [ ] risk caps agregados provados
-- [ ] logging suficiente para incident response
-- [ ] blockers S5 resolvidos
-- [ ] blockers S4 mitigados ou eliminados
