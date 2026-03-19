@@ -18,12 +18,15 @@ from __future__ import annotations
 
 import asyncio
 import atexit
+import hashlib
 import json
 import logging
 import math
 import os
 import signal
 import sys
+import tempfile
+import time
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -71,6 +74,7 @@ from src.commodity_mr import commodity_mr_signal
 from src.bond_mr_hedge import bond_mr_signal, check_defensive_rotation_trigger
 from src.options_premium import csp_signal, check_csp_exit
 from src.pre_trade_gate import build_pre_trade_gate, critical_inputs_are_finite
+from src.ib_requests import IBErrorPolicyDecision
 from src.risk_manager import RiskManager
 from src.grid_engine import GridEngine, Grid, GridLevel
 from src.execution import OrderManager, OrderStatus
@@ -114,6 +118,11 @@ _DATA_FILE_DEFAULTS: dict[str, dict[str, Any] | str] = {
 _RECONCILIATION_FETCH_ATTEMPTS = 3
 _RECONCILIATION_FETCH_DELAY_SECONDS = 5
 _INSTANCE_LOCK_FILENAME = "bot.instance.lock"
+
+
+def _get_broker_lock_root() -> Path:
+    """Directoria global para locks por contexto efectivo de broker."""
+    return Path(tempfile.gettempdir()) / "bot-trading-instance-locks"
 _EQUITY_BASELINE_KEYS = ("daily", "weekly", "monthly")
 
 
@@ -584,6 +593,8 @@ class TradingBot:
         self._last_equity_snapshot: float | None = None
         self._instance_lock_fd: int | None = None
         self._instance_lock_path: Path = config.data_dir / _INSTANCE_LOCK_FILENAME
+        self._broker_context_lock_fd: int | None = None
+        self._broker_context_lock_path: Path = self._build_broker_context_lock_path()
 
         # --- Watchlist ---
         self._watchlist: list[InstrumentSpec] = get_watchlist_specs()
@@ -638,10 +649,83 @@ class TradingBot:
                 "Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env."
             )
 
+    def _effective_ib_port(self) -> int:
+        """Resolve a porta efectiva do broker para fins de exclusao multi-instância."""
+        ib_cfg = self._config.ib
+        port = int(getattr(ib_cfg, "port", 0) or 0)
+        if port:
+            return port
+
+        paper_trading = bool(getattr(ib_cfg, "paper_trading", True))
+        use_gateway = bool(getattr(ib_cfg, "use_gateway", False))
+        if paper_trading and use_gateway:
+            return 4002
+        if paper_trading and not use_gateway:
+            return 7497
+        if not paper_trading and use_gateway:
+            return 4001
+        return 7496
+
+    def _broker_context_payload(self) -> dict[str, Any]:
+        """Contexto efectivo do broker usado para lock operacional global."""
+        ib_cfg = self._config.ib
+        return {
+            "host": str(getattr(ib_cfg, "host", "127.0.0.1")).strip().lower() or "127.0.0.1",
+            "port": self._effective_ib_port(),
+            "client_id": int(getattr(ib_cfg, "client_id", 1)),
+            "paper_trading": bool(getattr(ib_cfg, "paper_trading", True)),
+            "use_gateway": bool(getattr(ib_cfg, "use_gateway", False)),
+        }
+
+    def _build_broker_context_lock_path(self) -> Path:
+        """Calcula o lock global por contexto de broker para evitar client_id duplicado."""
+        broker_context = self._broker_context_payload()
+        lock_key = (
+            f"{broker_context['host']}:{broker_context['port']}:"
+            f"{broker_context['client_id']}"
+        )
+        digest = hashlib.sha256(lock_key.encode("utf-8")).hexdigest()[:16]
+        lock_name = (
+            f"ib-{broker_context['host'].replace('.', '_')}-"
+            f"{broker_context['port']}-"
+            f"client-{broker_context['client_id']}-"
+            f"{digest}.lock"
+        )
+        return _get_broker_lock_root() / lock_name
+
+    def _acquire_lock_file(
+        self,
+        lock_path: Path,
+        payload: dict[str, Any],
+        *,
+        error_message: str,
+    ) -> int:
+        """Adquire um lock por ficheiro de forma fail-closed."""
+        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        except FileExistsError as exc:
+            raise RuntimeError(error_message) from exc
+
+        try:
+            os.write(
+                fd,
+                json.dumps(payload, indent=2, ensure_ascii=False).encode("utf-8"),
+            )
+        except Exception:
+            os.close(fd)
+            try:
+                lock_path.unlink()
+            except OSError:
+                pass
+            raise
+        return fd
+
         self._connection.set_alert_callback(self._send_operational_alert)
         self._connection.set_disconnect_callback(self._on_ib_disconnected)
         self._connection.set_post_reconnect_callback(self._post_reconnect_sequence)
         self._connection.set_failed_reconnect_callback(self._on_reconnect_attempt_failed)
+        self._connection.set_error_callback(self._handle_ib_operational_event)
 
     # ------------------------------------------------------------------
     # Validacao de arranque
@@ -1272,32 +1356,14 @@ class TradingBot:
         spec = self._watchlist[0]
         contract = build_contract(spec)
         await self._data_feed.qualify_contract(contract)
-        before = set(self._connection.recent_errors(30))
+        started_at = time.monotonic()
         price = await self._data_feed.get_current_price(contract)
-        after = set(self._connection.recent_errors(30))
-        new_errors = after - before
-
-        for error_code, message in new_errors:
-            if error_code == 354:
-                logger.warning(
-                    "Permissao de dados de mercado em falta para %s. "
-                    "Verificar subscricoes em IBKR Account Management.",
-                    spec.display,
-                )
-                self._schedule_telegram(
-                    self._telegram.notify_operational_alert(
-                        f"Permissao de dados de mercado em falta para {spec.display}. "
-                        "Verificar subscricoes em IBKR Account Management."
-                    ) if self._telegram else None
-                )
-                return
-            if error_code == 10197:
-                logger.warning(
-                    "Sem dados fora de horas de mercado para %s: %s",
-                    spec.display,
-                    message,
-                )
-                return
+        if not await self._apply_ib_request_events(
+            self._connection.operational_events_since(started_at),
+            spec=spec,
+            phase="preflight_market_data",
+        ):
+            return
 
         if price is None:
             logger.warning(
@@ -1410,6 +1476,8 @@ class TradingBot:
             self._order_manager = OrderManager(self._connection)
         self._rehydrate_order_tracking()
         await self._reconcile_startup()
+        if self._entry_halt_reason == "ib_connection_lost":
+            self._entry_halt_reason = None
         self._schedule_telegram(
             self._telegram.notify_reconnect_resumed(datetime.now(timezone.utc).isoformat())
             if self._telegram else None
@@ -1433,71 +1501,103 @@ class TradingBot:
         )
 
     def _acquire_instance_lock(self) -> None:
-        """Impede mÃºltiplas instÃ¢ncias activas sobre o mesmo data_dir."""
-        if self._instance_lock_fd is not None:
+        """Impede mÃºltiplas instÃ¢ncias activas sobre o mesmo data_dir e broker context."""
+        if (
+            getattr(self, "_instance_lock_fd", None) is not None
+            and getattr(self, "_broker_context_lock_fd", None) is not None
+        ):
             return
 
-        lock_path = self._instance_lock_path
-        lock_path.parent.mkdir(parents=True, exist_ok=True)
+        lock_path = getattr(self, "_instance_lock_path", None)
+        if not isinstance(lock_path, Path):
+            lock_path = Path(self._config.data_dir) / _INSTANCE_LOCK_FILENAME
+            self._instance_lock_path = lock_path
 
-        try:
-            fd = os.open(
-                lock_path,
-                os.O_CREAT | os.O_EXCL | os.O_RDWR,
-            )
-        except FileExistsError as exc:
-            raise RuntimeError(
+        broker_lock_path = getattr(self, "_broker_context_lock_path", None)
+        if not isinstance(broker_lock_path, Path):
+            broker_lock_path = self._build_broker_context_lock_path()
+            self._broker_context_lock_path = broker_lock_path
+
+        created_at = datetime.now(timezone.utc).isoformat()
+        instance_payload = {
+            "pid": os.getpid(),
+            "client_id": self._config.ib.client_id,
+            "data_dir": str(lock_path.parent),
+            "created_at": created_at,
+        }
+        broker_context = self._broker_context_payload()
+        broker_payload = {
+            "pid": os.getpid(),
+            "created_at": created_at,
+            "cwd": str(Path.cwd()),
+            "data_dir": str(lock_path.parent),
+            **broker_context,
+        }
+
+        instance_fd = self._acquire_lock_file(
+            lock_path,
+            instance_payload,
+            error_message=(
                 f"Outra instÃ¢ncia parece activa para {lock_path.parent} "
                 f"(lock: {lock_path.name})."
-            ) from exc
-
+            ),
+        )
         try:
-            payload = json.dumps(
-                {
-                    "pid": os.getpid(),
-                    "client_id": self._config.ib.client_id,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                },
-                indent=2,
-                ensure_ascii=False,
-            ).encode("utf-8")
-            os.write(fd, payload)
+            broker_fd = self._acquire_lock_file(
+                broker_lock_path,
+                broker_payload,
+                error_message=(
+                    "Outra instÃ¢ncia parece activa para o mesmo contexto IB "
+                    f"({broker_context['host']}:{broker_context['port']} "
+                    f"client_id={broker_context['client_id']})."
+                ),
+            )
         except Exception:
-            os.close(fd)
+            try:
+                os.close(instance_fd)
+            except OSError:
+                pass
             try:
                 lock_path.unlink()
             except OSError:
                 pass
             raise
 
-        self._instance_lock_fd = fd
+        self._instance_lock_fd = instance_fd
+        self._broker_context_lock_fd = broker_fd
         atexit.register(self._release_instance_lock)
         logger.info("Lock de instÃ¢ncia adquirido: %s", lock_path)
+        logger.info("Lock de contexto IB adquirido: %s", broker_lock_path)
 
     def _release_instance_lock(self) -> None:
         """Liberta o lock de instÃ¢ncia de forma idempotente."""
-        fd = getattr(self, "_instance_lock_fd", None)
-        lock_path = getattr(self, "_instance_lock_path", None)
+        locks = [
+            ("_instance_lock_fd", "_instance_lock_path"),
+            ("_broker_context_lock_fd", "_broker_context_lock_path"),
+        ]
 
-        if fd is not None:
-            try:
-                os.close(fd)
-            except OSError:
-                pass
-            self._instance_lock_fd = None
+        for fd_attr, path_attr in locks:
+            fd = getattr(self, fd_attr, None)
+            lock_path = getattr(self, path_attr, None)
+            if fd is not None:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+                setattr(self, fd_attr, None)
+
+            if isinstance(lock_path, Path):
+                try:
+                    lock_path.unlink()
+                except FileNotFoundError:
+                    pass
+                except OSError as exc:
+                    logger.warning("Falha ao remover lock de instÃ¢ncia %s: %s", lock_path, exc)
 
         try:
             atexit.unregister(self._release_instance_lock)
         except Exception:
             pass
-
-        if isinstance(lock_path, Path):
-            try:
-                lock_path.unlink()
-            except FileNotFoundError:
-                pass
-            except OSError as exc:
-                logger.warning("Falha ao remover lock de instÃ¢ncia %s: %s", lock_path, exc)
 
     # ------------------------------------------------------------------
     # Tratamento de sinais do sistema operativo
@@ -1553,6 +1653,92 @@ class TradingBot:
             self._telegram.notify_operational_alert(message)
             if self._telegram else None
         )
+
+    async def _handle_ib_operational_event(
+        self,
+        decision: IBErrorPolicyDecision,
+    ) -> None:
+        """Aplica o efeito operacional determinístico de um erro IB relevante."""
+        self._last_error = f"IB {decision.error_code}: {decision.message}"
+
+        if decision.action == "entry_halt":
+            if self._entry_halt_reason in (None, decision.halt_reason):
+                self._entry_halt_reason = decision.halt_reason or "ib_connection_lost"
+            logger.error(
+                "IB entrou em estado degradado (%d). Entradas bloqueadas: %s",
+                decision.error_code,
+                self._entry_halt_reason,
+            )
+            self._schedule_telegram(
+                self._telegram.notify_operational_alert(
+                    f"IB degradado ({decision.error_code}). Entradas bloqueadas: "
+                    f"{self._entry_halt_reason} | detalhe={decision.message}"
+                ) if self._telegram else None
+            )
+            return
+
+        if decision.action == "clear_connection_halt":
+            if self._entry_halt_reason == (decision.halt_reason or "ib_connection_lost"):
+                self._entry_halt_reason = None
+            logger.info(
+                "IB reportou reconexão (%d). Estado de ligação normalizado.",
+                decision.error_code,
+            )
+            return
+
+    async def _apply_ib_request_events(
+        self,
+        events: list[IBErrorPolicyDecision],
+        *,
+        spec: InstrumentSpec,
+        phase: str,
+    ) -> bool:
+        """Traduz eventos IB de request em decisão operacional no call path actual."""
+        should_continue = True
+        for decision in events:
+            self._last_error = f"IB {decision.error_code}: {decision.message}"
+
+            if decision.action == "entry_halt":
+                await self._handle_ib_operational_event(decision)
+                should_continue = False
+                continue
+
+            if decision.action != "symbol_skip":
+                continue
+
+            if decision.error_code == 354:
+                message = (
+                    f"Sem permissões de dados de mercado para {spec.display} "
+                    f"em {phase}. Pedido saltado."
+                )
+                logger.warning("%s", message)
+                self._schedule_telegram(
+                    self._telegram.notify_operational_alert(message)
+                    if self._telegram else None
+                )
+            elif decision.error_code == 10197:
+                logger.info(
+                    "Sem dados fora de horas para %s em %s: %s",
+                    spec.display,
+                    phase,
+                    decision.message,
+                )
+            elif decision.error_code == 162:
+                logger.warning(
+                    "Pacing violation do IB para %s em %s. Pedido saltado neste ciclo.",
+                    spec.display,
+                    phase,
+                )
+            else:
+                logger.warning(
+                    "Erro IB accionável para %s em %s: codigo=%d %s",
+                    spec.display,
+                    phase,
+                    decision.error_code,
+                    decision.message,
+                )
+            should_continue = False
+        return should_continue
 
     async def _handle_session_transition(
         self,
@@ -2415,9 +2601,16 @@ class TradingBot:
             )
             return
 
+        historical_started_at = time.monotonic()
         bars_df = await self._data_feed.get_historical_bars(
             contract, duration="1 Y", bar_size="1 day",
         )
+        if not await self._apply_ib_request_events(
+            self._connection.operational_events_since(historical_started_at),
+            spec=spec,
+            phase="historical_bars",
+        ):
+            return
 
         if bars_df.empty:
             logger.warning("Sem barras historicas para %s.", spec.display)
@@ -2436,7 +2629,14 @@ class TradingBot:
             return
 
         # Calcular indicadores
+        live_snapshot_started_at = time.monotonic()
         indicators = await self._data_feed.get_market_data_live(contract, bars_df)
+        if not await self._apply_ib_request_events(
+            self._connection.operational_events_since(live_snapshot_started_at),
+            spec=spec,
+            phase="live_snapshot",
+        ):
+            return
 
         # Verificar se todos os indicadores necessarios estao disponiveis
         required_keys = [
@@ -2507,7 +2707,14 @@ class TradingBot:
         self._last_regimes[spec.display] = new_regime
 
         # Obter volume actual
+        volume_started_at = time.monotonic()
         current_volume = await self._data_feed.get_current_volume(contract)
+        if not await self._apply_ib_request_events(
+            self._connection.operational_events_since(volume_started_at),
+            spec=spec,
+            phase="live_volume",
+        ):
+            return
         volume: float = current_volume if current_volume is not None else 0.0
         closes = bars_df["close"].astype(float).tolist()  # Finding 2
         rsi2 = calculate_rsi2(closes)  # Finding 2

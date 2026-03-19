@@ -39,7 +39,12 @@ if sys.version_info >= (3, 10):
 
 from ib_insync import IB, CFD, Forex, Future, Stock, util
 
-from src.ib_requests import IBRateLimiter, IBRequestExecutor
+from src.ib_requests import (
+    IBErrorPolicyDecision,
+    IBRateLimiter,
+    IBRequestExecutor,
+    classify_ib_error,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -117,6 +122,7 @@ class _TTLCache:
 
 AlertCallback = Callable[[str], Awaitable[None]]
 AsyncHook = Callable[[], Awaitable[None]]
+ErrorHook = Callable[[IBErrorPolicyDecision], Awaitable[None] | None]
 
 
 # ---------------------------------------------------------------------------
@@ -173,7 +179,9 @@ class IBConnection:
         self._disconnect_callback: AsyncHook | None = None
         self._post_reconnect_callback: AsyncHook | None = None
         self._failed_reconnect_callback: AsyncHook | None = None
+        self._error_callback: ErrorHook | None = None
         self._recent_errors: deque[tuple[float, int, str]] = deque(maxlen=100)
+        self._recent_operational_events: deque[tuple[float, IBErrorPolicyDecision]] = deque(maxlen=100)
 
         # Registar callback de desconexão
         self.ib.disconnectedEvent += self._on_disconnected
@@ -201,6 +209,10 @@ class IBConnection:
     def set_failed_reconnect_callback(self, callback: AsyncHook | None) -> None:
         """Regista um callback apos uma tentativa falhada de reconexao."""
         self._failed_reconnect_callback = callback
+
+    def set_error_callback(self, callback: ErrorHook | None) -> None:
+        """Regista um callback para eventos operacionais derivados de erros IB."""
+        self._error_callback = callback
 
     @staticmethod
     def _env_bool(key: str, default: bool) -> bool:
@@ -349,6 +361,14 @@ class IBConnection:
         now = time.monotonic()
         return [(code, message) for ts, code, message in self._recent_errors if (now - ts) <= since_seconds]
 
+    def operational_events_since(self, start_monotonic: float) -> list[IBErrorPolicyDecision]:
+        """Devolve eventos operacionais ocorridos desde um instante monotónico."""
+        return [
+            decision
+            for ts, decision in self._recent_operational_events
+            if ts >= start_monotonic
+        ]
+
     def _on_error(
         self,
         req_id: int,
@@ -358,10 +378,52 @@ class IBConnection:
     ) -> None:
         """Regista os erros recentes do IB para preflight e pacing."""
         del req_id, contract
-        self._recent_errors.append((time.monotonic(), error_code, error_string))
+        occurred_at = time.monotonic()
+        self._recent_errors.append((occurred_at, error_code, error_string))
+
+        decision = classify_ib_error(error_code, error_string)
+        if decision is not None:
+            self._recent_operational_events.append((occurred_at, decision))
+            if decision.action == "entry_halt":
+                self._connected = False
+                self._connection_state = "DISCONNECTED"
+            elif decision.action == "clear_connection_halt" and self.ib.isConnected():
+                self._connected = True
+                self._connection_state = "CONNECTED"
+
+            log_fn = {
+                "critical": logger.error,
+                "error": logger.error,
+                "warning": logger.warning,
+                "info": logger.info,
+            }.get(decision.severity, logger.warning)
+            log_fn(
+                "Evento operacional IB [%s/%s] codigo=%d: %s",
+                decision.scope,
+                decision.action,
+                decision.error_code,
+                decision.message,
+            )
+            self._dispatch_error_callback(decision)
+            return
 
         if error_code in {1100, 1102, 2104, 2106, 354, 10197, _IB_PACING_ERROR_CODE}:
             logger.warning("Codigo IB %d: %s", error_code, error_string)
+
+    def _dispatch_error_callback(self, decision: IBErrorPolicyDecision) -> None:
+        """Encaminha eventos operacionais para o callback registado."""
+        if self._error_callback is None:
+            return
+        try:
+            result = self._error_callback(decision)
+            if asyncio.iscoroutine(result):
+                loop = asyncio.get_running_loop()
+                loop.create_task(result)
+        except RuntimeError:
+            logger.debug(
+                "Sem event loop activo para callback de erro IB (codigo=%d).",
+                decision.error_code,
+            )
 
     def _on_disconnected(self) -> None:
         """

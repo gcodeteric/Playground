@@ -240,7 +240,7 @@ def _render_header(status: dict[str, str], kpis: dict[str, Any]) -> None:
         )
     with meta_col:
         st.metric("Heartbeat", _fmt_dt(kpis.get("heartbeat")))
-        st.metric("Preflight", _fmt_dt(kpis.get("last_preflight")))
+        st.metric("Último ciclo", _fmt_dt(kpis.get("last_cycle_completed_at") or kpis.get("last_preflight")))
 
 
 def _render_overview(kpis: dict[str, Any], trades_df: pd.DataFrame, status: dict[str, str]) -> None:
@@ -257,6 +257,26 @@ def _render_overview(kpis: dict[str, Any], trades_df: pd.DataFrame, status: dict
     info2.metric("Active grids", str(kpis.get("active_grids", 0)))
     info3.metric("Telegram", str(status.get("telegram_status", "unknown")).upper())
     info4.metric("Pending commands", str(kpis.get("pending_commands", 0)))
+
+    econ1, econ2, econ3 = st.columns(3)
+    unrealized = kpis.get("unrealized_pnl")
+    econ1.metric(
+        "Unrealized PnL",
+        _fmt_eur(unrealized) if unrealized is not None else "Indisponível",
+    )
+    econ2.metric("Open notional", _fmt_eur(kpis.get("open_notional")))
+    econ3.metric("Risco até stop", _fmt_eur(kpis.get("open_risk_to_stop")))
+    if unrealized is None and int(kpis.get("open_positions", 0) or 0) > 0:
+        st.caption(
+            "Unrealized PnL só é mostrado quando existe preço actual persistido. "
+            "Open notional e risco até stop continuam visíveis como equivalente económico aberto."
+        )
+
+    status_cols = st.columns(4)
+    status_cols[0].metric("Bot", str(status.get("bot_state", "DEGRADADO")))
+    status_cols[1].metric("Risco operacional", str(status.get("risk_state", "normal")).upper())
+    status_cols[2].metric("IB conectado", "SIM" if status.get("ib_connected") else "NÃO")
+    status_cols[3].metric("Manual pause", "SIM" if status.get("manual_pause") else "NÃO")
 
     left, right = st.columns(2)
     with left:
@@ -315,6 +335,26 @@ def _render_risk(kpis: dict[str, Any], metrics: dict[str, Any]) -> None:
     meta_cols[1].metric("Average loss", _fmt_eur(kpis.get("avg_loss")))
     profit_factor = kpis.get("profit_factor")
     meta_cols[2].metric("Profit factor", f"{float(profit_factor):.2f}" if profit_factor is not None else "—")
+
+    ops_cols = st.columns(3)
+    ops_cols[0].metric("Open notional", _fmt_eur(kpis.get("open_notional")))
+    ops_cols[1].metric("Risco até stop", _fmt_eur(kpis.get("open_risk_to_stop")))
+    ops_cols[2].metric(
+        "Unrealized PnL",
+        _fmt_eur(kpis.get("unrealized_pnl")) if kpis.get("unrealized_pnl") is not None else "Indisponível",
+    )
+
+    halt_reason = kpis.get("entry_halt_reason")
+    emergency_halt = bool(kpis.get("emergency_halt"))
+    last_error = kpis.get("last_error")
+    if emergency_halt:
+        st.error(f"EMERGENCY HALT activo: {halt_reason or 'sem motivo explícito'}")
+    elif halt_reason:
+        st.warning(f"Entradas bloqueadas: {halt_reason}")
+    else:
+        st.success("Sem halt operacional activo.")
+    if last_error:
+        st.caption(f"Último erro reportado: {last_error}")
 
 
 def _render_performance(trades_df: pd.DataFrame, kpis: dict[str, Any]) -> None:
@@ -388,6 +428,20 @@ def _render_system_actions(
             }
         )
     st.dataframe(pd.DataFrame(file_rows), use_container_width=True, hide_index=True)
+
+    st.subheader("Estado operacional")
+    ops_rows = [
+        {"campo": "paper_mode", "valor": PAPER_LABEL},
+        {"campo": "heartbeat", "valor": _fmt_dt(kpis.get("heartbeat"))},
+        {"campo": "ultimo_ciclo", "valor": _fmt_dt(kpis.get("last_cycle_completed_at"))},
+        {"campo": "bot_state", "valor": str(build_status_summary(kpis).get("bot_state", "DEGRADADO"))},
+        {"campo": "entry_halt_reason", "valor": safe_metric(kpis.get("entry_halt_reason"))},
+        {"campo": "emergency_halt", "valor": "SIM" if kpis.get("emergency_halt") else "NÃO"},
+        {"campo": "ib_connected", "valor": "SIM" if kpis.get("ib_connected") else "NÃO"},
+        {"campo": "manual_pause", "valor": "SIM" if kpis.get("manual_pause") else "NÃO"},
+        {"campo": "last_error", "valor": safe_metric(kpis.get("last_error"))},
+    ]
+    st.dataframe(pd.DataFrame(ops_rows), use_container_width=True, hide_index=True)
 
     st.subheader("Ações seguras (emit command)")
     action_cols = st.columns(4)

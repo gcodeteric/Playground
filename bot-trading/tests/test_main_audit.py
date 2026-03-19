@@ -18,6 +18,7 @@ from main import (
 )
 from src.contracts import parse_watchlist_entry
 from src.grid_engine import GridEngine
+from src.ib_requests import IBErrorPolicyDecision
 from src.risk_manager import RiskManager
 from src.signal_engine import Confianca, Regime, RegimeInfo, SignalResult, TrendHorizon
 
@@ -48,6 +49,11 @@ def _build_bot_stub() -> TradingBot:
     bot._last_equity_snapshot = None
     bot._instance_lock_fd = None
     bot._instance_lock_path = pathlib.Path.cwd() / "bot.instance.lock"
+    bot._broker_context_lock_fd = None
+    bot._broker_context_lock_path = None
+    bot._connection = SimpleNamespace(
+        operational_events_since=MagicMock(return_value=[]),
+    )
     bot._risk_manager = SimpleNamespace(
         update_capital=MagicMock(),
         peak_equity=100_000.0,
@@ -96,7 +102,13 @@ def _build_signal_result() -> SignalResult:
 def _build_runtime_config(tmp_path):
     return SimpleNamespace(
         data_dir=tmp_path,
-        ib=SimpleNamespace(paper_trading=True, client_id=7),
+        ib=SimpleNamespace(
+            paper_trading=True,
+            client_id=7,
+            host="127.0.0.1",
+            port=7497,
+            use_gateway=False,
+        ),
         risk=SimpleNamespace(
             daily_loss_limit=0.03,
             weekly_loss_limit=0.06,
@@ -423,6 +435,79 @@ def test_enforce_account_context_halts_reconnect_on_mismatch():
     assert bot._emergency_halt is True
     assert bot._running is False
     assert bot._shutdown_event.is_set()
+
+
+@pytest.mark.asyncio
+async def test_handle_ib_operational_event_sets_connection_halt():
+    bot = _build_bot_stub()
+    bot._telegram = SimpleNamespace(notify_operational_alert=AsyncMock())
+    bot._schedule_telegram = lambda coro: asyncio.create_task(coro) if coro is not None else None
+
+    await TradingBot._handle_ib_operational_event(
+        bot,
+        IBErrorPolicyDecision(
+            error_code=1100,
+            message="Connectivity lost",
+            action="entry_halt",
+            scope="connection",
+            severity="critical",
+            halt_reason="ib_connection_lost",
+        ),
+    )
+    await asyncio.sleep(0)
+
+    assert bot._entry_halt_reason == "ib_connection_lost"
+    assert bot._last_error == "IB 1100: Connectivity lost"
+    bot._telegram.notify_operational_alert.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_handle_ib_operational_event_clears_connection_halt_on_restore():
+    bot = _build_bot_stub()
+    bot._entry_halt_reason = "ib_connection_lost"
+
+    await TradingBot._handle_ib_operational_event(
+        bot,
+        IBErrorPolicyDecision(
+            error_code=1102,
+            message="Connectivity restored",
+            action="clear_connection_halt",
+            scope="connection",
+            severity="info",
+            halt_reason="ib_connection_lost",
+        ),
+    )
+
+    assert bot._entry_halt_reason is None
+    assert bot._last_error == "IB 1102: Connectivity restored"
+
+
+@pytest.mark.asyncio
+async def test_apply_ib_request_events_skips_symbol_on_market_data_permission():
+    bot = _build_bot_stub()
+    bot._telegram = SimpleNamespace(notify_operational_alert=AsyncMock())
+    bot._schedule_telegram = lambda coro: asyncio.create_task(coro) if coro is not None else None
+    spec = parse_watchlist_entry("AAPL")
+
+    should_continue = await TradingBot._apply_ib_request_events(
+        bot,
+        [
+            IBErrorPolicyDecision(
+                error_code=354,
+                message="Requested market data is not subscribed",
+                action="symbol_skip",
+                scope="request",
+                severity="warning",
+            )
+        ],
+        spec=spec,
+        phase="live_snapshot",
+    )
+    await asyncio.sleep(0)
+
+    assert should_continue is False
+    assert bot._last_error == "IB 354: Requested market data is not subscribed"
+    bot._telegram.notify_operational_alert.assert_awaited_once()
 
 
 # ------------------------------------------------------------------
@@ -1248,7 +1333,8 @@ async def test_monitor_single_grid_ignores_partial_snapshot(tmp_path, monkeypatc
     bot._grid_engine.recenter_grid.assert_not_called()
 
 
-def test_instance_lock_prevents_second_instance(tmp_path):
+def test_instance_lock_prevents_second_instance(tmp_path, monkeypatch):
+    monkeypatch.setattr("main._get_broker_lock_root", lambda: tmp_path / "broker-locks")
     bot_a = _build_bot_stub()
     bot_a._config = _build_runtime_config(tmp_path)
     bot_a._instance_lock_path = tmp_path / "bot.instance.lock"
@@ -1267,7 +1353,8 @@ def test_instance_lock_prevents_second_instance(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_graceful_shutdown_releases_instance_lock(tmp_path):
+async def test_graceful_shutdown_releases_instance_lock(tmp_path, monkeypatch):
+    monkeypatch.setattr("main._get_broker_lock_root", lambda: tmp_path / "broker-locks")
     bot = _build_bot_stub()
     bot._config = _build_runtime_config(tmp_path)
     bot._instance_lock_path = tmp_path / "bot.instance.lock"
@@ -1290,6 +1377,50 @@ async def test_graceful_shutdown_releases_instance_lock(tmp_path):
         TradingBot._acquire_instance_lock(other_bot)
     finally:
         TradingBot._release_instance_lock(other_bot)
+
+
+def test_instance_lock_prevents_same_broker_context_across_data_dirs(tmp_path, monkeypatch):
+    monkeypatch.setattr("main._get_broker_lock_root", lambda: tmp_path / "broker-locks")
+    data_dir_a = tmp_path / "run-a"
+    data_dir_b = tmp_path / "run-b"
+
+    bot_a = _build_bot_stub()
+    bot_a._config = _build_runtime_config(data_dir_a)
+    bot_a._instance_lock_path = data_dir_a / "bot.instance.lock"
+
+    bot_b = _build_bot_stub()
+    bot_b._config = _build_runtime_config(data_dir_b)
+    bot_b._instance_lock_path = data_dir_b / "bot.instance.lock"
+
+    TradingBot._acquire_instance_lock(bot_a)
+    try:
+        with pytest.raises(RuntimeError, match="mesmo contexto IB"):
+            TradingBot._acquire_instance_lock(bot_b)
+    finally:
+        TradingBot._release_instance_lock(bot_a)
+        TradingBot._release_instance_lock(bot_b)
+
+
+def test_instance_lock_allows_distinct_client_ids_across_data_dirs(tmp_path, monkeypatch):
+    monkeypatch.setattr("main._get_broker_lock_root", lambda: tmp_path / "broker-locks")
+    data_dir_a = tmp_path / "run-a"
+    data_dir_b = tmp_path / "run-b"
+
+    bot_a = _build_bot_stub()
+    bot_a._config = _build_runtime_config(data_dir_a)
+    bot_a._instance_lock_path = data_dir_a / "bot.instance.lock"
+
+    bot_b = _build_bot_stub()
+    bot_b._config = _build_runtime_config(data_dir_b)
+    bot_b._config.ib.client_id = 9
+    bot_b._instance_lock_path = data_dir_b / "bot.instance.lock"
+
+    TradingBot._acquire_instance_lock(bot_a)
+    try:
+        TradingBot._acquire_instance_lock(bot_b)
+    finally:
+        TradingBot._release_instance_lock(bot_a)
+        TradingBot._release_instance_lock(bot_b)
 
 
 def test_load_persisted_grids_fail_closed_on_corruption(tmp_path):

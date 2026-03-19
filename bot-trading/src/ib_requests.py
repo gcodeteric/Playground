@@ -5,6 +5,7 @@ Utilitarios partilhados para pacing rules e retries do Interactive Brokers.
 from __future__ import annotations
 
 import asyncio
+from dataclasses import dataclass
 import inspect
 import logging
 import time
@@ -20,6 +21,84 @@ _DEFAULT_MAX_REQUESTS = 60
 _DEFAULT_IDENTICAL_COOLDOWN_SECONDS = 15.0
 _DEFAULT_MAX_ORDER_MESSAGES_PER_SECOND = 45
 _IB_PACING_ERROR_CODE = 162
+
+
+@dataclass(frozen=True, slots=True)
+class IBErrorPolicyDecision:
+    """Decisão operacional derivada de um código de erro do IB."""
+
+    error_code: int
+    message: str
+    action: str
+    scope: str
+    severity: str
+    halt_reason: str | None = None
+
+
+def classify_ib_error(error_code: int, error_string: str) -> IBErrorPolicyDecision | None:
+    """Mapeia códigos IB relevantes para acções operacionais determinísticas."""
+    policy = {
+        1100: IBErrorPolicyDecision(
+            error_code=1100,
+            message=error_string,
+            action="entry_halt",
+            scope="connection",
+            severity="critical",
+            halt_reason="ib_connection_lost",
+        ),
+        1101: IBErrorPolicyDecision(
+            error_code=1101,
+            message=error_string,
+            action="entry_halt",
+            scope="connection",
+            severity="critical",
+            halt_reason="ib_connection_lost",
+        ),
+        1102: IBErrorPolicyDecision(
+            error_code=1102,
+            message=error_string,
+            action="clear_connection_halt",
+            scope="connection",
+            severity="info",
+            halt_reason="ib_connection_lost",
+        ),
+        354: IBErrorPolicyDecision(
+            error_code=354,
+            message=error_string,
+            action="symbol_skip",
+            scope="request",
+            severity="warning",
+        ),
+        10197: IBErrorPolicyDecision(
+            error_code=10197,
+            message=error_string,
+            action="symbol_skip",
+            scope="request",
+            severity="warning",
+        ),
+        _IB_PACING_ERROR_CODE: IBErrorPolicyDecision(
+            error_code=_IB_PACING_ERROR_CODE,
+            message=error_string,
+            action="symbol_skip",
+            scope="request",
+            severity="warning",
+        ),
+        201: IBErrorPolicyDecision(
+            error_code=201,
+            message=error_string,
+            action="order_reject_sync",
+            scope="order",
+            severity="error",
+        ),
+        202: IBErrorPolicyDecision(
+            error_code=202,
+            message=error_string,
+            action="order_cancel_sync",
+            scope="order",
+            severity="warning",
+        ),
+    }
+    return policy.get(error_code)
 
 
 class IBRateLimiter:

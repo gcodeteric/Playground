@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, time, timedelta
 from math import floor
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from src.contracts import AssetType, InstrumentSpec
 
@@ -31,6 +32,8 @@ _PRE_CLOSE_MINUTES = 5
 _CALENDAR_ALIASES = {
     "XETRA": "XETR",
 }
+_NEW_YORK_TZ = ZoneInfo("America/New_York")
+_CHICAGO_TZ = ZoneInfo("America/Chicago")
 
 
 @dataclass(frozen=True, slots=True)
@@ -116,85 +119,80 @@ def _get_state_for_asset_type(asset_type: str, now: datetime) -> SessionState:
         return _forex_session_state(now_utc)
     if asset_type == "FUT":
         return _micro_future_session_state(now_utc)
-    return SessionState(True, False, "SESSAO_DESCONHECIDA", None, None)
+    return SessionState(False, False, "SESSAO_DESCONHECIDA", None, None)
 
 
 def _equity_session_state(asset_type: str, now: datetime) -> SessionState:
-    calendar_name, open_str, close_str = SCHEDULES[asset_type]
+    calendar_name, _, _ = SCHEDULES[asset_type]
 
-    if get_calendar is not None and calendar_name:
-        try:
-            cal_name = _CALENDAR_ALIASES.get(calendar_name, calendar_name)
-            cal = get_calendar(cal_name)
-            schedule = cal.schedule(now.date(), now.date(), tz="UTC")
-            if schedule.empty:
-                return SessionState(False, False, "FECHADO_FERIADO", None, None)
+    if get_calendar is None or not calendar_name:
+        logger.error(
+            "Calendario de mercado indisponivel para %s; gating fail-closed.",
+            asset_type,
+        )
+        return SessionState(False, False, "CALENDARIO_INDISPONIVEL", None, None)
 
-            opens_at = schedule.iloc[0]["market_open"].to_pydatetime().replace(
-                tzinfo=UTC,
-            )
-            closes_at = schedule.iloc[0]["market_close"].to_pydatetime().replace(
-                tzinfo=UTC,
-            )
+    try:
+        cal_name = _CALENDAR_ALIASES.get(calendar_name, calendar_name)
+        cal = get_calendar(cal_name)
+        schedule = cal.schedule(now.date(), now.date(), tz="UTC")
+        if schedule.empty:
+            return SessionState(False, False, "FECHADO_FERIADO", None, None)
 
-            if now < opens_at:
-                return SessionState(
-                    False, False, "ANTES_ABERTURA", opens_at, closes_at,
-                )
-            if now >= closes_at:
-                return SessionState(
-                    False, False, "DEPOIS_FECHO", opens_at, closes_at,
-                )
+        opens_at = schedule.iloc[0]["market_open"].to_pydatetime().replace(
+            tzinfo=UTC,
+        )
+        closes_at = schedule.iloc[0]["market_close"].to_pydatetime().replace(
+            tzinfo=UTC,
+        )
 
-            mins = _minutes_between(closes_at, now)
-            is_pre_close = mins <= _PRE_CLOSE_MINUTES
+        if now < opens_at:
             return SessionState(
-                True,
-                is_pre_close,
-                "PRE_CLOSE" if is_pre_close else "ABERTO",
-                opens_at,
-                closes_at,
+                False, False, "ANTES_ABERTURA", opens_at, closes_at,
             )
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("pandas falhou %s: %s. Fallback.", calendar_name, exc)
+        if now >= closes_at:
+            return SessionState(
+                False, False, "DEPOIS_FECHO", opens_at, closes_at,
+            )
 
-    # Fallback original (mantém compatibilidade)
-    if not _is_trading_day(calendar_name, now):
-        return SessionState(False, False, "FECHADO_FERIADO", None, None)
-    open_time = _parse_time(open_str)
-    close_time = _parse_time(close_str)
-    opens_at = datetime.combine(now.date(), open_time, tzinfo=UTC)
-    closes_at = datetime.combine(now.date(), close_time, tzinfo=UTC)
-
-    if now < opens_at:
-        return SessionState(False, False, "ANTES_ABERTURA", opens_at, closes_at)
-
-    if now >= closes_at:
-        return SessionState(False, False, "DEPOIS_FECHO", opens_at, closes_at)
-
-    mins = _minutes_between(closes_at, now)
-    is_pre_close = mins <= _PRE_CLOSE_MINUTES
-    return SessionState(
-        True,
-        is_pre_close,
-        "PRE_CLOSE" if is_pre_close else "ABERTO",
-        opens_at,
-        closes_at,
-    )
+        mins = _minutes_between(closes_at, now)
+        is_pre_close = mins <= _PRE_CLOSE_MINUTES
+        return SessionState(
+            True,
+            is_pre_close,
+            "PRE_CLOSE" if is_pre_close else "ABERTO",
+            opens_at,
+            closes_at,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.error(
+            "Calendario de mercado falhou para %s (%s); gating fail-closed.",
+            asset_type,
+            exc,
+        )
+        return SessionState(
+            False,
+            False,
+            "CALENDARIO_INCONCLUSIVO",
+            None,
+            None,
+        )
 
 
 def _forex_session_state(now: datetime) -> SessionState:
-    weekday = now.weekday()
-    today_22 = datetime.combine(now.date(), time(22, 0), tzinfo=UTC)
+    now_ny = now.astimezone(_NEW_YORK_TZ)
+    weekday = now_ny.weekday()
+    weekly_open = _local_datetime_to_utc(now_ny.date(), time(17, 0), _NEW_YORK_TZ)
+    weekly_close = _local_datetime_to_utc(now_ny.date(), time(17, 0), _NEW_YORK_TZ)
 
     if weekday == 5:
         return SessionState(False, False, "FECHADO_FIM_DE_SEMANA", None, None)
-    if weekday == 6 and now < today_22:
-        return SessionState(False, False, "ANTES_ABERTURA_SEMANAL", today_22, None)
-    if weekday == 4 and now >= today_22:
-        return SessionState(False, False, "DEPOIS_FECHO_SEMANAL", None, today_22)
+    if weekday == 6 and now_ny.time() < time(17, 0):
+        return SessionState(False, False, "ANTES_ABERTURA_SEMANAL", weekly_open, None)
+    if weekday == 4 and now_ny.time() >= time(17, 0):
+        return SessionState(False, False, "DEPOIS_FECHO_SEMANAL", None, weekly_close)
 
-    closes_at = today_22 if weekday == 4 else None
+    closes_at = weekly_close if weekday == 4 else None
     mins = _minutes_between(closes_at, now) if closes_at else 10**9
     return SessionState(
         True,
@@ -206,20 +204,33 @@ def _forex_session_state(now: datetime) -> SessionState:
 
 
 def _micro_future_session_state(now: datetime) -> SessionState:
-    weekday = now.weekday()
-    today_22 = datetime.combine(now.date(), time(22, 0), tzinfo=UTC)
-    today_23 = datetime.combine(now.date(), time(23, 0), tzinfo=UTC)
+    now_ct = now.astimezone(_CHICAGO_TZ)
+    weekday = now_ct.weekday()
+    pause_start_local = time(16, 0)
+    pause_end_local = time(17, 0)
+    pause_start = _local_datetime_to_utc(now_ct.date(), pause_start_local, _CHICAGO_TZ)
+    pause_end = _local_datetime_to_utc(now_ct.date(), pause_end_local, _CHICAGO_TZ)
 
     if weekday == 5:
         return SessionState(False, False, "FECHADO_FIM_DE_SEMANA", None, None)
-    if weekday == 6 and now < today_23:
-        return SessionState(False, False, "ANTES_ABERTURA_SEMANAL", today_23, None)
-    if weekday == 4 and now >= today_22:
-        return SessionState(False, False, "DEPOIS_FECHO_SEMANAL", None, today_22)
-    if time(22, 0) <= now.time() < time(23, 0):
-        return SessionState(False, False, "PAUSA_DIARIA", today_23, today_22)
+    if weekday == 6 and now_ct.time() < pause_end_local:
+        return SessionState(False, False, "ANTES_ABERTURA_SEMANAL", pause_end, None)
+    if weekday == 4 and now_ct.time() >= pause_start_local:
+        return SessionState(False, False, "DEPOIS_FECHO_SEMANAL", None, pause_start)
+    if pause_start_local <= now_ct.time() < pause_end_local:
+        return SessionState(False, False, "PAUSA_DIARIA", pause_end, pause_start)
 
-    closes_at = today_22 if now.time() < time(22, 0) else None
+    closes_at: datetime | None
+    if weekday == 4:
+        closes_at = pause_start
+    elif now_ct.time() < pause_start_local:
+        closes_at = pause_start
+    else:
+        closes_at = _local_datetime_to_utc(
+            now_ct.date() + timedelta(days=1),
+            pause_start_local,
+            _CHICAGO_TZ,
+        )
     mins = _minutes_between(closes_at, now) if closes_at else 10**9
     return SessionState(
         True,
@@ -228,6 +239,10 @@ def _micro_future_session_state(now: datetime) -> SessionState:
         None,
         closes_at,
     )
+
+
+def _local_datetime_to_utc(day: datetime.date, local_time: time, tz: ZoneInfo) -> datetime:
+    return datetime.combine(day, local_time, tzinfo=tz).astimezone(UTC)
 
 
 def _parse_time(raw: str) -> time:
@@ -245,11 +260,7 @@ def _is_trading_day(calendar_name: str | None, now: datetime) -> bool:
     if calendar_name is None:
         return True
     if get_calendar is None:
-        logger.warning(
-            "pandas_market_calendars nao disponivel; a usar apenas filtro de fim-de-semana para %s.",
-            calendar_name,
-        )
-        return True
+        return False
 
     normalized_name = _CALENDAR_ALIASES.get(calendar_name, calendar_name)
     calendar = get_calendar(normalized_name)

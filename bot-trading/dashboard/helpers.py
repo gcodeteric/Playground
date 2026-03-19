@@ -164,10 +164,41 @@ def load_positions(
                         "entry_price": level.get("buy_price"),
                         "stop_price": level.get("stop_price"),
                         "take_profit_price": level.get("sell_price"),
+                        "current_price": level.get("current_price", grid.get("current_price")),
+                        "price_source": level.get("price_source", grid.get("price_source")),
                     }
                 )
+    df = pd.DataFrame(rows)
+    if df.empty:
+        return df
 
-    return pd.DataFrame(rows)
+    for col in ("quantity", "entry_price", "stop_price", "take_profit_price", "current_price"):
+        if col in df.columns:
+            df[col] = pd.to_numeric(df[col], errors="coerce")
+
+    if {"quantity", "entry_price"}.issubset(df.columns):
+        df["open_notional"] = (df["quantity"].fillna(0.0) * df["entry_price"].fillna(0.0)).round(4)
+    else:
+        df["open_notional"] = 0.0
+
+    if {"quantity", "entry_price", "stop_price"}.issubset(df.columns):
+        df["open_risk_to_stop"] = (
+            df["quantity"].fillna(0.0)
+            * (df["entry_price"].fillna(0.0) - df["stop_price"].fillna(0.0)).abs()
+        ).round(4)
+    else:
+        df["open_risk_to_stop"] = 0.0
+
+    if {"quantity", "entry_price", "current_price"}.issubset(df.columns):
+        unrealized = (
+            df["quantity"].fillna(0.0)
+            * (df["current_price"] - df["entry_price"])
+        ).round(4)
+        df["unrealized_pnl"] = unrealized.where(df["current_price"].notna(), other=pd.NA)
+    else:
+        df["unrealized_pnl"] = pd.Series([pd.NA] * len(df), dtype="object")
+
+    return df
 
 
 def emit_command(
@@ -258,6 +289,21 @@ def compute_kpis(
     positions_df = load_positions(grids_state=grids_state)
     active_grids = len(grids_state)
     open_positions = int(len(positions_df))
+    open_notional = (
+        float(pd.to_numeric(positions_df["open_notional"], errors="coerce").fillna(0.0).sum())
+        if "open_notional" in positions_df.columns else 0.0
+    )
+    open_risk_to_stop = (
+        float(pd.to_numeric(positions_df["open_risk_to_stop"], errors="coerce").fillna(0.0).sum())
+        if "open_risk_to_stop" in positions_df.columns else 0.0
+    )
+    unrealized_series = (
+        pd.to_numeric(positions_df["unrealized_pnl"], errors="coerce")
+        if "unrealized_pnl" in positions_df.columns else pd.Series(dtype="float64")
+    )
+    unrealized_pnl = (
+        float(unrealized_series.dropna().sum()) if not unrealized_series.dropna().empty else None
+    )
 
     max_drawdown = metrics.get("max_drawdown")
     if max_drawdown is None and "pnl" in trades_df.columns and not trades_df.empty:
@@ -289,6 +335,11 @@ def compute_kpis(
 
     manual_pause = heartbeat_data.get("manual_pause", False) if heartbeat_data else False
     ib_connected = heartbeat_data.get("ib_connected", False) if heartbeat_data else False
+    entry_halt_reason = heartbeat_data.get("entry_halt_reason") if heartbeat_data else None
+    emergency_halt = bool(heartbeat_data.get("emergency_halt", False)) if heartbeat_data else False
+    last_error = heartbeat_data.get("last_error") if heartbeat_data else None
+    last_cycle_started_at = heartbeat_data.get("last_cycle_started_at") if heartbeat_data else None
+    last_cycle_completed_at = heartbeat_data.get("last_cycle_completed_at") if heartbeat_data else None
 
     reconciliation_path = data_dir / "reconciliation.log"
     last_reconciliation = (
@@ -311,12 +362,20 @@ def compute_kpis(
         "profit_factor": profit_factor,
         "max_drawdown": max_drawdown,
         "open_positions": open_positions,
+        "open_notional": open_notional,
+        "open_risk_to_stop": open_risk_to_stop,
+        "unrealized_pnl": unrealized_pnl,
         "active_grids": active_grids,
         "last_signal_time": last_signal_time,
         "last_reconciliation_time": last_reconciliation,
         "heartbeat": heartbeat,
         "manual_pause": manual_pause,
         "ib_connected": ib_connected,
+        "entry_halt_reason": entry_halt_reason,
+        "emergency_halt": emergency_halt,
+        "last_error": last_error,
+        "last_cycle_started_at": last_cycle_started_at,
+        "last_cycle_completed_at": last_cycle_completed_at,
         "telegram_status": preflight_state.get("telegram_status", "unknown"),
         "preflight_status": "ok" if preflight_state else "missing",
         "last_preflight": preflight_state.get("last_preflight"),
@@ -356,6 +415,22 @@ def build_status_summary(
         "health": health,
         "tone": tone,
         "paper_mode": "PAPER",
+        "bot_state": (
+            "EMERGENCY_HALT"
+            if bool(kpis.get("emergency_halt"))
+            else "PAUSADO"
+            if bool(kpis.get("manual_pause"))
+            else "ATIVO"
+            if bool(kpis.get("ib_connected")) and health == "OK"
+            else "DEGRADADO"
+        ),
+        "risk_state": (
+            str(kpis.get("entry_halt_reason"))
+            if kpis.get("entry_halt_reason")
+            else "emergency_halt"
+            if bool(kpis.get("emergency_halt"))
+            else "normal"
+        ),
         "telegram_status": str(kpis.get("telegram_status", "unknown")),
         "preflight_status": str(kpis.get("preflight_status", "missing")),
         "manual_pause": bool(kpis.get("manual_pause", False)),

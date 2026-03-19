@@ -155,7 +155,11 @@ class BracketInfo:
         )
 
 
-from src.ib_requests import IBRateLimiter, IBRequestExecutor
+from src.ib_requests import (
+    IBRateLimiter,
+    IBRequestExecutor,
+    classify_ib_error,
+)
 
 
 class RateLimiter(IBRateLimiter):
@@ -263,6 +267,24 @@ class OrderManager:
         # Codigos informativos (nao sao erros reais)
         informational_codes = {2104, 2106, 2158, 2119}
         if errorCode in informational_codes:
+            return
+
+        decision = classify_ib_error(errorCode, errorString)
+        if decision is not None and decision.scope == "order":
+            message = (
+                f"Erro operacional IB em ordens [{decision.action}] "
+                f"codigo={decision.error_code}: {decision.message}"
+            )
+            log_fn = logger.error if decision.severity == "error" else logger.warning
+            log_fn("%s (reqId=%d, contrato=%s)", message, reqId, contract)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(self._request_executor._send_alert(message))
+            except RuntimeError:
+                logger.debug(
+                    "Sem event loop activo para alerta de erro IB em ordens (%d).",
+                    decision.error_code,
+                )
             return
 
         logger.warning(

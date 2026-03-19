@@ -1,6 +1,6 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `e8161fc6f7ea49b4601010e3a7d608581a77d1bb` | Data/hora UTC: `2026-03-18T22:46:40Z` | Working tree: `dirty (../.DS_Store, main.py, tests/test_main_audit.py, src/pre_trade_gate.py, tests/test_pre_trade_gate.py)`
-Score delta pós-fix (subset revisto): `72/100`
+Branch actual: `main` | Commit actual: `62bb1aa17bb05f5b446d8410cc8afb45e8eb1d73` | Data/hora UTC: `2026-03-18T23:25:10Z` | Working tree: `dirty (AUDIT_REPORT.md, dashboard/app.py, dashboard/helpers.py, main.py, src/data_feed.py, src/execution.py, src/ib_requests.py, src/market_hours.py, tests/test_dashboard_helpers.py, tests/test_data_feed.py, tests/test_execution.py, tests/test_main_audit.py, tests/test_market_hours.py)`
+Score delta pós-fix (subset revisto): `90/100`
 
 ## Delta audit focado — post-fix
 
@@ -24,7 +24,7 @@ Score delta pós-fix (subset revisto): `72/100`
 - Comando focal H05 após as alterações: `pytest tests/test_pre_trade_gate.py tests/test_main_audit.py tests/test_risk_manager.py -q --tb=short`
 - Resultado focal H05 após as alterações: `127 passed, 133 warnings in 1.17s`
 - Comando final executado: `pytest tests/ -q --tb=short`
-- Resultado final: `406 passed, 1166 warnings in 4.83s`
+- Resultado final: `420 passed, 1166 warnings in 4.96s`
 - Classificação da falha inicial: `falha de código / contrato de testes`, não falha de ambiente.
 - Falhas observadas:
   - `tests/test_grid_engine.py::TestPersistence::test_load_state_schema_validation_rejects_invalid`
@@ -93,18 +93,114 @@ Score delta pós-fix (subset revisto): `72/100`
   - o gap H05 identificado no delta anterior ficou fechado no call path real de admissão de novas grids
   - as limitações remanescentes passaram a ser de cobertura futura opcional, não ausência do gate determinístico exigido
 
+### Fix focado — H04: market-hours fail-closed e timezone local
+- Ficheiros alterados nesta ronda:
+  - `src/market_hours.py`
+  - `tests/test_market_hours.py`
+- Mudanças efectivas no runtime:
+  - equities (`STK_US` e `STK_EU`) deixaram de usar fallback silencioso quando `pandas_market_calendars` está indisponível ou falha
+  - nesses casos o gating passou a `fail-closed` com `CALENDARIO_INDISPONIVEL` ou `CALENDARIO_INCONCLUSIVO`
+  - `FOREX` passou a usar horário local de Nova Iorque em vez de UTC fixa
+  - `FUT` passou a usar horário local de Chicago/CME em vez de UTC fixa
+  - `SESSAO_DESCONHECIDA` passou a falhar fechado
+- Evidência de testes:
+  - `tests/test_market_hours.py` passou de `7` para `12` testes
+  - nova cobertura para:
+    - calendário indisponível
+    - falha do calendário
+    - pre-close de FX com shift DST em Nova Iorque
+    - pausa diária de micro futures com shift DST em Chicago
+- Resultado desta ronda:
+  - o risco de falsa confiança por fallback silencioso em equities ficou removido
+  - FX/FUT deixaram de depender de janelas UTC hardcoded no call path de sessão
+
+### Fix focado — H09: dashboard com economic open e estado operacional
+- Ficheiros alterados nesta ronda:
+  - `dashboard/helpers.py`
+  - `dashboard/app.py`
+  - `tests/test_dashboard_helpers.py`
+- Mudanças efectivas no runtime do dashboard:
+  - `load_positions(...)` passou a derivar `current_price`, `price_source`, `open_notional`, `open_risk_to_stop` e `unrealized_pnl` quando houver preço real persistido
+  - `compute_kpis(...)` passou a expor `unrealized_pnl`, `open_notional`, `open_risk_to_stop`, `entry_halt_reason`, `emergency_halt`, `last_error`, `last_cycle_started_at` e `last_cycle_completed_at`
+  - `build_status_summary(...)` passou a materializar `bot_state` e `risk_state`
+  - o dashboard passou a mostrar explicitamente:
+    - `PAPER MODE`
+    - heartbeat / último ciclo
+    - `unrealized PnL` quando disponível
+    - `open notional` e `risco até stop` como equivalente económico aberto
+    - `entry_halt_reason` / `emergency_halt` / `last_error`
+- Evidência de testes:
+  - `tests/test_dashboard_helpers.py` passou a validar posições derivadas com `unrealized_pnl`, `open_notional` e `open_risk_to_stop`
+  - o mesmo ficheiro passou a validar surfacing de `entry_halt_reason`, `emergency_halt` e `last_error`
+- Resultado desta ronda:
+  - o dashboard deixou de mostrar apenas capital/equity estimada e passou a expor economic open e risco operacional suficientes para paper supervisionado
+
+### Fix focado — H03: policy operacional de erros IB
+- Ficheiros alterados nesta ronda:
+  - `src/ib_requests.py`
+  - `src/data_feed.py`
+  - `src/execution.py`
+  - `main.py`
+  - `tests/test_data_feed.py`
+  - `tests/test_execution.py`
+  - `tests/test_main_audit.py`
+- Mudanças efectivas no runtime:
+  - `src/ib_requests.py:27-97` passou a centralizar uma policy explícita (`IBErrorPolicyDecision` + `classify_ib_error(...)`)
+  - códigos `1100/1101` passam a `entry_halt`
+  - código `1102` passa a `clear_connection_halt`
+  - códigos `354/10197/162` passam a `symbol_skip`
+  - códigos `201/202` passam a erros operacionais de ordens com alerta explícito
+  - `src/data_feed.py:213-413` passou a armazenar eventos operacionais, expô-los por janela temporal e encaminhar eventos de ligação para callback
+  - `main.py:1544-1609` passou a materializar a decisão operacional no runtime:
+    - halt por perda de ligação
+    - clear do halt no restore/reconnect
+    - skip determinístico de request por permissões/OOH/pacing
+  - `main.py:1280-1284`, `2495-2603` passou a aplicar a policy no call path real de preflight, histórico, snapshot e volume
+  - `src/execution.py:272-286` passou a transformar erros de ordens relevantes em alerta operacional explícito, em vez de só log
+- Evidência de testes:
+  - `tests/test_data_feed.py` cobre `entry_halt`, callback de erro e `symbol_skip`
+  - `tests/test_main_audit.py` cobre halt/clear de ligação e skip operacional no runtime
+  - `tests/test_execution.py` cobre alerta operacional para rejeição de ordem
+- Resultado desta ronda:
+  - os erros IB críticos e accionáveis deixaram de ser mostly log-only
+  - o runtime passou a ter policy determinística e testável até à decisão operacional
+
+### Fix focado — H07: exclusão multi-instância por contexto IB
+- Ficheiros alterados nesta ronda:
+  - `main.py`
+  - `tests/test_main_audit.py`
+- Mudanças efectivas no runtime:
+  - `main.py:1427-1588` passou a manter dois locks independentes:
+    - lock local por `data_dir`
+    - lock global por contexto efectivo de broker (`host`, `port`, `client_id`)
+  - o lock global é materializado em directoria temporária comum, não no `data_dir`
+  - a porta efectiva passa a ser resolvida de forma determinística mesmo quando o config usa `port=0`
+  - o payload persistido do lock global passou a incluir `host`, `port`, `client_id`, `paper_trading`, `use_gateway`, `cwd` e `data_dir`
+  - o release passou a libertar ambos os locks de forma idempotente
+- Evidência de testes:
+  - `tests/test_main_audit.py` cobre:
+    - conflito no mesmo `data_dir`
+    - libertação do lock em shutdown gracioso
+    - conflito entre dois `data_dir` distintos com o mesmo contexto IB
+    - coexistência permitida entre dois `data_dir` distintos com `client_id` diferente
+  - validação focal: `pytest tests/test_main_audit.py -q --tb=short -k 'lock or client_id or instance'` → `6 passed, 44 deselected`
+  - validação final: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
+- Resultado desta ronda:
+  - o gap remanescente de exclusão multi-instância deixou de estar scoped apenas ao `data_dir`
+  - o runtime passou a bloquear duas instâncias operacionais que tentem usar o mesmo contexto efectivo de ligação IB
+
 ### Estado actualizado dos findings revistos
 
 | Finding | Estado | Evidência no código | Evidência em testes | Nota operacional |
 |---|---|---|---|---|
 | `C01` | `FECHADO` | `main.py:3210-3265` usa snapshot real de equity, baseline por período e bloqueia entradas se a equity for inconclusiva | `tests/test_main_audit.py:698-822` cobre halts por unrealized equity e fail-safe sem snapshot | Fecho real no call path runtime |
 | `C02` | `FECHADO` | `main.py:3131-3147` bloqueia recenter/respacing se `price_fresh=False` | `tests/test_main_audit.py:1093-1150` prova recenter só com quote fresca | Fecho real no path de grids activas |
-| `H03` | `PARCIAL` | `src/data_feed.py:352-365` e `src/execution.py:259-274` continuam mostly log-only; acção operacional real aparece apenas em `_on_disconnected()` e em `main.py:1266-1305` para `354/10197` | Não encontrei testes que provem matriz determinística de acção por `error_code` | Há reacção operacional em alguns casos, mas não há policy central nem transições determinísticas por erro IB |
-| `H04` | `PARCIAL` | `src/market_hours.py:125-159` faz fallback para horários estáticos quando `pandas_market_calendars` falha; `src/market_hours.py:186-230` mantém FX/FUT em UTC simplificado | `tests/test_market_hours.py:9-71` cobre equities DST/holiday e micro future pause, mas não cobre indisponibilidade de `pandas` nem fidelidade FX/FUT | Melhorou equities, mas ainda há falsa confiança no fallback e simplificação excessiva fora de equities |
-| `H05` | `FECHADO` | `src/pre_trade_gate.py:27-106` centraliza o gate explícito; `main.py:2617-2635` e `main.py:2681-2862` integram `session_ok`, `data_fresh`, `finite_inputs_ok`, `warmup_ok`, `quantity_ok` e `risk_ok` no call path real antes da entrada | `tests/test_pre_trade_gate.py` e `tests/test_main_audit.py:966-1000` provam stale/NaN/quantity/risk gating; suite final verde (`406 passed`) | Fecho real do gate determinístico no runtime actual; `notional/size/affordability` ficaram documentados como flags opcionais sem fonte fiável neste call path |
-| `H06` | `FECHADO` | `src/grid_engine.py:619-657` e `main.py:1419-1426` implementam recovery via backup e fail-closed no arranque | As 5 falhas ligadas a persistência/recovery foram resolvidas e `pytest tests/ -q --tb=short` voltou a verde (`406 passed`) | O runtime está coerente e os testes passaram a reflectir o contrato real |
-| `H07` | `PARCIAL` | `main.py:1434-1473` aplica lock por `data_dir` e persiste `client_id` no payload do lock | `tests/test_main_audit.py:1201-1243` provam exclusão por lock file local | Fecha multi-instância no mesmo `data_dir`, mas não prova unicidade operacional de `client_id` entre workspaces/directórios distintos |
-| `H09` | `PARCIAL` | `dashboard/app.py:226-243`, `246-317`, `367-414` e `dashboard/helpers.py:252-324`, `327-363` mostram `PAPER`, heartbeat, preflight, capital/equity estimada, risk KPIs e status básico | `tests/test_dashboard_helpers.py:112-147` provam KPIs básicos e `paper_mode` | Falta `unrealized/open PnL` económico e falta surfacing explícito de `entry_halt_reason` / `emergency_halt` |
+| `H03` | `FECHADO` | `src/ib_requests.py:27-97` centraliza a policy de códigos IB; `src/data_feed.py:213-413`, `main.py:1544-1609` e `src/execution.py:272-286` aplicam-na no runtime e na execução | `tests/test_data_feed.py`, `tests/test_main_audit.py` e `tests/test_execution.py` provam halt/clear/skip/alerta; suite final verde (`420 passed`) | Fecho real da matriz operacional mínima para erros IB relevantes no runtime actual |
+| `H04` | `FECHADO` | `src/market_hours.py:122-237` passou a falhar fechado sem calendário válido para equities e a usar `America/New_York` / `America/Chicago` para FX/FUT | `tests/test_market_hours.py` cobre calendário indisponível/erro e shifts DST reais de FX/FUT; suite final verde (`420 passed`) | Fecho real do gating de sessão para o runtime actual |
+| `H05` | `FECHADO` | `src/pre_trade_gate.py:27-106` centraliza o gate explícito; `main.py:2617-2635` e `main.py:2681-2862` integram `session_ok`, `data_fresh`, `finite_inputs_ok`, `warmup_ok`, `quantity_ok` e `risk_ok` no call path real antes da entrada | `tests/test_pre_trade_gate.py` e `tests/test_main_audit.py:966-1000` provam stale/NaN/quantity/risk gating; suite final verde (`420 passed`) | Fecho real do gate determinístico no runtime actual; `notional/size/affordability` ficaram documentados como flags opcionais sem fonte fiável neste call path |
+| `H06` | `FECHADO` | `src/grid_engine.py:619-657` e `main.py:1419-1426` implementam recovery via backup e fail-closed no arranque | As 5 falhas ligadas a persistência/recovery foram resolvidas e `pytest tests/ -q --tb=short` voltou a verde (`420 passed`) | O runtime está coerente e os testes passaram a reflectir o contrato real |
+| `H07` | `FECHADO` | `main.py:1427-1588` aplica lock local por `data_dir` e lock global por contexto efectivo de broker (`host`, `port`, `client_id`) | `tests/test_main_audit.py` provam conflito no mesmo `data_dir`, conflito cross-`data_dir` com mesmo contexto IB e coexistência com `client_id` distinto; suite final verde (`420 passed`) | Fecho real da exclusão multi-instância no escopo operativo local do runtime actual |
+| `H09` | `FECHADO` | `dashboard/helpers.py:121-221` deriva economic open e estado operacional; `dashboard/app.py:216-418` mostra `PAPER`, heartbeat/último ciclo, unrealized/equivalente económico aberto e halt operacional | `tests/test_dashboard_helpers.py` cobre economic open, `entry_halt_reason`, `emergency_halt` e `last_error`; suite final verde (`420 passed`) | Fecho real da observabilidade mínima exigida para paper supervisionado |
 
 ### Finding-by-finding
 
@@ -126,27 +222,47 @@ Score delta pós-fix (subset revisto): `72/100`
 - Conclusão:
   - O recenter de grids activas deixou de aceitar preços stale/fallback.
 
-#### H03 — PARCIAL
+#### H03 — FECHADO
 - Evidência de código:
-  - `src/data_feed.py:352-365`: `_on_error()` só acumula `recent_errors` e faz `logger.warning(...)`.
-  - `src/ib_requests.py:161-234`: `IBRequestExecutor.run()` tem retries/alertas genéricos, não decisão operacional por código IB.
-  - `main.py:1266-1305`: só há acção operacional explícita para permissões de market data (`354`) e OOH (`10197`) no preflight.
-  - `src/data_feed.py:366-430`: acção operacional real forte existe no callback de disconnect/reconnect, não no tratamento genérico de erro.
-  - `src/execution.py:259-274`: erros da camada de ordens continuam log-only.
+  - `src/ib_requests.py:27-97` introduz `IBErrorPolicyDecision` e `classify_ib_error(...)`.
+  - `src/data_feed.py:213-413` passou a:
+    - registar eventos operacionais IB por timestamp
+    - aplicar `entry_halt`/`clear_connection_halt` na ligação
+    - expor `operational_events_since(...)`
+    - encaminhar eventos de ligação para callback
+  - `main.py:1544-1609` passou a:
+    - materializar `ib_connection_lost` em `entry_halt_reason`
+    - limpar esse halt no restore/reconnect
+    - fazer `symbol_skip` determinístico para `354/10197/162`
+  - `main.py:1280-1284` aplica a policy no preflight de market data.
+  - `main.py:2495-2603` aplica a policy no call path real de histórico/snapshot/volume.
+  - `src/execution.py:272-286` passou a transformar `201/202` em alertas operacionais explícitos.
 - Evidência de testes:
-  - Não há teste que prove matriz determinística por `error_code`.
-- Fix mínimo necessário:
-  - introduzir um mapa de `error_code -> action` e propagar o efeito ao runtime (`entry_halt`, `symbol_skip`, `reconcile_required`, `safe_mode`, `order_reject_sync`).
+  - `tests/test_data_feed.py:129-176` prova `entry_halt`, callback e `symbol_skip`.
+  - `tests/test_main_audit.py:433-500` prova halt/clear de ligação e skip operacional no runtime.
+  - `tests/test_execution.py:123-136` prova alerta operacional para rejeição de ordem.
+  - validação focal: `pytest tests/test_data_feed.py tests/test_execution.py tests/test_main_audit.py -q --tb=short` → `141 passed, 1 warning`
+  - validação final: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
+- Conclusão:
+  - O tratamento de erros IB deixou de depender só de logging/retry genérico.
+  - O finding H03 fica `FECHADO` para o conjunto de códigos accionáveis actualmente usados pelo runtime.
 
-#### H04 — PARCIAL
+#### H04 — FECHADO
 - Evidência de código:
-  - `src/market_hours.py:125-159`: se `pandas_market_calendars` falha, o código faz warning e segue para fallback estático.
-  - `src/market_hours.py:247-252`: se a dependência não estiver disponível, `_is_trading_day()` degrada para filtro de fim-de-semana.
-  - `src/market_hours.py:186-230`: FX e FUT continuam modelados por janelas UTC simplificadas (`22:00/23:00`) sem timezone/holiday fidelity real.
+  - `src/market_hours.py:122-169`: equities passam a `CALENDARIO_INDISPONIVEL`/`CALENDARIO_INCONCLUSIVO` e ficam fechadas quando o calendário não é utilizável.
+  - `src/market_hours.py:172-191`: `FOREX` passou a usar `America/New_York` para weekly close/pre-close.
+  - `src/market_hours.py:194-237`: `FUT` passou a usar `America/Chicago` para pausa diária, weekly close e reopen.
+  - `src/market_hours.py:121`: `SESSAO_DESCONHECIDA` passou a falhar fechado.
 - Evidência de testes:
-  - `tests/test_market_hours.py:9-71` valida o happy path melhorado de equities, mas não prova comportamento seguro quando o calendário falha nem prova fidelidade de FX/FUT.
-- Fix mínimo necessário:
-  - degradar explicitamente a confiança operacional quando o calendário falha em equities críticas; para FX/FUT, ou usar timezone/local rules robustas ou marcar claramente estes activos como `session fidelity partial`.
+  - `tests/test_market_hours.py:49-70` prova fail-closed sem calendário e com erro de calendário.
+  - `tests/test_market_hours.py:89-103` prova pre-close de FX com shift DST em Nova Iorque.
+  - `tests/test_market_hours.py:114-135` prova pausa diária/reopen de micro futures com shift DST em Chicago.
+  - validação final: `pytest tests/test_market_hours.py -q --tb=short` → `12 passed`
+  - validação final alargada: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
+- Conclusão:
+  - O fallback silencioso deixou de permitir operar equities com falsa confiança.
+  - FX e FUT deixaram de depender de janelas UTC fixas no path real de sessão.
+  - O finding H04 fica `FECHADO` para o escopo actual.
 
 #### H05 — FECHADO
 - Evidência de código:
@@ -168,7 +284,7 @@ Score delta pós-fix (subset revisto): `72/100`
 - Evidência de testes:
   - `tests/test_pre_trade_gate.py` prova stale price, NaN em preço/indicador, quantity zero, caminho admitido e enumeração de rejection reasons.
   - `tests/test_main_audit.py:966-1000` prova que inputs não finitos são rejeitados antes de `position_size_per_level`, `validate_order` e `submit_bracket_order`.
-  - validação final: `pytest tests/ -q --tb=short` → `406 passed, 1166 warnings`
+  - validação final: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
 - Conclusão:
   - O pre-trade gate determinístico passou a existir como objecto central e foi integrado no path real de admissão de novas grids.
   - O finding H05 fica `FECHADO` para o escopo do runtime actual.
@@ -185,44 +301,58 @@ Score delta pós-fix (subset revisto): `72/100`
     - `tests/test_grid_engine.py::TestPersistence::test_load_state_validates_level_status`
     - `tests/test_grid_engine.py::TestPersistence::test_load_state_validates_missing_fields`
     - `tests/test_integration.py::TestStatePersistenceAndRecovery::test_state_corruption_handling`
-  - validação final: `pytest tests/ -q --tb=short` → `406 passed, 1166 warnings`
+  - validação final: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
 - Conclusão:
   - `H06` passa para `FECHADO`.
   - O comportamento fail-closed/recovery do runtime mostrou-se coerente; o problema estava nos testes, não no `GridEngine`.
 
-#### H07 — PARCIAL
+#### H07 — FECHADO
 - Evidência de código:
-  - `main.py:1434-1473` implementa lock file por `data_dir` e regista `client_id`.
+  - `main.py:1427-1588` implementa:
+    - lock local por `data_dir`
+    - lock global por contexto efectivo IB (`host`, `port`, `client_id`)
+  - `main.py:642-683` resolve a porta efectiva e constrói um lock path determinístico por contexto de broker.
 - Evidência de testes:
-  - `tests/test_main_audit.py:1201-1243` prova bloqueio de segunda instância no mesmo state path.
-- Lacuna remanescente:
-  - o lock é scoped ao `data_dir`; não há prova de exclusão operacional para o mesmo `client_id` em dois `data_dir` diferentes.
-- Fix mínimo necessário:
-  - adicionar lock adicional por broker/client context ou teste explícito/documentação a dizer que o lock é apenas por state directory.
+  - `tests/test_main_audit.py` prova:
+    - bloqueio de segunda instância no mesmo `data_dir`
+    - libertação do lock em shutdown gracioso
+    - bloqueio entre dois `data_dir` distintos com o mesmo `host:port:client_id`
+    - coexistência permitida com `client_id` diferente
+  - validação focal: `pytest tests/test_main_audit.py -q --tb=short -k 'lock or client_id or instance'` → `6 passed, 44 deselected`
+  - validação final: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
+- Conclusão:
+  - O finding H07 passa para `FECHADO`.
+  - O runtime deixou de depender apenas do `data_dir` para exclusão multi-instância e passou a bloquear reuse operacional do mesmo contexto de ligação IB.
 
-#### H09 — PARCIAL
+#### H09 — FECHADO
 - Evidência de código:
-  - `dashboard/app.py:226-243` mostra `PAPER MODE`, heartbeat e preflight.
-  - `dashboard/app.py:246-317` mostra capital, equity estimada, PnL diário, PnL acumulado, contagem de trades, open positions e risk KPIs.
-  - `dashboard/helpers.py:252-324` calcula KPIs a partir de métricas, trades, heartbeat e preflight.
-- O que falta para fechar:
-  - `dashboard/helpers.py:131-170` deriva posições apenas com quantity/entry/stop/take profit; não calcula `unrealized/open economic PnL`.
-  - `dashboard/helpers.py:302-324` não expõe `entry_halt_reason` nem `emergency_halt`, apesar de estes existirem no heartbeat em `main.py:2184-2205`.
+  - `dashboard/helpers.py:121-176` passou a derivar `current_price`, `price_source`, `open_notional`, `open_risk_to_stop` e `unrealized_pnl`.
+  - `dashboard/helpers.py:199-292` passou a expor `entry_halt_reason`, `emergency_halt`, `last_error` e timestamps operacionais do heartbeat.
+  - `dashboard/helpers.py:295-329` passou a materializar `bot_state` e `risk_state`.
+  - `dashboard/app.py:216-257` mostra `PAPER MODE`, heartbeat e último ciclo.
+  - `dashboard/app.py:258-290` mostra `Unrealized PnL`, `Open notional`, `Risco até stop`, `Bot`, `Risco operacional`, `IB conectado` e `Manual pause`.
+  - `dashboard/app.py:314-337` mostra halt operacional explícito na tab de risco.
+  - `dashboard/app.py:390-405` mostra tabela de estado operacional no painel de sistema.
 - Evidência de testes:
-  - `tests/test_dashboard_helpers.py:112-147` cobre só KPIs/status básicos.
-- Fix mínimo necessário:
-  - expor `entry_halt_reason`/`emergency_halt` em `compute_kpis()` e mostrar no header/risk tab;
-  - calcular `unrealized_pnl` a partir de posições abertas + último preço real quando disponível, ou mostrar explicitamente que está indisponível.
+  - `tests/test_dashboard_helpers.py:63-96` valida posições derivadas com `open_notional`, `open_risk_to_stop` e `unrealized_pnl`.
+  - `tests/test_dashboard_helpers.py:99-160` valida KPIs e estado operacional (`entry_halt_reason`, `emergency_halt`, `last_error`, `bot_state`, `risk_state`).
+  - validação focal: `pytest tests/test_dashboard_helpers.py -q --tb=short` → `6 passed`
+  - validação final: `pytest tests/ -q --tb=short` → `420 passed, 1166 warnings`
+- Conclusão:
+  - O dashboard passou a mostrar `PAPER mode`, heartbeat/última actualização, economic open e risco operacional suficiente para o escopo de paper supervisionado.
+  - O finding H09 fica `FECHADO`.
 
 ### Score actualizado e diferença face ao anterior
 - Score anterior no relatório histórico: `53/100`.
-- Score delta revisto para o subset auditado agora: `72/100`.
+- Score delta revisto para o subset auditado agora: `90/100`.
 - Justificação da subida:
   - `C01` e `C02` passaram de críticos abertos para fechados no call path real.
   - `H06` passou de parcial para fechado após validação teste-a-teste e suite completa verde.
   - `H05` passou de parcial para fechado com gate central explícito e testes dedicados.
-- Limites da subida:
-  - `H03`, `H04`, `H07` e `H09` continuam parciais.
+  - `H04` passou de parcial para fechado com fail-closed explícito e timezone local para FX/FUT.
+  - `H09` passou de parcial para fechado com economic open e estado operacional explícitos no dashboard.
+  - `H03` passou de parcial para fechado com policy central de erro IB e decisão operacional testável.
+  - `H07` passou de parcial para fechado com exclusão multi-instância por contexto efectivo de broker.
 - Nota:
   - o score acima não reclassifica áreas não revistas neste delta audit.
 
@@ -231,27 +361,26 @@ Score delta pós-fix (subset revisto): `72/100`
 - Evidência resumida:
   - as 5 falhas da área de persistência/recovery foram resolvidas com alinhamento de testes ao contrato runtime actual;
   - o novo pre-trade gate não introduziu regressões no call path de entrada;
+  - o endurecimento de `market_hours` não introduziu regressões na suite nem nos call paths revistos;
+  - a expansão de observabilidade do dashboard não introduziu regressões na suite nem quebras de import;
+  - a policy operacional de erros IB não introduziu regressões na suite nem nos paths de trading;
   - `pytest tests/test_grid_engine.py tests/test_integration.py -q --tb=short` → `74 passed`
   - `pytest tests/test_pre_trade_gate.py tests/test_main_audit.py tests/test_risk_manager.py -q --tb=short` → `127 passed`
-  - `pytest tests/ -q --tb=short` → `406 passed`
+  - `pytest tests/test_data_feed.py tests/test_execution.py tests/test_main_audit.py -q --tb=short` → `141 passed`
+  - `pytest tests/test_dashboard_helpers.py -q --tb=short` → `6 passed`
+  - `pytest tests/test_market_hours.py -q --tb=short` → `12 passed`
+  - o endurecimento da exclusão multi-instância não introduziu regressões na suite nem quebras no shutdown/restart;
+  - `pytest tests/test_main_audit.py -q --tb=short -k 'lock or client_id or instance'` → `6 passed`
+  - `pytest tests/ -q --tb=short` → `420 passed`
 
 ### Conclusão do delta audit
-- Pronto para paper trading com supervisão? `NÃO`
-- Blockers concretos:
-  - `H03` continua sem acção operacional determinística para a maioria dos erros IB;
-  - `H04` continua parcial por fallback silencioso em equities e modelação simplificada de FX/FUT;
-  - `H09` continua parcial por falta de `unrealized/open PnL` e visibilidade explícita de halt operacional;
-  - `H07` não pode ser dado como totalmente fechado enquanto a exclusão continuar scoped só ao `data_dir`.
+- Pronto para paper trading com supervisão? `SIM`
+- Justificação:
+  - no subset efectivamente revisto neste delta audit (`C01`, `C02`, `H03`, `H04`, `H05`, `H06`, `H07`, `H09`), já não restam findings abertos;
+  - a suite completa está verde (`420 passed`) e não há regressões detectadas nos call paths tocados pelos fixes.
 
 ### Próximos passos
-- Implementar um mapa operacional de erros IB com acções explícitas no runtime, não só logging/retry genérico.
-- Endurecer `market_hours`:
-  - degradar confiança operacional quando `pandas_market_calendars` falha em equities;
-  - rever FX/FUT para regras de sessão/timezone menos simplificadas.
-- Expor no dashboard:
-  - `unrealized/open PnL`
-  - `entry_halt_reason`
-  - `emergency_halt`
+- Nenhum finding permanece aberto no subset revisto deste delta audit.
 
 ## Auditoria anterior
 

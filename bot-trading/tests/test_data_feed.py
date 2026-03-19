@@ -125,6 +125,57 @@ class TestIBConnectionInit:
         mock_connection.ib.isConnected.return_value = False
         assert mock_connection.is_connected is False
 
+    def test_on_error_records_actionable_connection_event(self, mock_ib):
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection()
+
+        conn._on_error(
+            req_id=1,
+            error_code=1100,
+            error_string="Connectivity between IB and Trader Workstation has been lost",
+            contract=None,
+        )
+
+        events = conn.operational_events_since(0.0)
+        assert len(events) == 1
+        assert events[0].action == "entry_halt"
+        assert events[0].halt_reason == "ib_connection_lost"
+        assert conn._connection_state == "DISCONNECTED"
+
+    @pytest.mark.asyncio
+    async def test_on_error_dispatches_connection_error_callback(self, mock_ib):
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection()
+
+        callback = AsyncMock()
+        conn.set_error_callback(callback)
+
+        conn._on_error(
+            req_id=2,
+            error_code=1100,
+            error_string="Connectivity between IB and Trader Workstation has been lost",
+            contract=None,
+        )
+        await asyncio.sleep(0)
+
+        callback.assert_awaited_once()
+
+    def test_on_error_records_market_data_permission_as_symbol_skip(self, mock_ib):
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection()
+
+        conn._on_error(
+            req_id=3,
+            error_code=354,
+            error_string="Requested market data is not subscribed",
+            contract=None,
+        )
+
+        events = conn.operational_events_since(0.0)
+        assert len(events) == 1
+        assert events[0].action == "symbol_skip"
+        assert events[0].scope == "request"
+
 
 # ===================================================================
 # Tests: Contract creation

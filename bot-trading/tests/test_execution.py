@@ -123,6 +123,22 @@ class TestRateLimiter:
         assert elapsed >= 0.0  # May be very fast if timestamps expired
 
 
+@pytest.mark.asyncio
+async def test_order_error_sends_operational_alert(order_manager):
+    alert_cb = AsyncMock()
+    order_manager._request_executor.set_alert_callback(alert_cb)
+
+    order_manager._on_error(
+        reqId=7,
+        errorCode=201,
+        errorString="Order rejected - reason: margin",
+        contract=MagicMock(symbol="AAPL"),
+    )
+    await asyncio.sleep(0)
+
+    alert_cb.assert_awaited_once()
+
+
 # ===================================================================
 # Tests: submit_bracket_order (mocked IB)
 # ===================================================================
