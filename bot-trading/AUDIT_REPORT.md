@@ -1,6 +1,37 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `74c22efad89a47915f313ab7b011f6fc2046a829` | Data/hora UTC: `2026-03-19T03:47:20Z` | Working tree: `dirty (AUDIT_REPORT.md, data/bot.log)`
+Branch actual: `main` | Commit actual: `a0cf3fe5db82d5bf144f5fb56a89726f373855c3` | Data/hora UTC: `2026-03-19T07:35:55Z` | Working tree: `dirty (AUDIT_REPORT.md, data/bot.log)`
 Score delta pós-fix (subset revisto): `90/100` (mantido nesta ronda)
+
+## Delta audit focado - 2026-03-19 revalidation of committed Windows signal fix
+
+### Escopo e metodo
+- Ronda de revalidacao contra o codigo real actual, seguindo o prompt sem assumir que o relatorio anterior estava correcto.
+- Ficheiros de codigo alterados nesta ronda: nenhum.
+- No arranque desta ronda, `git status --short` estava limpo; apos a validacao de `python main.py`, a unica sujidade local observada foi `M data/bot.log`.
+- `_handle_shutdown_signal` permanece inalterado.
+
+### Diagnostico confirmado
+- O `main.py` actual ja contem o fallback cross-platform em `_setup_signal_handlers`.
+- Em Unix/Linux/macOS, o codigo continua a usar `loop.add_signal_handler(...)` quando suportado e faz log de `unix_signal_handlers`.
+- Em Windows, e tambem quando houver `NotImplementedError`, o codigo faz fallback para `signal.signal(...)`, regista `SIGINT` sempre, tenta `SIGTERM` se estiver disponivel/utilizavel e faz log de `windows_signal_fallback`.
+- O erro especifico de `NotImplementedError` em `_setup_signal_handlers()` nao se reproduziu nesta ronda.
+
+### Validacao desta ronda
+- Comando de testes: `py -m pytest tests/ -q --tb=short`
+- Resultado: `420 passed, 1166 warnings in 15.88s`
+- Total de testes: `420 passed`, igual ao historico recente; nao houve diferenca no total.
+- Validacao de arranque Windows: `python main.py` ultrapassou o erro especifico de `_setup_signal_handlers()`.
+- Evidencia observada no log: `Caminho de sinais activo: windows_signal_fallback (SIGINT, SIGTERM).`
+- Novo blocker encontrado depois deste ponto:
+  - `RuntimeError: Outra instância parece activa para o mesmo contexto IB (127.0.0.1:7497 client_id=1).`
+- Em conformidade com o prompt, esse blocker seguinte nao foi corrigido nesta ronda.
+- Score mantido: `90/100`.
+- Justificacao do score: esta ronda apenas revalidou o fix ja commitado e alinhou o relatorio com o estado real; nao houve alteracao funcional nova.
+
+### Regressoes novas
+- Nenhuma regressao nova atribuivel ao fix de compatibilidade Windows.
+- Blocker seguinte observado apenas em validacao de arranque:
+  - lock de instancia/contexto IB ja existente, fora do escopo desta ronda.
 
 ## Delta audit focado - 2026-03-19 validation of committed Windows signal fix
 
