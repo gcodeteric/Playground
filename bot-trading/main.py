@@ -1605,9 +1605,56 @@ class TradingBot:
 
     def _setup_signal_handlers(self, loop: asyncio.AbstractEventLoop) -> None:
         """Regista handlers para SIGINT e SIGTERM para encerramento gracioso."""
-        for sig in (signal.SIGINT, signal.SIGTERM):
-            loop.add_signal_handler(sig, self._handle_shutdown_signal, sig)
-        logger.info("Handlers de sinal registados (SIGINT, SIGTERM).")
+        signals_to_register = [signal.SIGINT]
+        sigterm = getattr(signal, "SIGTERM", None)
+        if sigterm is not None:
+            signals_to_register.append(sigterm)
+
+        if sys.platform != "win32":
+            try:
+                for sig in signals_to_register:
+                    loop.add_signal_handler(sig, self._handle_shutdown_signal, sig)
+                logger.info(
+                    "Caminho de sinais activo: unix_signal_handlers (%s).",
+                    ", ".join(signal.Signals(sig).name for sig in signals_to_register),
+                )
+                return
+            except NotImplementedError:
+                logger.warning(
+                    "Caminho de sinais unix_signal_handlers indisponivel neste loop; "
+                    "a usar windows_signal_fallback."
+                )
+
+        def _fallback_handler(signum: int, _frame: Any) -> None:
+            self._handle_shutdown_signal(signum)
+
+        signal.signal(signal.SIGINT, _fallback_handler)
+        registered_signals = [signal.Signals(signal.SIGINT).name]
+
+        if sigterm is None:
+            logger.info(
+                "Caminho de sinais activo: windows_signal_fallback (%s); "
+                "SIGTERM indisponivel nesta plataforma.",
+                ", ".join(registered_signals),
+            )
+            return
+
+        try:
+            signal.signal(sigterm, _fallback_handler)
+            registered_signals.append(signal.Signals(sigterm).name)
+        except (OSError, RuntimeError, ValueError) as exc:
+            logger.warning(
+                "Caminho de sinais activo: windows_signal_fallback (%s); "
+                "SIGTERM nao utilizavel no fallback: %s",
+                ", ".join(registered_signals),
+                exc,
+            )
+            return
+
+        logger.info(
+            "Caminho de sinais activo: windows_signal_fallback (%s).",
+            ", ".join(registered_signals),
+        )
 
     def _handle_shutdown_signal(self, sig: signal.Signals) -> None:
         """Callback invocado ao receber SIGINT ou SIGTERM."""

@@ -1,6 +1,39 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `3f2dfb1c6de3c4727f6edb71deb810ba7927c7d9` | Data/hora UTC: `2026-03-19T02:26:58Z` | Working tree: `dirty (AUDIT_REPORT.md, tests/test_main_audit.py)`
+Branch actual: `main` | Commit actual: `ae2b882275aee73f2beb217289214c6eb9702dbe` | Data/hora UTC: `2026-03-19T02:45:59Z` | Working tree: `dirty (AUDIT_REPORT.md, data/bot.log, main.py)`
 Score delta pós-fix (subset revisto): `90/100` (mantido nesta ronda)
+
+## Delta audit focado - 2026-03-19 windows signal compatibility fix
+
+### Escopo e metodo
+- Ronda limitada a compatibilidade de arranque Windows em `main.py`.
+- Ficheiros de codigo alterados nesta ronda: `main.py`.
+- `_handle_shutdown_signal` foi preservado sem alteracoes; a diff desta ronda ficou confinada a `_setup_signal_handlers`.
+
+### Diagnostico confirmado
+- O arranque falhava em Windows em `main.py:1609` com `NotImplementedError` ao chamar `loop.add_signal_handler(...)`.
+- A causa e compatibilidade de plataforma: `asyncio.AbstractEventLoop.add_signal_handler` nao tem o mesmo suporte em Windows que em Unix/Linux/macOS.
+- Classificacao desta falha: `compatibilidade Windows`, nao regressao do fluxo de shutdown gracioso.
+
+### Correcao aplicada
+- Em Unix/Linux/macOS, `_setup_signal_handlers` continua a usar `loop.add_signal_handler(...)` quando suportado, preservando o comportamento actual.
+- Se a plataforma for Windows, ou se `loop.add_signal_handler(...)` levantar `NotImplementedError`, o codigo faz fallback para `signal.signal(...)`.
+- No fallback, `SIGINT` e sempre registado; `SIGTERM` e registado apenas se estiver disponivel e funcional.
+- O caminho usado fica agora documentado em log como `unix_signal_handlers` ou `windows_signal_fallback`.
+- O handler efectivo continua a fazer o mesmo shutdown gracioso via `_handle_shutdown_signal`: `self._running = False` e `self._shutdown_event.set()`.
+
+### Validacao desta ronda
+- Validacao de arranque em Windows: `main.py` arrancou sem erro neste ponto.
+- Evidencia observada no arranque: `Caminho de sinais activo: windows_signal_fallback (SIGINT, SIGTERM).`
+- O processo passou pelos signal handlers, carregou configuracao, iniciou preflight e so depois foi terminado manualmente para encerrar a validacao.
+- Nao surgiu novo blocker de arranque apos este fix nesta ronda.
+- Comando final: `py -m pytest tests/ -q --tb=short`
+- Resultado final: `420 passed, 1166 warnings in 8.81s`
+- Total de testes: `420 passed`, igual ao historico recente; nao houve diferenca no total.
+- Score mantido: `90/100`.
+- Justificacao do score: o fix remove um blocker real de arranque em Windows, mas nao altera o perimetro funcional auditado nem introduz novos controlos de risco.
+
+### Regressoes novas
+- Nenhuma regressao nova observada nesta ronda.
 
 ## Delta audit focado - 2026-03-19 fragile test fix
 

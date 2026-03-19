@@ -1844,3 +1844,53 @@
 2026-03-18 02:55:11 | DEBUG    | main                 | --- Fim de ciclo ---
 2026-03-18 02:55:11 | DEBUG    | src.grid_engine      | Backup do estado criado: /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json.bak
 2026-03-18 02:55:11 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em /Users/beatrizneves/Documents/Playground/bot-trading/data/grids_state.json
+2026-03-19 02:44:54 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-19 02:44:54 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-19 02:44:54 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 3 | Posicoes max: 8
+2026-03-19 02:44:54 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-19 02:44:54 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 100000.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 8 | Max grids: 3 | R:R mínimo: 2.5
+2026-03-19 02:44:54 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: C:\Users\berna\Desktop\Playground\bot-trading\data)
+2026-03-19 02:44:54 | WARNING  | main                 | Telegram NAO configurado — notificacoes desactivadas. Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env.
+2026-03-19 02:44:54 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-19 02:44:54 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50. # WinRate
+2026-03-19 02:44:54 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-19 02:44:54 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-19 02:44:54 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-19 02:44:54 | INFO     | main                 | Caminho de sinais activo: windows_signal_fallback (SIGINT, SIGTERM).
+2026-03-19 02:44:54 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-19 02:44:54 | INFO     | main                 | Bot a iniciar — watchlist: ['AAPL', 'SPY', 'QQQ', 'XLU', 'GDXJ', 'VIX'] | capital: 100000.00 | ciclo: 300 s | paper: True
+2026-03-19 02:44:54 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-19 02:44:54 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-19 02:44:54 | INFO     | main                 | Lock de instÃ¢ncia adquirido: C:\Users\berna\Desktop\Playground\bot-trading\data\bot.instance.lock
+2026-03-19 02:44:54 | INFO     | main                 | Lock de contexto IB adquirido: C:\Users\berna\AppData\Local\Temp\bot-trading-instance-locks\ib-127_0_0_1-7497-client-1-781204e243c4ce97.lock
+2026-03-19 02:44:54 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-19 02:44:54 | INFO     | main                 | Estado de grids carregado â€” 0 grid(s) existente(s).
+2026-03-19 02:44:54 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-19 02:44:54 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-19 02:44:54 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-19 02:44:54 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1, estado=CONNECTING)…
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfuture
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:eufarm
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:cashfarm
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usopt.nj
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:euhmds
+2026-03-19 02:44:54 | WARNING  | src.data_feed        | Codigo IB 2106: A conex\u00e3o do centro de dados HMDS est\u00e1 OK:ushmds
+2026-03-19 02:44:54 | INFO     | src.data_feed        | Ligação ao IB estabelecida com sucesso (127.0.0.1:7497).
+2026-03-19 02:44:54 | INFO     | src.data_feed        | Tipo de dados de mercado IB configurado para delayed (3).
+2026-03-19 02:44:54 | INFO     | src.execution        | OrderManager inicializado com sucesso
+2026-03-19 02:44:54 | INFO     | main                 | Conta IB detectada: DU***9204 (PAPER).
+2026-03-19 02:44:54 | INFO     | risk_manager         | Capital actualizado — Anterior: 100000.00 | Novo: 619.91 | Variação: -99380.09 (-99.38%) | Desde início: -99.38%
+2026-03-19 02:44:54 | INFO     | main                 | Capital de runtime restaurado: 619.91 (fonte=broker, peak_equity=100000.00).
+2026-03-19 02:44:54 | INFO     | src.data_feed        | A qualificar contrato: AAPL…
+2026-03-19 02:44:55 | INFO     | src.data_feed        | Contrato qualificado: AAPL (conId=265598, exchange=SMART).
+2026-03-19 02:44:55 | DEBUG    | src.data_feed        | A obter preço actual de AAPL…
+2026-03-19 02:44:55 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 4: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL, contract: Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS')
+2026-03-19 02:44:55 | WARNING  | src.execution        | Erro IB — reqId=4, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.AAPL NASDAQ.NMS/TOP/ALL (contrato=Stock(conId=265598, symbol='AAPL', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='AAPL', tradingClass='NMS'))
