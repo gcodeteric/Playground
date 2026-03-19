@@ -57,16 +57,16 @@ def do_login(win, username, password):
     pyautogui.hotkey("ctrl", "a")
     pyautogui.write(username, interval=0.05)
 
-    # Campo password — aproximadamente 50% da altura da janela
-    pass_y = win.top + int(win.height * 0.50)
-    print(f"A clicar no campo password ({cx}, {pass_y})...")
-    pyautogui.click(cx, pass_y)
+    # Ir para o campo password com TAB
+    print("A mudar para o campo password com TAB...")
+    pyautogui.press("tab")
     time.sleep(0.5)
-    pyautogui.hotkey("ctrl", "a")
+
+    # Escrever password
     pyautogui.write(password, interval=0.05)
 
-    # Confirmar login
-    print("A confirmar login...")
+    # Confirmar login com ENTER
+    print("A confirmar login com ENTER...")
     pyautogui.press("enter")
     time.sleep(3)
     return True
