@@ -781,7 +781,17 @@ async def test_monthly_kill_switch_initiates_broker_flatten(tmp_path):
 
 
 @pytest.mark.asyncio
-async def test_unrealized_equity_loss_triggers_daily_halt(tmp_path):
+async def test_unrealized_equity_loss_triggers_daily_halt(tmp_path, monkeypatch):
+    frozen_now = datetime(2026, 3, 19, 12, 0, tzinfo=timezone.utc)
+
+    class FrozenDateTime(datetime):
+        @classmethod
+        def now(cls, tz=None):
+            if tz is None:
+                return frozen_now.replace(tzinfo=None)
+            return frozen_now.astimezone(tz)
+
+    monkeypatch.setattr("main.datetime", FrozenDateTime)
     bot = _build_bot_stub()
     bot._config = _build_runtime_config(tmp_path)
     bot._grid_engine = GridEngine(data_dir=str(tmp_path))
@@ -796,7 +806,7 @@ async def test_unrealized_equity_loss_triggers_daily_halt(tmp_path):
         return_value={"daily": 0.0, "weekly": 0.0, "monthly": 0.0},
     )
     bot._fetch_current_equity_snapshot = AsyncMock(return_value=96_000.0)
-    _seed_equity_baselines(bot, datetime(2026, 3, 18, tzinfo=timezone.utc))
+    _seed_equity_baselines(bot, frozen_now)
 
     grid = bot._grid_engine.create_grid(
         symbol="AAPL",

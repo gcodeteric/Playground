@@ -1,6 +1,42 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `62bb1aa17bb05f5b446d8410cc8afb45e8eb1d73` | Data/hora UTC: `2026-03-18T23:25:10Z` | Working tree: `dirty (AUDIT_REPORT.md, dashboard/app.py, dashboard/helpers.py, main.py, src/data_feed.py, src/execution.py, src/ib_requests.py, src/market_hours.py, tests/test_dashboard_helpers.py, tests/test_data_feed.py, tests/test_execution.py, tests/test_main_audit.py, tests/test_market_hours.py)`
-Score delta pós-fix (subset revisto): `90/100`
+Branch actual: `main` | Commit actual: `3f2dfb1c6de3c4727f6edb71deb810ba7927c7d9` | Data/hora UTC: `2026-03-19T02:26:58Z` | Working tree: `dirty (AUDIT_REPORT.md, tests/test_main_audit.py)`
+Score delta pós-fix (subset revisto): `90/100` (mantido nesta ronda)
+
+## Delta audit focado - 2026-03-19 fragile test fix
+
+### Escopo e metodo
+- Ronda limitada a fragilidade do teste `tests/test_main_audit.py::test_unrealized_equity_loss_triggers_daily_halt`.
+- Ficheiros de codigo alterados nesta ronda: `tests/test_main_audit.py`.
+- Runtime C01 mantido: `_check_risk_limits` e `_sync_equity_baselines` nao foram alterados; `main.py` ficou sem diff nesta ronda.
+
+### Diagnostico confirmado
+- O baseline diario era semeado com `datetime(2026, 3, 18, tzinfo=timezone.utc)`.
+- `_check_risk_limits()` calcula `now_utc = datetime.now(timezone.utc)` em `main.py:3511` e chama `_sync_equity_baselines(current_equity, now=now_utc)` em `main.py:3518`.
+- `_sync_equity_baselines()` substitui o baseline quando `entry["period"] != period_id` em `main.py:960-965`.
+- Portanto, quando o teste corre num dia posterior a `2026-03-18`, o baseline diario roda para a equity actual (`96_000.0`) e a perda diaria observada passa a `0%`.
+- Classificacao desta falha: `teste fragil`, nao bug de runtime.
+
+### Correcao aplicada
+- Abordagem usada: congelar o "agora" do cenario no proprio teste com `monkeypatch`, equivalente a `unittest.mock.patch`, trocando `main.datetime.now(...)` por um instante fixo (`2026-03-19T12:00:00Z`).
+- O baseline do teste passou a ser semeado com o mesmo instante congelado.
+- Resultado: o `period id` diario do seed e o do runtime passam a coincidir de forma deterministica, sem alterar o comportamento real de C01.
+
+### Validacao desta ronda
+- Instalacoes realizadas para executar a validacao pedida neste ambiente: `py -m pip install -r requirements.txt`.
+- Comando focal: `py -m pytest tests/test_main_audit.py::test_unrealized_equity_loss_triggers_daily_halt -v`
+- Resultado focal: `1 passed, 1 warning in 9.98s`
+- Comando final: `py -m pytest tests/ -q --tb=short`
+- Resultado final: `420 passed, 1166 warnings in 11.14s`
+- Total de testes: `420 passed`, igual ao historico recente deste relatorio; nao houve diferenca no total.
+- Score mantido: `90/100`.
+- Justificacao do score: a correcao fecha apenas fragilidade de teste; nao altera cobertura funcional nem runtime adicional.
+
+### Regressoes novas
+- Nenhuma regressao nova observada.
+- Evidencia de que o runtime de `C01` nao foi alterado nesta ronda:
+  - `main.py` nao foi modificado.
+  - A unica alteracao de codigo foi em `tests/test_main_audit.py`.
+  - A suite completa permaneceu verde com `420 passed`.
 
 ## Delta audit focado — post-fix
 
