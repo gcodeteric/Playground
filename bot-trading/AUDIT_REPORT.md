@@ -1,6 +1,49 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `ae2b882275aee73f2beb217289214c6eb9702dbe` | Data/hora UTC: `2026-03-19T02:45:59Z` | Working tree: `dirty (AUDIT_REPORT.md, data/bot.log, main.py)`
+Branch actual: `main` | Commit actual: `74c22efad89a47915f313ab7b011f6fc2046a829` | Data/hora UTC: `2026-03-19T03:47:20Z` | Working tree: `dirty (AUDIT_REPORT.md, data/bot.log)`
 Score delta pós-fix (subset revisto): `90/100` (mantido nesta ronda)
+
+## Delta audit focado - 2026-03-19 validation of committed Windows signal fix
+
+### Escopo e metodo
+- Ronda de validacao contra o codigo real actual de `main.py`, sem assumir que o `AUDIT_REPORT.md` anterior estava alinhado.
+- Ficheiros de codigo alterados nesta ronda: nenhum.
+- O `main.py` actual ja contem a compatibilidade Windows em `_setup_signal_handlers`; nao foi necessario novo patch de runtime nesta ronda.
+- `_handle_shutdown_signal` permanece inalterado.
+
+### Diagnostico confirmado
+- O contexto recebido para esta ronda estava stale face ao codigo real:
+  - `git status --short` real mostrou apenas `M data/bot.log`
+  - `main.py` ja continha fallback `windows_signal_fallback` e uso de `signal.signal(...)`
+- O fix de compatibilidade Windows ja esta commitado em `74c22efad89a47915f313ab7b011f6fc2046a829`.
+- O call path do erro original continua confirmado historicamente em `_setup_signal_handlers`, mas o codigo actual ja nao usa apenas `loop.add_signal_handler(...)`.
+
+### Compatibilidade Windows validada
+- Unix/Linux/macOS:
+  - continua a usar `loop.add_signal_handler(...)` quando suportado
+  - faz log de `unix_signal_handlers`
+- Windows:
+  - faz fallback para `signal.signal(...)`
+  - regista `SIGINT` sempre
+  - tenta registar `SIGTERM` apenas se estiver disponivel e utilizavel
+  - faz log de `windows_signal_fallback`
+- O comportamento de shutdown gracioso manteve-se inalterado porque `_handle_shutdown_signal` continua responsavel por `self._running = False` e `self._shutdown_event.set()`.
+
+### Validacao desta ronda
+- Comando de testes: `py -m pytest tests/ -q --tb=short`
+- Resultado: `420 passed, 1166 warnings in 8.81s`
+- Total de testes: `420 passed`, igual ao historico recente; nao houve diferenca no total.
+- Validacao de arranque Windows: `python main.py` ultrapassou o erro especifico de `_setup_signal_handlers()`.
+- Evidencia observada no log: `Caminho de sinais activo: windows_signal_fallback (SIGINT, SIGTERM).`
+- Novo blocker encontrado depois deste ponto:
+  - `RuntimeError: Outra instância parece activa para o mesmo contexto IB (127.0.0.1:7497 client_id=1).`
+- Em conformidade com a instrucao desta ronda, esse blocker seguinte nao foi corrigido aqui.
+- Score mantido: `90/100`.
+- Justificacao do score: esta ronda apenas valida e alinha o estado real do repo; nao houve alteracao funcional nova nem ampliacao do perimetro auditado.
+
+### Regressoes novas
+- Nenhuma regressao nova atribuivel ao fix de compatibilidade Windows.
+- Blocker seguinte observado apenas em validacao de arranque:
+  - lock de instancia/contexto IB ja existente, fora do escopo desta ronda.
 
 ## Delta audit focado - 2026-03-19 windows signal compatibility fix
 
