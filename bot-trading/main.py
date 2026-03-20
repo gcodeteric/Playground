@@ -2517,6 +2517,7 @@ class TradingBot:
         # --- Loop principal ---
         try:
             while self._running:
+                """
                 # Verificar shutdown.request antes do ciclo
                 # Verificar shutdown.request apos ciclo
                 if self._shutdown_request_path.exists():
@@ -2570,6 +2571,52 @@ class TradingBot:
                     break
                 except asyncio.TimeoutError:
                     # Timeout normal — continuar para o proximo ciclo
+                    pass
+
+                """
+                if self._shutdown_request_path.exists():
+                    logger.warning(
+                        "Ficheiro shutdown.request detectado antes do ciclo - "
+                        "a iniciar encerramento gracioso."
+                    )
+                    self._shutdown_event.set()
+                    break
+
+                try:
+                    await self._main_cycle()
+                except Exception as exc:  # noqa: BLE001
+                    self._last_error = str(exc)
+                    logger.error(
+                        "Erro nao tratado no ciclo principal: %s", exc,
+                        exc_info=True,
+                    )
+                    self._schedule_telegram(
+                        self._telegram.critical_error(
+                            error=str(exc),
+                            location="main loop",
+                            paper=self._config.ib.paper_trading,
+                        ) if self._telegram else None
+                    )
+
+                if self._shutdown_request_path.exists():
+                    logger.warning(
+                        "Ficheiro shutdown.request detectado apos ciclo - "
+                        "a iniciar encerramento gracioso."
+                    )
+                    self._shutdown_event.set()
+
+                try:
+                    self._grid_engine.save_state()
+                except Exception as exc:  # noqa: BLE001
+                    logger.error("Erro ao persistir estado das grids: %s", exc)
+
+                try:
+                    await asyncio.wait_for(
+                        self._shutdown_event.wait(),
+                        timeout=self._config.cycle_interval_seconds,
+                    )
+                    break
+                except asyncio.TimeoutError:
                     pass
 
         finally:
@@ -3903,6 +3950,7 @@ class TradingBot:
 
         logger.info("Bot encerrado com sucesso.")
         return
+        """
 
         if self._telegram_poll_task is not None and not self._telegram_poll_task.done():
             self._telegram_poll_task.cancel()
@@ -3945,6 +3993,8 @@ class TradingBot:
         self._release_instance_lock()
         logger.info("Bot encerrado com sucesso.")
 
+
+        """
 
 # ---------------------------------------------------------------------------
 # Ponto de entrada
