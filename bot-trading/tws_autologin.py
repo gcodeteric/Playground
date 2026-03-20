@@ -23,8 +23,15 @@ pyautogui.FAILSAFE = True
 
 
 def load_credentials():
-    creds = json.loads(CREDENTIALS_FILE.read_text(encoding="utf-8"))
-    return creds["username"], creds["password"]
+    if not CREDENTIALS_FILE.exists():
+        print(f"ERRO: ficheiro de credenciais nao encontrado: {CREDENTIALS_FILE}")
+        sys.exit(1)
+    try:
+        creds = json.loads(CREDENTIALS_FILE.read_text(encoding="utf-8"))
+        return creds["username"], creds["password"]
+    except (json.JSONDecodeError, KeyError) as exc:
+        print(f"ERRO: credenciais invalidas em {CREDENTIALS_FILE}: {exc}")
+        sys.exit(1)
 
 
 def wait_for_login_window(timeout=60):
@@ -97,7 +104,7 @@ def main():
     # Aguardar janela de login
     win = wait_for_login_window(timeout=60)
     if not win:
-        print("ERRO: janela de login não detectada.")
+        print("ERRO: janela de login nao detectada no timeout. A sair sem login.")
         sys.exit(1)
 
     # Fazer login

@@ -22,9 +22,9 @@ echo A abrir TWS e fazer login automatico...
 "%~dp0venv\Scripts\python.exe" tws_autologin.py
 if errorlevel 1 (
     echo.
-    echo AVISO: auto-login falhou.
-    echo Faz login manualmente no TWS e prime qualquer tecla para continuar.
-    pause
+        echo AVISO: auto-login falhou - a continuar sem login automatico.
+        echo Faz login manualmente no TWS nos proximos 30 segundos.
+        timeout /t 30 /nobreak >nul
 )
 
 echo.
@@ -44,4 +44,3 @@ rem Arrancar bot nesta janela
 echo A arrancar bot...
 echo.
 "%~dp0venv\Scripts\python.exe" main.py
-pause

@@ -41,3 +41,9 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - `metrics_peak` so e reutilizado quando for coerente com o capital real do broker (`<= 10x broker_capital`).
 - Quando o valor herdado e inconsistente, o bot faz warning e usa o capital real como base do peak.
 - Validacao e commit pendentes de confirmacao local: o executor de shell desta sessao continua a devolver `exit 1` sem output, incluindo em `pytest`.
+## 2026-03-20 - H12
+
+- `start_all.bat`: removido o bloqueio interativo no falhanço do auto-login e removido o `pause` final.
+- `tws_autologin.py`: mensagem de falha de deteccao da janela de login clarificada e `load_credentials()` agora falha de forma explicita quando o ficheiro nao existe ou esta invalido.
+- Salvaguarda mantida: coordenadas hardcoded nao foram alteradas nesta correcao.
+- Validacao e commit continuam pendentes de confirmacao local porque o executor de shell desta sessao devolve `exit 1` sem output, incluindo em `pytest`.

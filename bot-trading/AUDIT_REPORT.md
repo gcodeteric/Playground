@@ -1149,3 +1149,9 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - A protecao aceita `metrics_peak` apenas quando o valor fica dentro de um limite de coerencia (`<= 10x broker_capital`).
 - Quando o valor do `metrics.json` e descartado, o sistema regista warning e usa o capital real como peak efetivo.
 - `pytest` e commit ficaram bloqueados pelo runner local desta sessao, que continua a falhar com `exit 1` e sem output.
+## 2026-03-20 - H12
+
+- Corrigido `start_all.bat` para evitar bloqueio interativo quando `tws_autologin.py` falha e para eliminar o `pause` final que prendia automacoes.
+- Corrigido `tws_autologin.py` para falhar com mensagens claras quando a janela de login nao aparece no timeout ou quando o ficheiro de credenciais esta ausente/invalido.
+- Limite conhecido mantido: as coordenadas hardcoded nao foram alteradas nesta fase.
+- `pytest` e commit permaneceram bloqueados pelo runner local desta sessao, que continua a falhar com `exit 1` e sem output.
