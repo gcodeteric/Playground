@@ -175,6 +175,7 @@ class IBConnection:
         self._connect_lock: asyncio.Lock = asyncio.Lock()
         self._reconnect_delay: int = _INITIAL_RECONNECT_DELAY
         self._reconnecting: bool = False
+        self._shutting_down: bool = False
         self._reconnect_task: asyncio.Task[None] | None = None
         self._disconnect_callback: AsyncHook | None = None
         self._post_reconnect_callback: AsyncHook | None = None
@@ -209,6 +210,13 @@ class IBConnection:
     def set_failed_reconnect_callback(self, callback: AsyncHook | None) -> None:
         """Regista um callback apos uma tentativa falhada de reconexao."""
         self._failed_reconnect_callback = callback
+
+    def set_shutting_down(self) -> None:
+        """Marca ligacao como em shutdown - impede reconexao automatica."""
+        self._shutting_down = True
+        if self._reconnect_task is not None and not self._reconnect_task.done():
+            self._reconnect_task.cancel()
+            logger.info("Tarefa de reconexao cancelada (shutdown em curso).")
 
     def set_error_callback(self, callback: ErrorHook | None) -> None:
         """Regista um callback para eventos operacionais derivados de erros IB."""
@@ -437,6 +445,9 @@ class IBConnection:
         logger.warning("Desconexão do IB detectada pelo callback.")
 
         if self._reconnecting:
+            return
+        if self._shutting_down:
+            logger.info("Reconexao automatica bloqueada - shutdown em curso.")
             return
 
         # Agendar reconexão assíncrona

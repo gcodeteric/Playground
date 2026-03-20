@@ -555,6 +555,8 @@ async def process_new_modules(
 # Classe principal do bot
 # ---------------------------------------------------------------------------
 
+_SHUTDOWN_ORDER_CANCEL_TIMEOUT: int = 10  # segundos
+
 class TradingBot:
     """
     Bot de trading autonomo com loop infinito.
@@ -567,6 +569,8 @@ class TradingBot:
         self._config: AppConfig = config
         self._running: bool = False
         self._shutdown_event: asyncio.Event = asyncio.Event()
+        self._is_shutting_down: bool = False
+        self._shutdown_request_path: Path = config.data_dir / "shutdown.request"
         self._daily_summary_sent: bool = False
         self._last_regimes: dict[str, str] = {}  # simbolo -> regime anterior
         self._last_session_open: dict[str, bool] = {}
@@ -2513,8 +2517,28 @@ class TradingBot:
         # --- Loop principal ---
         try:
             while self._running:
+                # Verificar shutdown.request antes do ciclo
+                # Verificar shutdown.request apos ciclo
+                if self._shutdown_request_path.exists():
+                    logger.warning(
+                        "Ficheiro shutdown.request detectado antes do ciclo - "
+                        "a iniciar encerramento gracioso."
+                    )
+                    self._shutdown_event.set()
+                    break
+
                 try:
                     await self._main_cycle()
+
+                if self._shutdown_request_path.exists():
+                    logger.warning(
+                        "Ficheiro shutdown.request detectado apos ciclo - "
+                        "a iniciar encerramento gracioso."
+                    )
+                    self._shutdown_event.set()
+
+                if self._shutdown_event.is_set():
+                    break
                 except Exception as exc:  # noqa: BLE001
                     self._last_error = str(exc)
                     logger.error(
@@ -2541,6 +2565,7 @@ class TradingBot:
                         self._shutdown_event.wait(),
                         timeout=self._config.cycle_interval_seconds,
                     )
+                    break
                     # Se o wait completou, o shutdown foi sinalizado
                     break
                 except asyncio.TimeoutError:
@@ -3756,8 +3781,128 @@ class TradingBot:
     # ------------------------------------------------------------------
 
     async def _graceful_shutdown(self) -> None:
-        """Executa o encerramento gracioso do bot."""
-        logger.info("A iniciar encerramento gracioso...")
+        """Executa o encerramento gracioso do bot - broker-aware."""
+        self._is_shutting_down = True
+        logger.info("A iniciar encerramento gracioso (broker-aware)...")
+
+        # Impedir reconnect automatico durante shutdown
+        connection = getattr(self, "_connection", None)
+        if connection is not None and hasattr(connection, "set_shutting_down"):
+            connection.set_shutting_down()
+
+        # Cancelar polling Telegram
+        telegram_poll_task = getattr(self, "_telegram_poll_task", None)
+        if telegram_poll_task is not None and not telegram_poll_task.done():
+            telegram_poll_task.cancel()
+            try:
+                await telegram_poll_task
+            except asyncio.CancelledError:
+                pass
+
+        # Cancelar ordens abertas no broker
+        order_manager = getattr(self, "_order_manager", None)
+        if order_manager is None:
+            logger.warning(
+                "Shutdown: OrderManager indisponivel - cancelamento de ordens nao executado."
+            )
+        else:
+            try:
+                open_orders = await order_manager.get_open_orders()
+                if open_orders:
+                    logger.warning(
+                        "Shutdown: %d ordem(ns) abertas detectadas - a tentar cancelar.",
+                        len(open_orders),
+                    )
+
+                    async def _cancel_all() -> tuple[int, int]:
+                        cancelled, failed = 0, 0
+                        for order in open_orders:
+                            order_id = order.get("orderId") or order.get("order_id")
+                            if order_id:
+                                success = await order_manager.cancel_order(int(order_id))
+                                if success:
+                                    cancelled += 1
+                                else:
+                                    failed += 1
+                                    logger.error(
+                                        "Shutdown: falha ao cancelar ordem %s.", order_id
+                                    )
+                        return cancelled, failed
+
+                    cancelled, failed = await asyncio.wait_for(
+                        _cancel_all(),
+                        timeout=_SHUTDOWN_ORDER_CANCEL_TIMEOUT,
+                    )
+                    logger.info(
+                        "Shutdown: %d ordem(ns) canceladas, %d por resolver.",
+                        cancelled,
+                        failed,
+                    )
+                else:
+                    logger.info("Shutdown: sem ordens abertas - nada a cancelar.")
+            except asyncio.TimeoutError:
+                logger.error(
+                    "Shutdown: timeout (%ds) ao cancelar ordens - "
+                    "podem existir ordens pendentes no broker.",
+                    _SHUTDOWN_ORDER_CANCEL_TIMEOUT,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Shutdown: erro ao cancelar ordens: %s", exc)
+
+        # Persistir estado final
+        grid_engine = getattr(self, "_grid_engine", None)
+        if grid_engine is None:
+            logger.warning("Shutdown: GridEngine indisponivel - persistencia ignorada.")
+        else:
+            try:
+                grid_engine.save_state()
+                logger.info("Estado das grids persistido com sucesso.")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Erro ao persistir estado final: %s", exc)
+
+        # Guardar metricas finais
+        trade_logger = getattr(self, "_trade_logger", None)
+        if trade_logger is None:
+            logger.warning("Shutdown: TradeLogger indisponivel - metricas ignoradas.")
+        else:
+            try:
+                metrics = trade_logger.calculate_metrics()
+                trade_logger.save_metrics(self._build_metrics_payload(metrics))
+                logger.info("Metricas finais guardadas com sucesso.")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Erro ao guardar metricas finais: %s", exc)
+
+        # Desligar do IB (reconnect ja bloqueado)
+        if connection is None:
+            logger.warning("Shutdown: ligacao ao IB indisponivel.")
+        else:
+            try:
+                await connection.disconnect()
+                logger.info("Ligacao ao IB encerrada.")
+            except Exception as exc:  # noqa: BLE001
+                logger.error("Erro ao desligar do IB: %s", exc)
+
+        # Notificacao Telegram
+        telegram = getattr(self, "_telegram", None)
+        self._schedule_telegram(
+            telegram.bot_stopped(
+                reason="shutdown normal",
+                paper=self._config.ib.paper_trading,
+            ) if telegram else None
+        )
+        if telegram is not None:
+            await asyncio.sleep(1)
+
+        # Remover ficheiro shutdown.request se existir
+        try:
+            if self._shutdown_request_path.exists():
+                self._shutdown_request_path.unlink()
+                logger.info("Ficheiro shutdown.request removido.")
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Nao foi possivel remover shutdown.request: %s", exc)
+
+        logger.info("Bot encerrado com sucesso.")
+        return
 
         if self._telegram_poll_task is not None and not self._telegram_poll_task.done():
             self._telegram_poll_task.cancel()
