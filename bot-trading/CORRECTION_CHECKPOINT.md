@@ -65,3 +65,8 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - Documentado o comportamento de `stop_and_report.bat`, incluindo timeout de 30s e fallback com `taskkill /f`.
 - Adicionada nota operacional para nao fechar o TWS/Gateway antes de parar o bot.
 - `pytest` nao foi executado por instrucao explicita desta correcao.
+## 2026-03-20 - H02
+
+- `src/ib_requests.py`: extraida a constante `_PACING_VIOLATION_RETRY_SECONDS = 600.0`.
+- O retry especifico para pacing violation deixou de usar `delay = 60.0` hardcoded e passou a usar a constante de modulo.
+- `pytest` nao foi executado por instrucao explicita desta correcao.

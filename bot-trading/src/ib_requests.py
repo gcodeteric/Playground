@@ -21,6 +21,7 @@ _DEFAULT_MAX_REQUESTS = 60
 _DEFAULT_IDENTICAL_COOLDOWN_SECONDS = 15.0
 _DEFAULT_MAX_ORDER_MESSAGES_PER_SECOND = 45
 _IB_PACING_ERROR_CODE = 162
+_PACING_VIOLATION_RETRY_SECONDS: float = 600.0
 
 
 @dataclass(frozen=True, slots=True)
@@ -279,7 +280,7 @@ class IBRequestExecutor:
             except Exception as exc:  # noqa: BLE001
                 delay = base_delay * (2 ** (attempt - 1))
                 if self._is_pacing_violation(exc):
-                    delay = 60.0
+                    delay = _PACING_VIOLATION_RETRY_SECONDS
                     self._logger.warning(
                         "Violacao de pacing do IB detectada em %s. Espera forcada de 60 s antes do retry.",
                         operation_name,

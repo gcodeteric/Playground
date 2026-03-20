@@ -1173,3 +1173,8 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - A secao passa a mencionar explicitamente `data/shutdown.request`, o timeout de 30s do `stop_and_report.bat` e o fallback com `taskkill /f`.
 - Adicionada a nota operacional de dependencia da ligacao IB ativa durante o shutdown.
 - `pytest` nao foi executado por instrucao explicita desta correcao.
+## 2026-03-20 - H02
+
+- Corrigido `src/ib_requests.py` para remover o `delay = 60.0` hardcoded no retry apos pacing violation.
+- O cooldown passou a ser centralizado na constante `_PACING_VIOLATION_RETRY_SECONDS = 600.0`.
+- `pytest` nao foi executado por instrucao explicita desta correcao.
