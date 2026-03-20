@@ -70,12 +70,68 @@ def read_reports_last_n_days(n: int = 5) -> list[str]:
 # Gerador de relatório diário
 # ---------------------------------------------------------------------------
 
+def extract_log_events(path: Path, today: str) -> dict:
+    """Extrai eventos relevantes do bot.log para o dia de hoje."""
+    result = {
+        "errors": [],
+        "warnings": [],
+        "reconnects": [],
+        "yfinance_fallbacks": [],
+        "reconciliation_issues": [],
+        "entry_halts": [],
+        "session_start": None,
+        "session_end": None,
+    }
+    try:
+        lines = path.read_text(encoding="utf-8", errors="replace").splitlines()
+        for line in lines:
+            if today not in line:
+                continue
+            if " | ERROR " in line or " | CRITICAL " in line:
+                result["errors"].append(line.strip())
+            elif " | WARNING " in line:
+                if "reconex" in line.lower() or "reconnect" in line.lower():
+                    result["reconnects"].append(line.strip())
+                elif "yfinance" in line.lower() or "fallback" in line.lower():
+                    result["yfinance_fallbacks"].append(line.strip())
+                elif "reconcili" in line.lower() and "inconclus" in line.lower():
+                    result["reconciliation_issues"].append(line.strip())
+                elif "halt" in line.lower() or "bloqueada" in line.lower():
+                    result["entry_halts"].append(line.strip())
+                else:
+                    result["warnings"].append(line.strip())
+            if "Bot a iniciar" in line and result["session_start"] is None:
+                result["session_start"] = line[:19]
+            if "Bot encerrado com sucesso" in line:
+                result["session_end"] = line[:19]
+    except Exception:
+        pass
+    return result
+
+
 def generate_daily_report() -> str:
     heartbeat = read_json(DATA_DIR / "heartbeat.json")
     metrics = read_json(DATA_DIR / "metrics.json")
     grids = read_json(DATA_DIR / "grids_state.json")
     preflight = read_json(DATA_DIR / "preflight_state.json")
     log_tail = read_log_tail(DATA_DIR / "bot.log")
+    events = extract_log_events(DATA_DIR / "bot.log", TODAY)
+    events_section = (
+        "-- EVENTOS DO DIA --------------------------------------------------------\n"
+        f'Sessao:   {events["session_start"] or "N/D"} -> {events["session_end"] or "em curso"}\n\n'
+        f'Erros/Criticos ({len(events["errors"])}):\n'
+        f'{chr(10).join(f"  {e}" for e in events["errors"][-10:]) or "  (nenhum)"}\n\n'
+        f'Reconnects ao IB ({len(events["reconnects"])}):\n'
+        f'{chr(10).join(f"  {e}" for e in events["reconnects"][-5:]) or "  (nenhum)"}\n\n'
+        f'Fallbacks yfinance ({len(events["yfinance_fallbacks"])}):\n'
+        f'{chr(10).join(f"  {e}" for e in events["yfinance_fallbacks"][-5:]) or "  (nenhum)"}\n\n'
+        f'Reconciliacoes inconclusivas ({len(events["reconciliation_issues"])}):\n'
+        f'{chr(10).join(f"  {e}" for e in events["reconciliation_issues"]) or "  (nenhuma)"}\n\n'
+        f'Entry halts ({len(events["entry_halts"])}):\n'
+        f'{chr(10).join(f"  {e}" for e in events["entry_halts"][-5:]) or "  (nenhum)"}\n\n'
+        f'Outros warnings ({len(events["warnings"])}):\n'
+        f'{chr(10).join(f"  {e}" for e in events["warnings"][-5:]) or "  (nenhum)"}'
+    )
 
     # Métricas
     metrics_block = metrics.get("metrics", metrics)
@@ -145,6 +201,8 @@ Telegram:              {preflight.get("telegram_status", "N/D")}
 Watchlist size:        {preflight.get("watchlist_size", "N/D")}
 
 ── ÚLTIMAS LINHAS DO LOG ───────────────────────────────────────────────────────
+{events_section}
+
 {log_tail}
 
 ================================================================================
@@ -172,6 +230,7 @@ Quero uma resposta em 5 secções:
 - O estado geral parece saudável para continuar amanhã?
 
 2. RISCO
+- Quantos reconnects, fallbacks yfinance e reconciliacoes inconclusivas ocorreram hoje?
 - Houve sinais de risco operacional?
 - Kill switches, entry_halt, emergency_halt, reconnects, falhas de dados?
 - Alguma situação que deva bloquear a próxima sessão?

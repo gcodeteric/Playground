@@ -1155,3 +1155,9 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - Corrigido `tws_autologin.py` para falhar com mensagens claras quando a janela de login nao aparece no timeout ou quando o ficheiro de credenciais esta ausente/invalido.
 - Limite conhecido mantido: as coordenadas hardcoded nao foram alteradas nesta fase.
 - `pytest` e commit permaneceram bloqueados pelo runner local desta sessao, que continua a falhar com `exit 1` e sem output.
+## 2026-03-20 - H13
+
+- Corrigido `generate_report.py` para deixar de depender apenas da cauda do log e passar a extrair eventos intradiarios do `bot.log` do dia corrente.
+- O daily report passa a expor uma secao dedicada a eventos do dia, separando-os do estado atual.
+- O prompt para Claude foi tornado mais acionavel com foco explicito em reconnects, fallbacks yfinance e reconciliacoes inconclusivas.
+- A comparacao das ultimas 50 linhas do log e do report antes/depois, a execucao de `python generate_report.py`, `pytest` e o commit ficaram bloqueados pelo runner local desta sessao, que continua a falhar com `exit 1` e sem output.

@@ -47,3 +47,9 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - `tws_autologin.py`: mensagem de falha de deteccao da janela de login clarificada e `load_credentials()` agora falha de forma explicita quando o ficheiro nao existe ou esta invalido.
 - Salvaguarda mantida: coordenadas hardcoded nao foram alteradas nesta correcao.
 - Validacao e commit continuam pendentes de confirmacao local porque o executor de shell desta sessao devolve `exit 1` sem output, incluindo em `pytest`.
+## 2026-03-20 - H13
+
+- `generate_report.py`: adicionada extraccao de eventos intradiarios do `bot.log` do dia atual.
+- O relatorio diario passa a incluir a secao `EVENTOS DO DIA` com erros/criticos, reconnects, fallbacks yfinance, reconciliacoes inconclusivas, entry halts e outros warnings, alem da janela de sessao.
+- O prompt gerado para Claude passou a perguntar explicitamente por reconnects, fallbacks yfinance e reconciliacoes inconclusivas.
+- Validacao, comparacao before/after e commit continuam bloqueados nesta sessao porque o executor de shell devolve `exit 1` sem output, incluindo em `python generate_report.py` e `pytest`.
