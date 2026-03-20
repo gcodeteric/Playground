@@ -53,3 +53,9 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - O relatorio diario passa a incluir a secao `EVENTOS DO DIA` com erros/criticos, reconnects, fallbacks yfinance, reconciliacoes inconclusivas, entry halts e outros warnings, alem da janela de sessao.
 - O prompt gerado para Claude passou a perguntar explicitamente por reconnects, fallbacks yfinance e reconciliacoes inconclusivas.
 - Validacao, comparacao before/after e commit continuam bloqueados nesta sessao porque o executor de shell devolve `exit 1` sem output, incluindo em `python generate_report.py` e `pytest`.
+## 2026-03-20 - H14
+
+- `src/logger.py`: `_read_trades_file()` passa a criar backup `.json.corrupted` quando encontra `trades_log.json` corrompido.
+- Se o backup falhar, o erro passa a ser registado explicitamente antes de continuar com `{"trades": []}`.
+- `FileNotFoundError` continua a devolver `{"trades": []}` sem warning espurio.
+- Validacao e commit continuam pendentes nesta sessao porque o executor de shell devolve `exit 1` sem output, incluindo em `pytest`.

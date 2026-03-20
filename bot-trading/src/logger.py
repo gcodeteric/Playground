@@ -84,8 +84,23 @@ class TradeLogger:
             if "trades" not in data:
                 data["trades"] = []
             return data
-        except (json.JSONDecodeError, FileNotFoundError):
-            logger.warning("Ficheiro de trades corrompido ou inexistente — recriado.")
+        except json.JSONDecodeError:
+            backup_path = self._trades_path.with_suffix(".json.corrupted")
+            try:
+                import shutil
+                shutil.copy2(self._trades_path, backup_path)
+                logger.error(
+                    "Ficheiro de trades corrompido — backup criado em %s. "
+                    "Historico preservado no backup.",
+                    backup_path,
+                )
+            except Exception as backup_exc:  # noqa: BLE001
+                logger.error(
+                    "Ficheiro de trades corrompido e backup falhou: %s",
+                    backup_exc,
+                )
+            return {"trades": []}
+        except FileNotFoundError:
             return {"trades": []}
 
     def _write_trades_file(self, data: dict[str, Any]) -> None:
