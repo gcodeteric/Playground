@@ -1,32 +1,29 @@
 # =============================================================================
-# Bot de Trading Autonomo — Ficheiros ignorados pelo Git
+# Bot de Trading Autonomo - Ficheiros ignorados pelo Git
 # =============================================================================
-
-# Ambiente virtual
+# Ambientes virtuais
 venv/
 .venv/
 env/
-
+venv2/
 # Cache Python
 __pycache__/
 *.py[cod]
 *.pyo
-
 # Pytest
 .pytest_cache/
 .coverage
 htmlcov/
-
 # Dados locais
 data/*.json
-
-# Env secrets
+# Segredos
 .env
-
+tws_credentials.json
+openrouter_credentials.json
+hunter_alpha_config.json
 # macOS
 .DS_Store
-
-# Extras do projecto
+# Extras
 *$py.class
 *.so
 *.egg-info/
@@ -38,17 +35,3 @@ build/
 *.swp
 *.swo
 *~
-.AppleDouble
-.LSOverride
-tws_credentials.json 
-venv/ 
-data/  cd C:\Users\berna\Desktop\Playground\bot-trading
-tws_credentials.json 
-venv/ 
-data/ 
-tws_credentials.json 
-venv/ 
-data/ 
-tws_credentials.json 
-venv/ 
-data/ 
