@@ -578,6 +578,7 @@ class TradingBot:
         self._orphan_positions: dict[str, dict[str, Any]] = {}
         self._reconciliation_log_path: Path = config.data_dir / "reconciliation.log"
         self._startup_reconciled: bool = False
+        self._reconciliation_conclusive: bool = False
         self._manual_pause: bool = False
         self._entry_halt_reason: str | None = None
         self._emergency_halt: bool = False
@@ -1442,7 +1443,9 @@ class TradingBot:
         if self._telegram is not None:
             telegram_status = "OK" if getattr(self._telegram, "enabled", True) else "error"
         state = {
-            "startup_reconciled": self._startup_reconciled,
+                "startup_reconciled": self._startup_reconciled,
+                "reconciliation_conclusive": getattr(self, "_reconciliation_conclusive", False),
+                "reconciliation_halt_active": self._entry_halt_reason == "reconciliation_failed",
             "telegram_status": telegram_status,
             "last_preflight": datetime.now(timezone.utc).isoformat(),
             "watchlist_size": len(self._watchlist),
@@ -2125,6 +2128,7 @@ class TradingBot:
         )
 
     async def _run_reconciliation(self) -> None:
+        self._reconciliation_conclusive = False
         """Lógica de reconciliação reutilizável — chamada por arranque e por comando runtime."""
         if self._reconciliation_in_progress:
             logger.warning("Reconciliação já em curso — a ignorar pedido duplicado.")
@@ -2283,10 +2287,18 @@ class TradingBot:
         finally:
             self._reconciliation_in_progress = False
 
+        self._reconciliation_conclusive = True
+
     async def _reconcile_startup(self) -> None:
         """Reconcilia o estado local com posicoes e ordens reais do IB no arranque."""
         await self._run_reconciliation()
         self._startup_reconciled = True
+        if not self._reconciliation_conclusive:
+            logger.error(
+                "H10: Reconciliacao de arranque inconclusiva — "
+                "entradas bloqueadas ate confirmacao manual."
+            )
+            self._entry_halt_reason = "reconciliation_failed"
 
     # ------------------------------------------------------------------
     # Command consumer — ficheiros em data/commands/

@@ -28,3 +28,10 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 2. Confirmar testes: 420 passed (baseline já validado)
 3. Confirmar estado OpenClaw: `agents list`, `cron list`, `gateway status`
 4. Se tudo OK, iniciar RONDA 1 — C03 primeiro
+## 2026-03-20 - H10
+
+- `main.py`: adicionado `self._reconciliation_conclusive` no arranque.
+- `_run_reconciliation()`: passa a iniciar como inconclusiva e marca conclusiva apenas no fecho normal da rotina.
+- `_reconcile_startup()`: quando a reconciliacao de arranque nao fecha de forma conclusiva, ativa `self._entry_halt_reason = "reconciliation_failed"`.
+- `preflight_state.json`: passa a incluir `reconciliation_conclusive` e `reconciliation_halt_active`.
+- Validacao pendente: o executor de shell desta sessao devolve `exit 1` ate para comandos triviais, por isso a confirmacao local do gate de `_entry_halt_reason`, o `pytest` e o commit ficaram bloqueados.

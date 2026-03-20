@@ -1137,3 +1137,9 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - [x] Fase 12: Infra, dados, mercado, estado (chaos scenarios)
 - [x] Fase 13: PDT, wash sale, margin, short
 - [x] Fase 14: Scoring, relatório
+## 2026-03-20 - H10
+
+- Alteracao aplicada em `main.py` para impedir que reconciliacao de arranque inconclusiva seja tratada como concluida.
+- O bloqueio reutiliza `self._entry_halt_reason` com o motivo `reconciliation_failed`.
+- O estado exportado em `preflight_state.json` passa a expor `reconciliation_conclusive` e `reconciliation_halt_active`.
+- Limite desta sessao: o runner local de shell esta avariado e devolve `exit 1` ate para comandos simples, pelo que a confirmacao do gate existente, a execucao de `pytest` e a criacao do commit permanecem pendentes.
