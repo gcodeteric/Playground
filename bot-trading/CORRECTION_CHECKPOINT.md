@@ -59,3 +59,9 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - Se o backup falhar, o erro passa a ser registado explicitamente antes de continuar com `{"trades": []}`.
 - `FileNotFoundError` continua a devolver `{"trades": []}` sem warning espurio.
 - Validacao e commit continuam pendentes nesta sessao porque o executor de shell devolve `exit 1` sem output, incluindo em `pytest`.
+## 2026-03-20 - M12
+
+- `README.md`: secao `Parar o Bot` atualizada para descrever o shutdown gracioso real via `data/shutdown.request`.
+- Documentado o comportamento de `stop_and_report.bat`, incluindo timeout de 30s e fallback com `taskkill /f`.
+- Adicionada nota operacional para nao fechar o TWS/Gateway antes de parar o bot.
+- `pytest` nao foi executado por instrucao explicita desta correcao.

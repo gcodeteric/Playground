@@ -137,8 +137,14 @@ O bot vai:
 
 ### Parar o Bot
 
-- `Ctrl+C` — paragem graceful (cancela ordens pendentes, persiste estado)
+- `Ctrl+C` — shutdown gracioso: cria `data/shutdown.request`, aguarda o bot cancelar
+  ordens abertas, persistir estado e desligar do IB de forma limpa
+- `stop_and_report.bat` — shutdown automatico via `data/shutdown.request` com timeout
+  de 30s; usa `taskkill /f` como fallback se o bot nao terminar a tempo
 - O bot pode ser reiniciado a qualquer momento — retoma estado de `data/grids_state.json`
+
+> **Nota:** Nunca fechar o TWS/Gateway antes de parar o bot — o shutdown gracioso
+> precisa da ligacao IB activa para cancelar ordens pendentes.
 
 ---
 

@@ -1167,3 +1167,9 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - O logger passa a distinguir corrupcao de ficheiro inexistente e a registar erro explicito quando o backup do ficheiro corrompido falha.
 - Nao houve mais alteracoes ao pipeline de escrita/leitura do logger.
 - `pytest` e commit ficaram bloqueados pelo runner local desta sessao, que continua a falhar com `exit 1` e sem output.
+## 2026-03-20 - M12
+
+- Corrigida a documentacao de shutdown em `README.md` para refletir o fluxo real de paragem graciosa.
+- A secao passa a mencionar explicitamente `data/shutdown.request`, o timeout de 30s do `stop_and_report.bat` e o fallback com `taskkill /f`.
+- Adicionada a nota operacional de dependencia da ligacao IB ativa durante o shutdown.
+- `pytest` nao foi executado por instrucao explicita desta correcao.
