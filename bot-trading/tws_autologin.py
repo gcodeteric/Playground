@@ -110,7 +110,7 @@ def main():
     # Fazer login
     do_login(win, username, password)
     print("Login enviado. A aguardar TWS carregar...")
-    time.sleep(10)
+    time.sleep(30)
     print("TWS pronto.")
 
 
