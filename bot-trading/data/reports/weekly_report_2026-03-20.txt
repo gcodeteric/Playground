@@ -1,0 +1,85 @@
+================================================================================
+RELATÓRIO SEMANAL — BOT DE TRADING
+Semana terminada em: 2026-03-20 11:04 UTC
+Modo: PAPER TRADING
+================================================================================
+
+Este relatório agrega os últimos 5 dias de operação.
+
+
+============================================================
+2026-03-19
+============================================================
+================================================================================
+RELATÓRIO DIÁRIO — BOT DE TRADING
+Data: 2026-03-19 16:58 UTC
+Modo: PAPER TRADING
+================================================================================
+
+── ESTADO OPERACIONAL ──────────────────────────────────────────────────────────
+IB Conectado:          ✅ SIM
+Pausa manual:          ✅ NÃO
+Entry halt:            ✅ NENHUM
+Emergency halt:        ✅ NÃO
+Último erro:           IB 354: Voc\u00ea n\u00e3o est\u00e1 inscrito nos dados de mercado solicitados. Para verificar o status da API, v\u00e1 at\u00e9 o menu da conta e, em seguida, selecione Gerenciador de inscri\u00e7\u00f5es em dados de mercado e/ou disponibilidade de dados atrasados.
+Último ciclo:          2026-03-19T16:58:14.556520+00:00
+
+── CAPITAL ─────────────────────────────────────────────────────────────────────
+Capital actual:        1119.91
+Capital inicial:       1120.0
+Peak equity:           100000.0
+Baseline diário:       619.91
+Baseline semanal:      619.91
+
+── PERFORMANCE ─────────────────────────────────────────────────────────────────
+P&L total:             0.0
+Número de trades:      0
+Win rate:              0.0%
+Max drawdown:          0.00%
+
+── GRIDS ───────────────────────────────────────────────────────────────────────
+Grids activas:         0
+Grids fechadas hoje:   0
+
+  (nenhuma grid activa)
+
+── PREFLIGHT ───────────────────────────────────────────────────────────────────
+Reconciliação:         ⚠️ INCONCLUSIVA
+Telegram:              OK
+Watchlist size:        5
+
+── ÚLTIMAS LINHAS DO LOG ───────────────────────────────────────────────────────
+2026-03-19 16:58:14 | DEBUG    | yfinance             | response code=200
+2026-03-19 16:58:14 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-19 16:58:14 | DEBUG    | yfinance             |    Exiting get()
+2026-03-19 16:58:14 | DEBUG    | yfinance             | EZU: yfinance received OHLC data: 2026-03-13 13:30:00 -> 2026-03-19 16:58:00
+2026-03-19 16:58:14 | DEBUG    | yfinance             | EZU: OHLC after cleaning: 2026-03-13 09:30:00-04:00 -> 2026-03-19 12:58:00-04:00
+2026-03-19 16:58:14 | DEBUG    | yfinance             | EZU: OHLC after combining events: 2026-03-13 00:00:00-04:00 -> 2026-03-19 00:00:00-04:00
+2026-03-19 16:58:14 | DEBUG    | yfinance             | EZU: yfinance returning OHLC: 2026-03-13 00:00:00-04:00 -> 2026-03-19 00:00:00-04:00
+2026-03-19 16:58:14 | DEBUG    | yfinance             |   Exiting history()
+2026-03-19 16:58:14 | DEBUG    | yfinance             |  Exiting history()
+2026-03-19 16:58:14 | DEBUG    | yfinance             | Exiting download()
+2026-03-19 16:58:14 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: EZU = 1556843
+2026-03-19 16:58:14 | INFO     | main                 | Sinal Kotegawa para EZU: signal=False | horizonte=MEDIUM_TERM | desvio=-6.01% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-19 16:58:14 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'down', 'magnitude_pct': -1.731, 'magnitude_atr': 0.8697, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 62.39, 'today_open': 61.31, 'atr14': 1.2417805037671585}
+2026-03-19 16:58:14 | INFO     | src.gap_fade         | Gap fade gerou sinal LONG com confidence=3.
+2026-03-19 16:58:14 | INFO     | main                 | Sinal multi-instrumento para EZU: signal=LONG | confidence=3 | módulo=gap_fade
+2026-03-19 16:58:14 | WARNING  | main                 | Execução directa de sinais multi-instrumento desactivada por segurança até integração na state machine persistente: EZU (LONG).
+2026-03-19 16:58:14 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-19 16:58:14 | DEBUG    | src.grid_engine      | Backup do estado criado: C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json.bak
+2026-03-19 16:58:14 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-19 16:58:14 | INFO     | main                 | A iniciar encerramento gracioso...
+2026-03-19 16:58:14 | DEBUG    | src.grid_engine      | Backup do estado criado: C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json.bak
+2026-03-19 16:58:14 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-19 16:58:14 | INFO     | main                 | Estado das grids persistido com sucesso.
+2026-03-19 16:58:14 | INFO     | src.logger           | Metricas guardadas em C:\Users\berna\Desktop\Playground\bot-trading\data\metrics.json
+2026-03-19 16:58:14 | INFO     | main                 | Metricas finais guardadas com sucesso.
+2026-03-19 16:58:14 | WARNING  | src.data_feed        | Desconexão do IB detectada pelo callback.
+2026-03-19 16:58:14 | INFO     | src.data_feed        | Desligado do IB com sucesso.
+2026-03-19 16:58:14 | INFO     | main                 | Ligacao ao IB encerrada.
+2026-03-19 16:58:14 | INFO     | src.data_feed        | A iniciar reconexão automática ao IB com espera inicial de 65 s…
+2026-03-19 16:58:15 | INFO     | main                 | Bot encerrado com sucesso.
+
+================================================================================
+
+================================================================================
