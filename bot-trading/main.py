@@ -1225,7 +1225,20 @@ class TradingBot:
         self._last_equity_snapshot = restored_capital
         self._risk_manager.update_capital(self._capital)
 
-        if metrics_peak is not None:
+        if metrics_peak is not None and broker_capital is not None:
+            # So aceitar metrics_peak se for coerente com o capital real do broker
+            # (nao mais de 10x o capital atual - protege contra baselines herdados)
+            if metrics_peak <= broker_capital * 10:
+                restored_peak = max(restored_peak, metrics_peak, self._capital)
+            else:
+                logger.warning(
+                    "H11: peak_equity do metrics.json (%.2f) inconsistente com "
+                    "capital real do broker (%.2f) - a usar capital real como peak.",
+                    metrics_peak,
+                    broker_capital,
+                )
+                restored_peak = max(restored_peak, self._capital)
+        elif metrics_peak is not None:
             restored_peak = max(restored_peak, metrics_peak, self._capital)
         else:
             restored_peak = max(restored_peak, self._capital)

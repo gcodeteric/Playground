@@ -1143,3 +1143,9 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - O bloqueio reutiliza `self._entry_halt_reason` com o motivo `reconciliation_failed`.
 - O estado exportado em `preflight_state.json` passa a expor `reconciliation_conclusive` e `reconciliation_halt_active`.
 - Limite desta sessao: o runner local de shell esta avariado e devolve `exit 1` ate para comandos simples, pelo que a confirmacao do gate existente, a execucao de `pytest` e a criacao do commit permanecem pendentes.
+## 2026-03-20 - H11
+
+- Corrigido o restauro de `peak_equity` em `_restore_runtime_capital()` para evitar herdar um `peak_equity` historico incoerente com o capital real do broker.
+- A protecao aceita `metrics_peak` apenas quando o valor fica dentro de um limite de coerencia (`<= 10x broker_capital`).
+- Quando o valor do `metrics.json` e descartado, o sistema regista warning e usa o capital real como peak efetivo.
+- `pytest` e commit ficaram bloqueados pelo runner local desta sessao, que continua a falhar com `exit 1` e sem output.

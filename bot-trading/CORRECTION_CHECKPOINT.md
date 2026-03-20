@@ -35,3 +35,9 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - `_reconcile_startup()`: quando a reconciliacao de arranque nao fecha de forma conclusiva, ativa `self._entry_halt_reason = "reconciliation_failed"`.
 - `preflight_state.json`: passa a incluir `reconciliation_conclusive` e `reconciliation_halt_active`.
 - Validacao pendente: o executor de shell desta sessao devolve `exit 1` ate para comandos triviais, por isso a confirmacao local do gate de `_entry_halt_reason`, o `pytest` e o commit ficaram bloqueados.
+## 2026-03-20 - H11
+
+- `main.py`: sanitizado `peak_equity` herdado do `metrics.json` em `_restore_runtime_capital()`.
+- `metrics_peak` so e reutilizado quando for coerente com o capital real do broker (`<= 10x broker_capital`).
+- Quando o valor herdado e inconsistente, o bot faz warning e usa o capital real como base do peak.
+- Validacao e commit pendentes de confirmacao local: o executor de shell desta sessao continua a devolver `exit 1` sem output, incluindo em `pytest`.
