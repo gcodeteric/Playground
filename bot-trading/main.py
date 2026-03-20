@@ -3941,12 +3941,18 @@ class TradingBot:
             await asyncio.sleep(1)
 
         # Remover ficheiro shutdown.request se existir
-        try:
-            if self._shutdown_request_path.exists():
-                self._shutdown_request_path.unlink()
-                logger.info("Ficheiro shutdown.request removido.")
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("Nao foi possivel remover shutdown.request: %s", exc)
+        shutdown_request_path = getattr(self, "_shutdown_request_path", None)
+        if shutdown_request_path is not None:
+            try:
+                if shutdown_request_path.exists():
+                    shutdown_request_path.unlink()
+                    logger.info("Ficheiro shutdown.request removido.")
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Nao foi possivel remover shutdown.request: %s", exc)
+
+        release_lock = getattr(self, "_release_instance_lock", None)
+        if release_lock is not None:
+            release_lock()
 
         logger.info("Bot encerrado com sucesso.")
         return
