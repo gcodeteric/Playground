@@ -34,19 +34,19 @@ _VALID_LEVEL_STATUSES = {"pending", "bought", "sold", "stopped", "cancelled"}
 
 _REGIME_NUM_LEVELS: dict[str, int] = {
     "BULL": 5,
-    "BEAR": 4,       # Finding 3a — BEAR: 8→4 anti cluster-stop
-    "SIDEWAYS": 8,   # Finding 3a — SIDEWAYS: 7→8
+    "BEAR": 4,      
+    "SIDEWAYS": 8,  
 }
 
 _STATE_FILENAME = "grids_state.json"
 _BACKUP_SUFFIX = ".bak"
 
-# Finding 3c — limiar de recentragem por regime
-_RECENTER_THRESHOLDS: dict[str, float] = {  # Finding 3c
-    "BULL": 0.80,  # Finding 3c
-    "BEAR": 0.60,  # Finding 3c
-    "SIDEWAYS": 0.70,  # Finding 3c
-}  # Finding 3c
+
+_RECENTER_THRESHOLDS: dict[str, float] = {
+    "BULL": 0.80,
+    "BEAR": 0.60,
+    "SIDEWAYS": 0.70,
+}
 _MIN_SPACING_PCT = 1.0
 _MAX_SPACING_PCT = 4.0
 _CHANGE_THRESHOLD_PCT = 0.3
@@ -130,27 +130,27 @@ class GridEngine:
         logger.info("Motor de grid inicializado (directoria de dados: %s)", data_dir)
 
     @staticmethod
-    def calculate_geometric_levels(  # Finding 5
-        center_price: float,  # Finding 5
-        spacing_pct: float,  # Finding 5
-        num_levels: int,  # Finding 5
-    ) -> list[float]:  # Finding 5
+    def calculate_geometric_levels(
+        center_price: float,
+        spacing_pct: float,
+        num_levels: int,
+    ) -> list[float]:
         """
-        Níveis com espaçamento geométrico — percentagem constante  # Finding 5
-        entre níveis. Superior ao aritmético em mercados voláteis.  # Finding 5
-        Finding 5.  # Finding 5
+        Níveis com espaçamento geométrico — percentagem constante
+        entre níveis. Superior ao aritmético em mercados voláteis.
+        Finding 5.
         """
-        if num_levels <= 1:  # Finding 5
-            return [center_price * (1.0 - spacing_pct / 100.0)]  # Finding 5
-        lower_bound = center_price * (  # Finding 5
-            1.0 - (spacing_pct / 100.0) * num_levels  # Finding 5
-        )  # Finding 5
-        lower_bound = max(lower_bound, center_price * 0.50)  # Finding 5
-        ratio = (center_price / lower_bound) ** (  # Finding 5
-            1.0 / max(1, num_levels - 1)  # Finding 5
-        )  # Finding 5
-        levels = [lower_bound * (ratio ** i) for i in range(num_levels)]  # Finding 5
-        return sorted(levels, reverse=True)  # Finding 5
+        if num_levels <= 1:
+            return [center_price * (1.0 - spacing_pct / 100.0)]
+        lower_bound = center_price * (
+            1.0 - (spacing_pct / 100.0) * num_levels
+        )
+        lower_bound = max(lower_bound, center_price * 0.50)
+        ratio = (center_price / lower_bound) ** (
+            1.0 / max(1, num_levels - 1)
+        )
+        levels = [lower_bound * (ratio ** i) for i in range(num_levels)]
+        return sorted(levels, reverse=True)
 
     # ------------------------------------------------------------------
     # Criacao de grid
@@ -187,11 +187,11 @@ class GridEngine:
         now = datetime.now(tz=timezone.utc).isoformat()
 
         levels: list[GridLevel] = []
-        geo_levels = self.calculate_geometric_levels(  # Finding 5
-            center_price, spacing_pct, num_levels  # Finding 5
-        )  # Finding 5
-        for n, buy_price_raw in enumerate(geo_levels, start=1):  # Finding 5
-            buy_price = round(buy_price_raw, 6)  # Finding 5
+        geo_levels = self.calculate_geometric_levels(
+            center_price, spacing_pct, num_levels
+        )
+        for n, buy_price_raw in enumerate(geo_levels, start=1):
+            buy_price = round(buy_price_raw, 6)
             # Kotegawa TP — NÃO ALTERAR
             sell_price = round(buy_price + tp_atr_mult * atr, 6)
             # Kotegawa SL — NÃO ALTERAR
@@ -296,25 +296,25 @@ class GridEngine:
         # Recentrar se o preco se afastou mais de 70 % da extensao total
         # em qualquer direccao
         if extension_down > 0:
-            # Finding 3c — threshold de recentragem por regime
-            recenter_threshold = _RECENTER_THRESHOLDS.get(grid.regime, 0.70)  # Finding 3c
-            threshold_down = grid.center_price - recenter_threshold * extension_down  # Finding 3c
+           
+            recenter_threshold = _RECENTER_THRESHOLDS.get(grid.regime, 0.70)
+            threshold_down = grid.center_price - recenter_threshold * extension_down
             if current_price < threshold_down:
                 logger.info(
                     "Grid %s: preco actual (%.4f) ultrapassou %.0f%% da extensao "
-                    "inferior (limiar=%.4f). Recentragem recomendada. # Finding 3c",
+                    "inferior (limiar=%.4f). Recentragem recomendada.",
                     grid.id, current_price, recenter_threshold * 100, threshold_down,
                 )
                 return True
 
         # Preco moveu-se para cima alem do limiar por regime
         if extension_down > 0:
-            recenter_threshold = _RECENTER_THRESHOLDS.get(grid.regime, 0.70)  # Finding 3c
-            threshold_up = grid.center_price + recenter_threshold * extension_down  # Finding 3c
+            recenter_threshold = _RECENTER_THRESHOLDS.get(grid.regime, 0.70)
+            threshold_up = grid.center_price + recenter_threshold * extension_down
             if current_price > threshold_up:
                 logger.info(
                     "Grid %s: preco actual (%.4f) ultrapassou %.0f%% da extensao "
-                    "superior (limiar=%.4f). Recentragem recomendada. # Finding 3c",
+                    "superior (limiar=%.4f). Recentragem recomendada.",
                     grid.id, current_price, recenter_threshold * 100, threshold_up,
                 )
                 return True
@@ -364,11 +364,11 @@ class GridEngine:
         adjusted_qty = max(1, int(round(grid.levels[0].quantity if grid.levels else 1)))
 
         new_levels: list[GridLevel] = []
-        geo_levels = self.calculate_geometric_levels(  # Finding 5
-            new_center, spacing_pct, num_new  # Finding 5
-        )  # Finding 5
-        for i, buy_price_raw in enumerate(geo_levels):  # Finding 5
-            buy_price = round(buy_price_raw, 6)  # Finding 5
+        geo_levels = self.calculate_geometric_levels(
+            new_center, spacing_pct, num_new
+        )
+        for i, buy_price_raw in enumerate(geo_levels):
+            buy_price = round(buy_price_raw, 6)
             # Kotegawa TP — NÃO ALTERAR
             sell_price = round(buy_price + tp_atr_mult * atr, 6)
             # Kotegawa SL — NÃO ALTERAR

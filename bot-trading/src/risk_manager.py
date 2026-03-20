@@ -251,7 +251,7 @@ class RiskManager:
 
         self._capital: float = capital
         self._initial_capital: float = capital
-        self.peak_equity: float = capital  # Finding 8
+        self.peak_equity: float = capital
         self.risk_per_level: float = risk_per_level
         self.kelly_cap: float = kelly_cap
         self.stop_atr_mult: float = stop_atr_mult
@@ -297,84 +297,84 @@ class RiskManager:
         """Capital inicial registado no arranque."""
         return self._initial_capital
 
-    def update_peak_equity(self, current_equity: float) -> None:  # Finding 8
-        """Actualiza o máximo histórico do capital."""  # Finding 8
-        if current_equity > self.peak_equity:  # Finding 8
-            self.peak_equity = current_equity  # Finding 8
+    def update_peak_equity(self, current_equity: float) -> None:
+        """Actualiza o máximo histórico do capital."""
+        if current_equity > self.peak_equity:
+            self.peak_equity = current_equity
 
-    def apply_drawdown_scaling(self, base_size: int) -> int:  # Finding 8
-        """  # Finding 8
-        Reduz posição 50% quando DD ≥ metade do limite mensal.  # Finding 8
-        Finding 8 — Half-Kelly drawdown recovery.  # Finding 8
-        """  # Finding 8
-        if self.peak_equity <= 0:  # Finding 8
-            return base_size  # Finding 8
-        drawdown = (self.peak_equity - self.capital) / self.peak_equity  # Finding 8
-        trigger = self.monthly_dd_limit / 2.0  # Finding 8
-        if drawdown >= trigger:  # Finding 8
-            scaled = max(1, int(base_size * 0.5))  # Finding 8
-            logger.warning(  # Finding 8
-                "Half-Kelly activado: DD=%.2f%% ≥ %.2f%%. "  # Finding 8
-                "Posição %d → %d. # Finding 8",  # Finding 8
-                drawdown * 100, trigger * 100, base_size, scaled,  # Finding 8
-            )  # Finding 8
-            return scaled  # Finding 8
-        return base_size  # Finding 8
+    def apply_drawdown_scaling(self, base_size: int) -> int:
+        """
+        Reduz posição 50% quando DD ≥ metade do limite mensal.
+        Finding 8 — Half-Kelly drawdown recovery.
+        """
+        if self.peak_equity <= 0:
+            return base_size
+        drawdown = (self.peak_equity - self.capital) / self.peak_equity
+        trigger = self.monthly_dd_limit / 2.0
+        if drawdown >= trigger:
+            scaled = max(1, int(base_size * 0.5))
+            logger.warning(
+                "Half-Kelly activado: DD=%.2f%% ≥ %.2f%%. "
+                "Posição %d → %d.",
+                drawdown * 100, trigger * 100, base_size, scaled,
+            )
+            return scaled
+        return base_size
 
-    def dynamic_risk_per_level(self, num_levels: int) -> float:  # Finding 4d
-        """  # Finding 4d
-        Risco por nível = kelly_cap / num_níveis.  # Finding 4d
-        Garante que risco total da grid ≤ Kelly cap. Finding 4d.  # Finding 4d
-        """  # Finding 4d
-        return min(self.risk_per_level, self.kelly_cap / max(1, num_levels))  # Finding 4d
+    def dynamic_risk_per_level(self, num_levels: int) -> float:
+        """
+        Risco por nível = kelly_cap / num_níveis.
+        Garante que risco total da grid ≤ Kelly cap. Finding 4d.
+        """
+        return min(self.risk_per_level, self.kelly_cap / max(1, num_levels))
 
-    def calculate_dynamic_win_rate(  # WinRate
-        self,  # WinRate
-        trades_log_path: Any,  # WinRate
-        lookback: int = 100,  # WinRate
-        min_trades: int = 20,  # WinRate
-    ) -> float:  # WinRate
-        """  # WinRate
-        Win rate real dos últimos N trades fechados.  # WinRate
-        Substitui o valor estático de 50% assumido no Kelly.  # WinRate
-        Requer mínimo de 20 trades para activar.  # WinRate
-        Retorna 0.50 se dados insuficientes. # WinRate  # WinRate
-        """  # WinRate
-        try:  # WinRate
-            import json  # WinRate
-            from pathlib import Path  # WinRate
+    def calculate_dynamic_win_rate(
+        self,
+        trades_log_path: Any,
+        lookback: int = 100,
+        min_trades: int = 20,
+    ) -> float:
+        """
+        Win rate real dos últimos N trades fechados.
+        Substitui o valor estático de 50% assumido no Kelly.
+        Requer mínimo de 20 trades para activar.
+        Retorna 0.50 se dados insuficientes.
+        """
+        try:
+            import json
+            from pathlib import Path
 
-            path = Path(trades_log_path)  # WinRate
-            if not path.exists():  # WinRate
-                return 0.50  # WinRate
-            data = json.loads(path.read_text(encoding="utf-8"))  # WinRate
-            trades = data.get("trades", [])  # WinRate
-            closed = [  # WinRate
-                t for t in trades  # WinRate
-                if t.get("pnl") is not None and t.get("side") == "SELL"  # WinRate
-            ]  # WinRate
-            if len(closed) < min_trades:  # WinRate
-                logger.debug(  # WinRate
-                    "Win rate dinâmico: %d trades (mínimo %d). "  # WinRate
-                    "A usar 0.50. # WinRate",  # WinRate
-                    len(closed), min_trades,  # WinRate
-                )  # WinRate
-                return 0.50  # WinRate
-            recent = closed[-lookback:]  # WinRate
-            wins = sum(1 for t in recent if float(t.get("pnl", 0)) > 0)  # WinRate
-            rate = wins / len(recent)  # WinRate
-            rate = max(0.35, min(0.80, rate))  # WinRate
-            logger.info(  # WinRate
-                "Win rate dinâmico: %.1f%% (%d/%d trades). # WinRate",  # WinRate
-                rate * 100, wins, len(recent),  # WinRate
-            )  # WinRate
-            return rate  # WinRate
-        except Exception as exc:  # noqa: BLE001  # WinRate
-            logger.warning(  # WinRate
-                "Erro no win rate dinâmico: %s. A usar 0.50. # WinRate",  # WinRate
-                exc,  # WinRate
-            )  # WinRate
-            return 0.50  # WinRate
+            path = Path(trades_log_path)
+            if not path.exists():
+                return 0.50
+            data = json.loads(path.read_text(encoding="utf-8"))
+            trades = data.get("trades", [])
+            closed = [
+                t for t in trades
+                if t.get("pnl") is not None and t.get("side") == "SELL"
+            ]
+            if len(closed) < min_trades:
+                logger.debug(
+                    "Win rate dinâmico: %d trades (mínimo %d). "
+                    "A usar 0.50.",
+                    len(closed), min_trades,
+                )
+                return 0.50
+            recent = closed[-lookback:]
+            wins = sum(1 for t in recent if float(t.get("pnl", 0)) > 0)
+            rate = wins / len(recent)
+            rate = max(0.35, min(0.80, rate))
+            logger.info(
+                "Win rate dinâmico: %.1f%% (%d/%d trades).",
+                rate * 100, wins, len(recent),
+            )
+            return rate
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Erro no win rate dinâmico: %s. A usar 0.50.",
+                exc,
+            )
+            return 0.50
 
     # ──────────────────────────────────────────────────────────────────
     # Position Sizing — Half-Kelly Criterion
@@ -386,7 +386,7 @@ class RiskManager:
         stop: float,
         win_rate: float = 0.5,
         payoff_ratio: float = 2.5,
-        num_levels: int = 1,  # Finding 4d
+        num_levels: int = 1,
     ) -> int:
         """
         Calcula o tamanho da posição por nível de grid usando Half-Kelly.
@@ -455,7 +455,7 @@ class RiskManager:
         capped_kelly = min(half_kelly, self.kelly_cap)
 
         # 4. Cap pelo risk_per_level (1% — risco máximo por nível de grid)
-        final_fraction = min(capped_kelly, self.dynamic_risk_per_level(num_levels))  # Finding 4d
+        final_fraction = min(capped_kelly, self.dynamic_risk_per_level(num_levels))
 
         # 5. Montante de risco em unidades monetárias
         risk_amount = capital * final_fraction
@@ -474,8 +474,8 @@ class RiskManager:
             risk_amount, size, entry, stop,
         )
 
-        size = self.apply_drawdown_scaling(size)  # Finding 8
-        return max(size, 0)  # Finding 8
+        size = self.apply_drawdown_scaling(size)
+        return max(size, 0)
 
     # ──────────────────────────────────────────────────────────────────
     # Verificações de limites de perda (Kill Switches)
@@ -870,7 +870,7 @@ class RiskManager:
         level: int | None = order_params.get("level", None)
         win_rate: float = order_params.get("win_rate", 0.5)
         payoff_ratio: float = order_params.get("payoff_ratio", 2.5)
-        num_levels: int = order_params.get("num_levels", 1)  # Finding 4d
+        num_levels: int = order_params.get("num_levels", 1)
         open_positions: list[str] = list(order_params.get("open_positions", []) or [])
         returns_map: dict[str, list[float]] = dict(order_params.get("returns_map", {}) or {})
         max_correlation: float = float(order_params.get("max_correlation", 0.70))
@@ -969,7 +969,7 @@ class RiskManager:
 
         # ── 4. Risco por nível dentro dos limites ──
         if sizing_inputs_valid:
-            max_risk_pct = min(self.kelly_cap, self.dynamic_risk_per_level(num_levels))  # Finding 4d
+            max_risk_pct = min(self.kelly_cap, self.dynamic_risk_per_level(num_levels))
 
             risk_ok = risk_percent <= max_risk_pct + 1e-9  # Tolerância numérica
             if not risk_ok:
@@ -1139,7 +1139,7 @@ class RiskManager:
             - level (int, opcional): Nível da grid (para verificar averaging down).
             - win_rate (float, opcional): Win rate actual. Defeito: 0.5.
             - payoff_ratio (float, opcional): Payoff ratio actual. Defeito: 2.5.
-            - num_levels (int, opcional): Número de níveis planeados na grid. # Finding 4d
+            - num_levels (int, opcional): Número de níveis planeados na grid.
 
         Args:
             order_params: Dicionário com os parâmetros da ordem.
@@ -1307,7 +1307,7 @@ class RiskManager:
 
         old_capital = self._capital
         self._capital = new_capital
-        self.update_peak_equity(new_capital)  # Finding 8
+        self.update_peak_equity(new_capital)
 
         # Calcular variação para logging
         change = new_capital - old_capital

@@ -101,7 +101,7 @@ class SignalResult:
     size_multiplier: float
     preco: float
     rsi: float
-    rsi2: float | None  # Finding 2
+    rsi2: float | None
     bb_lower: float
     volume_ratio: float
 
@@ -191,27 +191,27 @@ def calculate_rsi(closes: list[float], period: int = 14) -> float | None:
     return rsi
 
 
-def calculate_rsi2(closes: list[float]) -> float | None:  # Finding 2
+def calculate_rsi2(closes: list[float]) -> float | None:
     """
-    RSI de 2 períodos via EWM — método Larry Connors.  # Finding 2
-    Isola capitulações agudas de 1-2 dias.  # Finding 2
-    Retorna None se menos de 3 barras disponíveis.  # Finding 2
+    RSI de 2 períodos via EWM — método Larry Connors.
+    Isola capitulações agudas de 1-2 dias.
+    Retorna None se menos de 3 barras disponíveis.
     """
-    if len(closes) < 3:  # Finding 2
-        return None  # Finding 2
-    delta = [closes[i] - closes[i - 1] for i in range(1, len(closes))]  # Finding 2
-    gains = [max(d, 0.0) for d in delta]  # Finding 2
-    losses = [abs(min(d, 0.0)) for d in delta]  # Finding 2
-    alpha = 0.5  # Finding 2
-    avg_gain = gains[0]  # Finding 2
-    avg_loss = losses[0]  # Finding 2
-    for g, l in zip(gains[1:], losses[1:]):  # Finding 2
-        avg_gain = alpha * g + (1 - alpha) * avg_gain  # Finding 2
-        avg_loss = alpha * l + (1 - alpha) * avg_loss  # Finding 2
-    if avg_loss == 0.0:  # Finding 2
-        return 100.0  # Finding 2
-    rs = avg_gain / avg_loss  # Finding 2
-    return 100.0 - (100.0 / (1.0 + rs))  # Finding 2
+    if len(closes) < 3:
+        return None
+    delta = [closes[i] - closes[i - 1] for i in range(1, len(closes))]
+    gains = [max(d, 0.0) for d in delta]
+    losses = [abs(min(d, 0.0)) for d in delta]
+    alpha = 0.5
+    avg_gain = gains[0]
+    avg_loss = losses[0]
+    for g, l in zip(gains[1:], losses[1:]):
+        avg_gain = alpha * g + (1 - alpha) * avg_gain
+        avg_loss = alpha * l + (1 - alpha) * avg_loss
+    if avg_loss == 0.0:
+        return 100.0
+    rs = avg_gain / avg_loss
+    return 100.0 - (100.0 / (1.0 + rs))
 
 
 def calculate_atr(
@@ -584,7 +584,7 @@ def kotegawa_signal(
     regime: str,
     sma50: float | None = None,
     sma200: float | None = None,
-    rsi2: float | None = None,  # Finding 2
+    rsi2: float | None = None,
 ) -> SignalResult:
     """Gera sinal de entrada Kotegawa com base no desvio SMA(25) e confirmações.
 
@@ -650,15 +650,15 @@ def kotegawa_signal(
     confirmacoes = 0
     detalhes: list[str] = []
 
-    # Finding 2 — RSI2 substitui RSI14 como confirmação obrigatória
-    _rsi_val = rsi2 if rsi2 is not None else rsi  # Finding 2
-    _rsi_thresh = 10.0 if rsi2 is not None else 30.0  # Finding 2
-    _rsi_label = "RSI2" if rsi2 is not None else "RSI14(fallback)"  # Finding 2
-    if _rsi_val <= _rsi_thresh:  # Finding 2
-        confirmacoes += 1  # Finding 2
-        detalhes.append(  # Finding 2
-            f"{_rsi_label}={_rsi_val:.2f} ≤ {_rsi_thresh:.0f} "  # Finding 2
-            f"(sobrevenda aguda) # Finding 2"  # Finding 2
+   
+    _rsi_val = rsi2 if rsi2 is not None else rsi
+    _rsi_thresh = 10.0 if rsi2 is not None else 30.0
+    _rsi_label = "RSI2" if rsi2 is not None else "RSI14(fallback)"
+    if _rsi_val <= _rsi_thresh:
+        confirmacoes += 1
+        detalhes.append(
+            f"{_rsi_label}={_rsi_val:.2f} ≤ {_rsi_thresh:.0f} "
+            f"(sobrevenda aguda)"
         )
 
     # Confirmação 2: preço abaixo da banda inferior de Bollinger
@@ -683,7 +683,7 @@ def kotegawa_signal(
     desvio_suficiente = deviation <= dev_minimo
 
     # Sinal válido: KAIRI suficiente, RSI obrigatório e pelo menos 1 confirmação
-    signal = desvio_suficiente and (_rsi_val <= _rsi_thresh) and confirmacoes >= 1  # Finding 2
+    signal = desvio_suficiente and (_rsi_val <= _rsi_thresh) and confirmacoes >= 1
 
     return SignalResult(
         signal=signal,
@@ -698,7 +698,7 @@ def kotegawa_signal(
         size_multiplier=size_multiplier,
         preco=price,
         rsi=rsi,
-        rsi2=rsi2,  # Finding 2
+        rsi2=rsi2,
         bb_lower=bb_lower,
         volume_ratio=volume_ratio,
     )
@@ -743,7 +743,7 @@ def analyze(
     sma50 = calculate_sma(closes, 50)
     sma200 = calculate_sma(closes, 200)
     rsi = calculate_rsi(closes, 14)
-    rsi2 = calculate_rsi2(closes)  # Finding 2
+    rsi2 = calculate_rsi2(closes)
     atr = calculate_atr(highs, lows, closes, 14)
     bb = calculate_bollinger_bands(closes, 20, 2.0)
     vol_avg_20 = calculate_volume_avg(volumes, 20)
@@ -793,7 +793,7 @@ def analyze(
         regime=regime_info.regime.value,
         sma50=sma50,
         sma200=sma200,
-        rsi2=rsi2,  # Finding 2
+        rsi2=rsi2,
     )
 
     return regime_info, signal_result

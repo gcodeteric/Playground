@@ -521,7 +521,7 @@ class TelegramNotifier:
                         return False
                     return True
         except Exception as exc:  # noqa: BLE001
-            self._logger.debug("Telegram send falhou (silencioso): %s", exc)
+            self._logger.warning("Telegram send falhou: %s", exc)
             return False
 
     async def send_message(self, message: str) -> bool:

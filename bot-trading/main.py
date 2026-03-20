@@ -56,7 +56,7 @@ from src.market_hours import (
 from src.signal_engine import (
     analyze,
     calculate_adx,
-    calculate_rsi2,  # Finding 2
+    calculate_rsi2,
     detect_regime,
     kotegawa_signal,
     Regime,
@@ -104,7 +104,7 @@ _DAILY_SUMMARY_HOUR: int = 23  # Hora UTC para o resumo diario
 _RISK_OF_RUIN_THRESHOLD: float = 0.01  # 1% — recusa arrancar se acima disto
 
 # Watchlist por defeito (pode ser overridden via .env WATCHLIST)
-_DEFAULT_WATCHLIST: list[str] = ["AAPL", "SPY", "QQQ", "XLU", "GDXJ", "VIX"]  # Finding 10
+_DEFAULT_WATCHLIST: list[str] = ["AAPL", "SPY", "QQQ", "XLU", "GDXJ", "VIX"]
 
 # Capital inicial por defeito para paper trading
 _DEFAULT_PAPER_CAPITAL: float = 100_000.0
@@ -606,7 +606,7 @@ class TradingBot:
 
         # --- Capital ---
         self._capital: float = get_initial_capital()
-        self._dynamic_win_rate: float = 0.50  # WinRate
+        self._dynamic_win_rate: float = 0.50
 
         # --- Componentes ---
         self._connection: IBConnection = IBConnection(
@@ -653,6 +653,13 @@ class TradingBot:
                 "Telegram NAO configurado — notificacoes desactivadas. "
                 "Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env."
             )
+
+        # --- Callbacks IB para eventos operacionais ---
+        self._connection.set_alert_callback(self._send_operational_alert)
+        self._connection.set_disconnect_callback(self._on_ib_disconnected)
+        self._connection.set_post_reconnect_callback(self._post_reconnect_sequence)
+        self._connection.set_failed_reconnect_callback(self._on_reconnect_attempt_failed)
+        self._connection.set_error_callback(self._handle_ib_operational_event)
 
     def _effective_ib_port(self) -> int:
         """Resolve a porta efectiva do broker para fins de exclusao multi-instância."""
@@ -726,12 +733,6 @@ class TradingBot:
             raise
         return fd
 
-        self._connection.set_alert_callback(self._send_operational_alert)
-        self._connection.set_disconnect_callback(self._on_ib_disconnected)
-        self._connection.set_post_reconnect_callback(self._post_reconnect_sequence)
-        self._connection.set_failed_reconnect_callback(self._on_reconnect_attempt_failed)
-        self._connection.set_error_callback(self._handle_ib_operational_event)
-
     # ------------------------------------------------------------------
     # Validacao de arranque
     # ------------------------------------------------------------------
@@ -744,12 +745,12 @@ class TradingBot:
         - Recusa arrancar se RoR > 1%
         """
         logger.info("A executar validacoes de arranque...")
-        self.refresh_dynamic_win_rate()  # WinRate
+        self.refresh_dynamic_win_rate()
 
         # Calcular Risk of Ruin com parametros por defeito conservadores
-        # Win rate dinâmico, Payoff ratio: 2.5 (min_rr)  # WinRate
+        # Win rate dinâmico, Payoff ratio: 2.5 (min_rr)
         ror = self._risk_manager.calculate_risk_of_ruin(
-            win_rate=self._dynamic_win_rate,  # WinRate
+            win_rate=self._dynamic_win_rate,
             payoff_ratio=self._config.risk.min_rr,
             risk_per_trade=self._config.risk.risk_per_level,
         )
@@ -774,17 +775,17 @@ class TradingBot:
         )
         return True
 
-    def refresh_dynamic_win_rate(self) -> None:  # WinRate
-        """Actualiza win rate real no início de cada ciclo. # WinRate"""  # WinRate
-        new_rate = self._risk_manager.calculate_dynamic_win_rate(  # WinRate
-            self._config.data_dir / "trades_log.json",  # WinRate
-        )  # WinRate
-        if abs(new_rate - self._dynamic_win_rate) > 0.02:  # WinRate
-            logger.info(  # WinRate
-                "Win rate actualizado: %.1f%% → %.1f%% # WinRate",  # WinRate
-                self._dynamic_win_rate * 100, new_rate * 100,  # WinRate
-            )  # WinRate
-        self._dynamic_win_rate = new_rate  # WinRate
+    def refresh_dynamic_win_rate(self) -> None:
+        """Actualiza win rate real no início de cada ciclo."""
+        new_rate = self._risk_manager.calculate_dynamic_win_rate(
+            self._config.data_dir / "trades_log.json",
+        )
+        if abs(new_rate - self._dynamic_win_rate) > 0.02:
+            logger.info(
+                "Win rate actualizado: %.1f%% → %.1f%%",
+                self._dynamic_win_rate * 100, new_rate * 100,
+            )
+        self._dynamic_win_rate = new_rate
 
     @staticmethod
     def _parse_trade_timestamp(value: Any) -> datetime | None:
@@ -855,7 +856,7 @@ class TradingBot:
 
     @staticmethod
     def _get_equity_period_ids(now: datetime | None = None) -> dict[str, str]:
-        """Calcula identificadores estÃ¡veis para os baselines diÃ¡rio/semanal/mensal."""
+        """Calcula identificadores estáveis para os baselines diário/semanal/mensal."""
         now_utc = (
             now.astimezone(timezone.utc)
             if now is not None else datetime.now(timezone.utc)
@@ -874,7 +875,7 @@ class TradingBot:
         *,
         expected_period: str | None = None,
     ) -> bool:
-        """Valida um baseline persistido sem assumir que o ficheiro estÃ¡ intacto."""
+        """Valida um baseline persistido sem assumir que o ficheiro está intacto."""
         if not isinstance(entry, dict):
             return False
 
@@ -895,7 +896,7 @@ class TradingBot:
         self,
         snapshot: dict[str, Any],
     ) -> dict[str, dict[str, Any]]:
-        """Extrai baselines vÃ¡lidos do snapshot de mÃ©tricas persistido."""
+        """Extrai baselines válidos do snapshot de métricas persistido."""
         baselines: dict[str, dict[str, Any]] = {}
         raw = snapshot.get("equity_baselines")
         if not isinstance(raw, dict):
@@ -915,7 +916,7 @@ class TradingBot:
         return baselines
 
     def _persist_runtime_metrics_snapshot(self) -> None:
-        """Persiste o estado runtime crÃ­tico sem recalcular toda a telemetria."""
+        """Persiste o estado runtime crítico sem recalcular toda a telemetria."""
         try:
             metrics_snapshot = self._load_metrics_snapshot()
             metrics_snapshot.pop("last_updated", None)
@@ -932,9 +933,9 @@ class TradingBot:
         now: datetime | None = None,
     ) -> bool:
         """
-        Inicializa/roda os baselines por perÃ­odo.
+        Inicializa/roda os baselines por período.
 
-        Se existir um baseline para o perÃ­odo actual mas estiver corrompido,
+        Se existir um baseline para o período actual mas estiver corrompido,
         o bot entra em fail-safe em vez de continuar com divisÃµes inseguras.
         """
         if not math.isfinite(current_equity) or current_equity <= 0:
@@ -956,7 +957,7 @@ class TradingBot:
 
             if not self._is_valid_equity_baseline(entry):
                 logger.critical(
-                    "Baseline de equity %s invÃƒÂ¡lido/corrompido: %s",
+                    "Baseline de equity %s inválido/corrompido: %s",
                     key,
                     entry,
                 )
@@ -969,15 +970,6 @@ class TradingBot:
                 }
                 changed = True
                 continue
-
-            if False:
-                logger.critical(
-                    "Baseline de equity %s invÃ¡lido para o perÃ­odo %s: %s",
-                    key,
-                    period_id,
-                    entry,
-                )
-                return False
 
         if changed:
             logger.info(
@@ -997,7 +989,7 @@ class TradingBot:
         period_key: str,
         current_equity: float,
     ) -> float | None:
-        """Calcula o delta de equity face ao baseline do perÃ­odo activo."""
+        """Calcula o delta de equity face ao baseline do período activo."""
         entry = self._equity_baselines.get(period_key)
         if not self._is_valid_equity_baseline(entry):
             return None
@@ -1009,7 +1001,7 @@ class TradingBot:
         baseline_equity: float,
         current_equity: float,
     ) -> float | None:
-        """Calcula perda relativa desde o baseline sem permitir divisÃµes invÃ¡lidas."""
+        """Calcula perda relativa desde o baseline sem permitir divisões inválidas."""
         if (
             not math.isfinite(baseline_equity)
             or not math.isfinite(current_equity)
@@ -1020,7 +1012,7 @@ class TradingBot:
         return abs(min((current_equity - baseline_equity) / baseline_equity, 0.0))
 
     async def _fetch_current_equity_snapshot(self) -> float | None:
-        """ObtÃ©m a equity actual do broker via NetLiquidation (ou equivalente)."""
+        """Obtém a equity actual do broker via NetLiquidation (ou equivalente)."""
         try:
             account_values = await self._connection.request_executor.run(
                 "account_values",
@@ -1034,7 +1026,7 @@ class TradingBot:
 
         equity = self._extract_account_equity(account_values)
         if equity is None or not math.isfinite(equity) or equity <= 0:
-            logger.error("Snapshot de equity invÃ¡lido/indisponÃ­vel: %s", equity)
+            logger.error("Snapshot de equity inválido/indisponível: %s", equity)
             return None
 
         self._last_equity_snapshot = float(equity)
@@ -1519,12 +1511,12 @@ class TradingBot:
         )
 
     def _load_persisted_grids_or_fail_closed(self) -> None:
-        """Carrega o estado persistido ou aborta o arranque se nÃ£o houver recovery seguro."""
+        """Carrega o estado persistido ou aborta o arranque se não houver recovery seguro."""
         try:
             self._grid_engine.load_state()
         except Exception as exc:
             message = (
-                "Estado persistido de grids indisponÃ­vel/corrompido. "
+                "Estado persistido de grids indisponível/corrompido. "
                 "Arranque abortado em fail-closed."
             )
             logger.critical("%s Detalhe: %s", message, exc)
@@ -1536,7 +1528,7 @@ class TradingBot:
         )
 
     def _acquire_instance_lock(self) -> None:
-        """Impede mÃºltiplas instÃ¢ncias activas sobre o mesmo data_dir e broker context."""
+        """Impede múltiplas instâncias activas sobre o mesmo data_dir e broker context."""
         if (
             getattr(self, "_instance_lock_fd", None) is not None
             and getattr(self, "_broker_context_lock_fd", None) is not None
@@ -2557,63 +2549,6 @@ class TradingBot:
         # --- Loop principal ---
         try:
             while self._running:
-                """
-                # Verificar shutdown.request antes do ciclo
-                # Verificar shutdown.request apos ciclo
-                if self._shutdown_request_path.exists():
-                    logger.warning(
-                        "Ficheiro shutdown.request detectado antes do ciclo - "
-                        "a iniciar encerramento gracioso."
-                    )
-                    self._shutdown_event.set()
-                    break
-
-                try:
-                    await self._main_cycle()
-
-                if self._shutdown_request_path.exists():
-                    logger.warning(
-                        "Ficheiro shutdown.request detectado apos ciclo - "
-                        "a iniciar encerramento gracioso."
-                    )
-                    self._shutdown_event.set()
-
-                if self._shutdown_event.is_set():
-                    break
-                except Exception as exc:  # noqa: BLE001
-                    self._last_error = str(exc)
-                    logger.error(
-                        "Erro nao tratado no ciclo principal: %s", exc,
-                        exc_info=True,
-                    )
-                    self._schedule_telegram(
-                        self._telegram.critical_error(
-                            error=str(exc),
-                            location="main loop",
-                            paper=self._config.ib.paper_trading,
-                        ) if self._telegram else None
-                    )
-
-                # Persistir estado apos cada ciclo
-                try:
-                    self._grid_engine.save_state()
-                except Exception as exc:  # noqa: BLE001
-                    logger.error("Erro ao persistir estado das grids: %s", exc)
-
-                # Dormir ate proximo ciclo (interruptivel por shutdown)
-                try:
-                    await asyncio.wait_for(
-                        self._shutdown_event.wait(),
-                        timeout=self._config.cycle_interval_seconds,
-                    )
-                    break
-                    # Se o wait completou, o shutdown foi sinalizado
-                    break
-                except asyncio.TimeoutError:
-                    # Timeout normal — continuar para o proximo ciclo
-                    pass
-
-                """
                 if self._shutdown_request_path.exists():
                     logger.warning(
                         "Ficheiro shutdown.request detectado antes do ciclo - "
@@ -2686,7 +2621,7 @@ class TradingBot:
             self._write_heartbeat()
             return
 
-        self.refresh_dynamic_win_rate()  # WinRate
+        self.refresh_dynamic_win_rate()
         await self._evaluate_sector_rotation()
 
         # 7. Verificar limites de risco (daily/weekly/monthly)
@@ -2875,8 +2810,8 @@ class TradingBot:
         ):
             return
         volume: float = current_volume if current_volume is not None else 0.0
-        closes = bars_df["close"].astype(float).tolist()  # Finding 2
-        rsi2 = calculate_rsi2(closes)  # Finding 2
+        closes = bars_df["close"].astype(float).tolist()
+        rsi2 = calculate_rsi2(closes)
 
         # 4. Calcular sinal Kotegawa (deviation SMA25 + confirmacoes)
         signal_result: SignalResult = kotegawa_signal(
@@ -2889,7 +2824,7 @@ class TradingBot:
             regime=regime_info.regime.value,
             sma50=sma50,
             sma200=sma200,
-            rsi2=rsi2,  # Finding 2
+            rsi2=rsi2,
         )
 
         logger.info(
@@ -3093,7 +3028,7 @@ class TradingBot:
 
         # Obter metricas para position sizing
         metrics = self._trade_logger.calculate_metrics()
-        win_rate = metrics.get("win_rate", self._dynamic_win_rate) or self._dynamic_win_rate  # WinRate
+        win_rate = metrics.get("win_rate", self._dynamic_win_rate) or self._dynamic_win_rate
         payoff_ratio = metrics.get("payoff_ratio", 2.5) or 2.5
 
         # Determinar numero de niveis para o regime
@@ -3135,9 +3070,9 @@ class TradingBot:
             capital=self._capital,
             entry=first_buy,
             stop=first_stop,
-            win_rate=win_rate if 0 < win_rate < 1 else self._dynamic_win_rate,  # WinRate
+            win_rate=win_rate if 0 < win_rate < 1 else self._dynamic_win_rate,
             payoff_ratio=payoff_ratio if payoff_ratio > 0 else 2.5,
-            num_levels=num_levels,  # Finding 4d
+            num_levels=num_levels,
         )
 
         if base_quantity <= 0:
@@ -3189,9 +3124,9 @@ class TradingBot:
             "monthly_pnl": period_pnl["monthly"],
             "current_positions": current_positions,
             "current_grids": len(active_grids),
-            "win_rate": win_rate if 0 < win_rate < 1 else self._dynamic_win_rate,  # WinRate
+            "win_rate": win_rate if 0 < win_rate < 1 else self._dynamic_win_rate,
             "payoff_ratio": payoff_ratio if payoff_ratio > 0 else 2.5,
-            "num_levels": num_levels,  # Finding 4d
+            "num_levels": num_levels,
             "open_positions": open_positions,
             "returns_map": returns_map,
         })
@@ -3444,9 +3379,9 @@ class TradingBot:
                             "order_ref": logical_trade_key,
                             "order_leg": "tp",
                         })
-                        self._capital += pnl  # Finding 8
-                        self._risk_manager.update_capital(self._capital)  # Finding 8
-                        self._risk_manager.update_peak_equity(self._capital)  # Finding 8
+                        self._capital += pnl
+                        self._risk_manager.update_capital(self._capital)
+                        self._risk_manager.update_peak_equity(self._capital)
                         self._refresh_period_pnl()
                         self._schedule_telegram(
                             self._telegram.trade_closed(
@@ -3512,9 +3447,9 @@ class TradingBot:
                             "order_ref": logical_trade_key,
                             "order_leg": "stop",
                         })
-                        self._capital += loss  # Finding 8
-                        self._risk_manager.update_capital(self._capital)  # Finding 8
-                        self._risk_manager.update_peak_equity(self._capital)  # Finding 8
+                        self._capital += loss
+                        self._risk_manager.update_capital(self._capital)
+                        self._risk_manager.update_peak_equity(self._capital)
                         self._refresh_period_pnl()
                         # Verificar se o kill switch deve ser activado
                         daily_summary = self._trade_logger.get_daily_summary()
@@ -3995,52 +3930,6 @@ class TradingBot:
             release_lock()
 
         logger.info("Bot encerrado com sucesso.")
-        return
-        """
-
-        if self._telegram_poll_task is not None and not self._telegram_poll_task.done():
-            self._telegram_poll_task.cancel()
-            try:
-                await self._telegram_poll_task
-            except asyncio.CancelledError:
-                pass
-
-        # Persistir estado final
-        try:
-            self._grid_engine.save_state()
-            logger.info("Estado das grids persistido com sucesso.")
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Erro ao persistir estado final: %s", exc)
-
-        # Guardar metricas finais
-        try:
-            metrics = self._trade_logger.calculate_metrics()
-            self._trade_logger.save_metrics(self._build_metrics_payload(metrics))
-            logger.info("Metricas finais guardadas com sucesso.")
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Erro ao guardar metricas finais: %s", exc)
-
-        # Desligar do IB
-        try:
-            await self._connection.disconnect()
-            logger.info("Ligacao ao IB encerrada.")
-        except Exception as exc:  # noqa: BLE001
-            logger.error("Erro ao desligar do IB: %s", exc)
-
-        self._schedule_telegram(
-            self._telegram.bot_stopped(
-                reason="shutdown normal",
-                paper=self._config.ib.paper_trading,
-            ) if self._telegram else None
-        )
-        if self._telegram is not None:
-            await asyncio.sleep(1)
-
-        self._release_instance_lock()
-        logger.info("Bot encerrado com sucesso.")
-
-
-        """
 
 # ---------------------------------------------------------------------------
 # Ponto de entrada
