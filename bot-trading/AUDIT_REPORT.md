@@ -1,6 +1,158 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `a0cf3fe5db82d5bf144f5fb56a89726f373855c3` | Data/hora UTC: `2026-03-19T07:35:55Z` | Working tree: `dirty (AUDIT_REPORT.md, data/bot.log)`
-Score delta pós-fix (subset revisto): `90/100` (mantido nesta ronda)
+Branch actual: `main` | Commit actual: `cc7c4990c2a22ae3e8b04d3024f84c957aeff7bb` | Data/hora UTC: `2026-03-20T02:16:05Z` | Working tree no início da ronda: `clean`
+Score audit total actual: `72/100`
+
+## Delta audit total - 2026-03-20 persistência do gateway + auditoria operacional completa
+
+### Escopo e método
+- Source of truth desta ronda: código real, scripts reais, artefactos runtime reais e outputs reais; o relatório anterior foi tratado apenas como contexto.
+- Artefactos lidos nesta ronda:
+  - `AUDIT_REPORT.md`
+  - `README.md`
+  - `CODEX_IMPLEMENTATION_BRIEF_FINAL.md`
+  - módulos críticos do runtime: `main.py`, `config.py`, `src/data_feed.py`, `src/execution.py`, `src/grid_engine.py`, `src/risk_manager.py`, `src/logger.py`, `src/ib_requests.py`
+  - scripts operacionais: `start_all.bat`, `start_bot.bat`, `start_dashboard.bat`, `stop_and_report.bat`, `generate_report.bat`, `generate_report.py`, `tws_autologin.py`
+  - dashboard: `dashboard/app.py`, `dashboard/helpers.py`
+  - suite de testes e casos críticos de `tests/`
+  - artefactos runtime reais em `data/`: `metrics.json`, `heartbeat.json`, `grids_state.json`, `trades_log.json`, `snapshot.json`, `preflight_state.json`, `reconciliation.log`, `bot.log`, `data/reports/`
+- Inventário real do repositório mapeado por leitura recursiva; foram confirmados duplicados/artefactos runtime no repo (`dashboard 2`, `CODEX_IMPLEMENTATION_BRIEF_FINAL 2.md`, `__pycache__`, `.pytest_cache`, ficheiro `notepad`, `venv/`, `venv2/`).
+- Testes executados com o Python prioritário pedido:
+  - `C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short`
+  - resultado real: `420 passed in 16.51s`
+
+### Fase 0 — persistência do gateway OpenClaw
+- Estado inicial confirmado:
+  - `gateway install` suportado pela versão instalada.
+  - `gateway install --port 18789 --runtime node --json` falhou com `ERROR: Acesso negado.`
+  - `schtasks /Query /FO LIST /V | findstr /I "openclaw gateway"` continuou sem qualquer task real do Windows.
+- Correcção aplicada nesta ronda:
+  - foi usado fallback seguro ao nível do utilizador via pasta Startup:
+    - `C:\Users\berna\AppData\Roaming\Microsoft\Windows\Start Menu\Programs\Startup\OpenClaw Gateway.cmd`
+  - o fallback só arranca o gateway se a porta `18789` estiver livre e chama `openclaw.cmd gateway run --port 18789` em janela escondida.
+- Validação real:
+  - a porta ficou livre após fecho do gateway manual anterior.
+  - a execução do login item voltou a pôr o gateway a ouvir em `127.0.0.1:18789`.
+  - `openclaw gateway health` passou a `OK`.
+  - `openclaw gateway status` passou a indicar runtime activo com `Startup-folder login item installed`.
+  - os 3 agentes e os 5 cron jobs permaneceram intactos.
+- Conclusão operacional da Fase 0:
+  - persistência prática confirmada ao nível de login do utilizador.
+  - não existe evidência de uma Scheduled Task real do Windows; o estado persistente actual depende do login item da pasta Startup, não de `schtasks`.
+  - não foi validado um reboot/logoff completo nesta ronda; esse ponto fica `não validado`.
+
+### Validação OpenClaw real no fim da Fase 0
+- Gateway:
+  - `openclaw gateway status` confirma:
+    - listener em `127.0.0.1:18789`
+    - `RPC probe: ok`
+    - `Runtime: running`
+    - `Startup-folder login item installed`
+- Agentes:
+  - `main`
+  - `ops-scheduler`
+  - `claude-briefing`
+  - `ops-analyst` com `Model: openrouter/hunter-alpha:free`
+- Cron jobs:
+  - `bot-arranque`
+  - `bot-relatorio`
+  - `briefing-diario`
+  - `briefing-semanal`
+  - `bot-paragem`
+- Fragilidade confirmada:
+  - `openclaw cron list` simples continua a falhar com `gateway closed (1000 normal closure)`
+  - `openclaw status` simples continua a reportar `missing scope: operator.read`
+  - `openclaw cron list --url ws://127.0.0.1:18789 --token <token local>` funciona e lista os 5 jobs
+
+### Estado actualizado dos findings anteriores
+| ID | Estado actual | Nota curta |
+| --- | --- | --- |
+| `C01` | `FECHADO` | runtime de risco usa snapshot de equity real + baselines por período |
+| `C02` | `FECHADO` | entradas e ajustamento dinâmico bloqueiam quote `fresh=False` |
+| `H01` | `PARCIAL` | ambiente local actual corre, mas reprodutibilidade continua fraca e o repo inclui `venv/`, `venv2/` e `.gitignore` defeituoso |
+| `H02` | `ABERTO` | pacing/backoff continua rígido (`15 s` identical cooldown, `60 s` pacing retry) |
+| `H03` | `FECHADO` | policy operacional IB central existe e está integrada |
+| `H04` | `FECHADO` | market-hours fail-closed e timezones locais já estão no código |
+| `H05` | `FECHADO` | pre-trade gate real existe para sessão/frescura/NaN/risco |
+| `H06` | `FECHADO` | `grids_state.json` tem backup + recovery + fail-closed |
+| `H07` | `FECHADO` | exclusão mútua por instância e por contexto IB real confirmada |
+| `H08` | `FECHADO` | a suite está executável e passou (`420 passed`) |
+| `H09` | `FECHADO` | dashboard actual tem observabilidade melhor do que na auditoria antiga |
+| `M01` | `ABERTO` | continua sem gate real de type-check/CI |
+| `M02` | `ABERTO` | `datetime.utcnow` permanece em defaults de dataclasses de risco |
+| `M03` | `ABERTO` | falta cap explícito de gross exposure/notional agregado |
+| `M04` | `ABERTO` | continua sem contrato unificado para todos os módulos de sinal |
+| `M05` | `ABERTO` | estratégias multi-instrumento continuam audit-only / não executáveis |
+| `M06` | `ABERTO` | estados continuam stringly-typed |
+| `M07` | `ABERTO` | não há migração formal de schema de estado |
+| `M08` | `ABERTO` | logs continuam sem rotação/retenção formal e heartbeat continua só local-file |
+| `M09` | `PARCIAL` | cobertura subiu, mas faltam regressões operacionais reais (shutdown forçado, scripts Windows, reports) |
+| `L01` | `ABERTO` | continuam `except Exception`/`BaseException` demasiado amplos em paths críticos |
+| `L02` | `ABERTO` | `dashboard/` e `dashboard 2/` continuam duplicados |
+
+### Novos findings desta ronda
+
+#### Crítico
+| ID | Finding | Evidência | Impacto |
+| --- | --- | --- | --- |
+| `C03` | O path operativo de fecho diário não é gracioso e pode deixar ordens broker-side vivas. | `stop_and_report.bat` usa `taskkill /f`; `_graceful_shutdown()` em `main.py:3758-3791` não cancela ordens pendentes nem faz flatten antes de desligar. | A automação diária de paragem pode terminar o processo sem cancelar ordens abertas/pending; isto invalida a confiança em shutdown limpo e em reports pós-fecho. |
+
+#### Alto
+| ID | Finding | Evidência | Impacto |
+| --- | --- | --- | --- |
+| `H10` | A reconciliação de arranque pode ficar inconclusiva e o bot continua mesmo assim. | `_run_reconciliation()` retorna cedo com `positions not confirmed`, marca grids como `unknown`; `_reconcile_startup()` em seguida define sempre `_startup_reconciled = True`. `data/reconciliation.log` mostra vários eventos `Reconciliação inconclusiva`. | O bot pode arrancar com divergência não resolvida entre estado local e broker-side. |
+| `H11` | Telemetria de equity/peak pode ficar presa num regime antigo e contaminar sizing/relatórios. | `metrics.json` real: `capital=1119.91`, `initial_capital=1120.0`, `peak_equity=100000.0`; `_restore_runtime_capital()` reaproveita `metrics_peak` e `apply_drawdown_scaling()` usa `peak_equity`. | O drawdown scaling pode ficar sempre activo e os relatórios ficam materialmente enganadores. |
+| `H12` | O setup OpenClaw continua frágil para administração local: o gateway está persistente, mas a auth/scope da CLI continua inconsistente. | `gateway health` e `cron list --url --token ...` funcionam; `status` simples continua com `missing scope: operator.read`; `cron list` simples continua a falhar. | Automação existe, mas a gestão/observabilidade do gateway não é consistente sem workarounds. |
+| `H13` | Os scripts Windows de automação continuam frágeis e orientados a UI. | `start_all.bat` depende de `tws_autologin.py` e pode cair em `pause`; `stop_and_report.bat` depende de `WINDOWTITLE` e abre Notepad no fim. | A operação diária sem vigilância continua arriscada em Windows real. |
+| `H14` | Segredos operacionais permanecem em ficheiros plaintext locais. | `.env` local contém credenciais activas; `tws_credentials.json` existe em claro; `tws_autologin.py` lê esse JSON directamente. | Exposição local desnecessária de credenciais; qualquer acesso ao perfil da máquina lê esses segredos. |
+
+#### Médio
+| ID | Finding | Evidência | Impacto |
+| --- | --- | --- | --- |
+| `M10` | `trades_log.json` e `metrics.json` não têm recovery/backup comparável ao `grids_state.json`. | `TradeLogger._read_trades_file()` devolve `{"trades":[]}` se o JSON estiver corrompido; o write seguinte pode normalizar por cima. | Corrupção local pode apagar histórico útil e degradar auditoria pós-incidente. |
+| `M11` | O pipeline de relatórios é demasiado final-state-oriented e perde contexto intradiário. | `generate_report.py` usa heartbeat/metrics/snapshot/log tail; o daily report real resume o último estado e a cauda do log; weekly report agrega daily reports já resumidos. | Relatórios e prompts para Claude não capturam bem o dia inteiro nem a cadeia causal dos incidentes. |
+| `M12` | O dashboard pode sub-reportar exposição real. | `dashboard/helpers.py` deriva posições de `grids_state.json` se não houver ficheiro de posições; com reconciliação inconclusiva ou órfãos broker-side, a UI pode mostrar `0` posições locais. | O operador pode ler um estado demasiado optimista. |
+| `M13` | Higiene do repositório continua insuficiente. | `.gitignore` está malformado; há `dashboard 2`, `CODEX_IMPLEMENTATION_BRIEF_FINAL 2.md`, `__pycache__`, `.pytest_cache`, ficheiro `notepad`, `venv/`, `venv2/`. | Aumenta drift, confusão operacional e risco de commitar artefactos errados. |
+| `M14` | A arquitectura está funcional, mas demasiado monolítica. | `main.py` tem `3858` linhas; `execution.py`, `risk_manager.py` e `data_feed.py` têm todos > `1400` linhas. | O custo de mudança é alto e a confiança operacional depende demasiado de convenções implícitas. |
+| `M15` | A suite de testes é boa para lógica pura, mas não prova os paths operacionais mais perigosos. | `420 passed`; há boa cobertura unitária de risco/grid/data-feed, mas não há validação real de `.bat`, TWS autologin, shutdown forçado, gateway persistence em reboot, nem coerência report/log. | Os `420 passed` dão confiança no core lógico, não na operação Windows diária end-to-end. |
+
+#### Baixo / informacional
+| ID | Finding | Evidência | Impacto |
+| --- | --- | --- | --- |
+| `L03` | README sobrestima a autonomia e o shutdown. | `README.md` fala em bot “100% autónomo” e diz que `Ctrl+C` cancela ordens pendentes; o runtime actual desactiva execução directa multi-instrumento e `_graceful_shutdown()` não cancela ordens. | Documentação induz expectativas demasiado optimistas. |
+| `I01` | O estado apresentado pela CLI do OpenClaw usa nomenclatura enganadora para a persistência. | `gateway status` mostra `Service: Scheduled Task (registered)` mas `schtasks` não encontra task real; a persistência validada é via pasta Startup. | Risco de interpretar mal o método real de persistência. |
+
+### Score actualizado e justificação
+- Score anterior no topo do relatório: `90/100`.
+- Score actual após auditoria total: `72/100`.
+- Justificação da descida:
+  - a ronda anterior era subset/delta e estava centrada em fixes específicos já fechados;
+  - a auditoria total desta ronda encontrou riscos operacionais reais que não tinham sido classificados antes, sobretudo:
+    - fecho diário forçado sem path gracioso garantido (`C03`)
+    - arranque permitido com reconciliação inconclusiva (`H10`)
+    - telemetria de equity/peak incoerente com impacto em sizing/reporting (`H11`)
+    - fragilidade da automação Windows e da administração OpenClaw (`H12`, `H13`)
+  - o core lógico continua significativamente melhor do que o relatório histórico mais antigo sugeria, mas a prontidão operacional diária continua abaixo do que um `90/100` implicaria.
+
+### Regressões novas
+- Nenhuma regressão nova causada por alterações desta ronda.
+- Os findings novos desta secção são preexistentes no código/scripts actuais; foram apenas confirmados agora por leitura e validação operacional real.
+
+### Confiança final desta ronda
+- `Confirmado`:
+  - suite de testes passa (`420 passed`)
+  - gateway OpenClaw fica persistente por login item em Startup
+  - agentes e cron jobs existem e mantêm-se
+  - locks de instância/contexto IB, baselines de equity, pre-trade gate e persistência de grids estão implementados no runtime
+- `Provável`:
+  - os cron jobs conseguem disparar no gateway persistente se a sessão local do utilizador existir
+  - o `ops-analyst` tem modelo Hunter Alpha configurado, embora a resolução efectiva de auth no OpenClaw continue pouco transparente
+- `Não validado`:
+  - reboot/logoff real do Windows para provar auto-arranque do gateway pós-login
+  - execução real de jobs `bot-arranque` / `bot-paragem`
+  - fecho de ordens reais no IB/TWS
+  - geração de weekly report/prompt numa sexta-feira operacional completa
+
+## Histórico preservado
 
 ## Delta audit focado - 2026-03-19 revalidation of committed Windows signal fix
 
