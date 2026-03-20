@@ -4,7 +4,7 @@ import asyncio
 import json
 from datetime import datetime, timezone
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 import pathlib
 
 import pandas as pd
@@ -184,6 +184,51 @@ async def test_reconciliation_unknown_positions_does_not_pause_grid(tmp_path):
     assert grid.reconciliation_state == "unknown"
     assert bot._startup_reconciled is True
     bot._order_manager.cancel_symbol_orders.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fetch_positions_empty_broker_is_confirmed_when_local_state_is_empty(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = SimpleNamespace(data_dir=tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    bot._order_manager = SimpleNamespace(
+        get_positions=AsyncMock(return_value=[]),
+    )
+
+    observation = await TradingBot._fetch_positions_with_retry(bot)
+
+    assert observation.state == "confirmed"
+    assert observation.positions == []
+    bot._order_manager.get_positions.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_fetch_positions_empty_broker_stays_unknown_when_local_grid_has_open_position(tmp_path):
+    bot = _build_bot_stub()
+    bot._config = SimpleNamespace(data_dir=tmp_path)
+    bot._grid_engine = GridEngine(data_dir=str(tmp_path))
+    grid = bot._grid_engine.create_grid(
+        symbol="AAPL",
+        center_price=100.0,
+        atr=2.0,
+        regime="BULL",
+        num_levels=1,
+        base_quantity=10,
+        confidence="ALTO",
+        size_multiplier=1.0,
+    )
+    grid.levels[0].status = "bought"
+    bot._order_manager = SimpleNamespace(
+        get_positions=AsyncMock(return_value=[]),
+    )
+
+    with patch("main.asyncio.sleep", new=AsyncMock()) as sleep_mock:
+        observation = await TradingBot._fetch_positions_with_retry(bot)
+
+    assert observation.state == "unknown"
+    assert observation.positions == []
+    assert bot._order_manager.get_positions.await_count == 3
+    assert sleep_mock.await_count == 2
 
 
 @pytest.mark.asyncio

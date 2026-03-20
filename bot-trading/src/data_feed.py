@@ -24,6 +24,7 @@ import time
 from collections import deque
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
 import numpy as np
@@ -714,6 +715,7 @@ class DataFeed:
     async def get_price_yfinance(self, symbol: str) -> float | None:
         """Fallback assíncrono: preço actual via yfinance."""
         cache_key = f"yfinance_price:{symbol.upper()}"
+        asof_cache_key = f"{cache_key}:asof"
         cached = self._cache.get(cache_key)
         if cached is not None:
             return float(cached)
@@ -724,13 +726,19 @@ class DataFeed:
             df = await asyncio.wait_for(
                 loop.run_in_executor(
                     None,
-                    lambda: yf.download(yf_symbol, period="1d", progress=False),
+                    lambda: yf.download(yf_symbol, period="5d", progress=False),
                 ),
                 timeout=5.0,
             )
-            price = float(df["Close"].iloc[-1]) if not df.empty else None
+            close_series = (
+                df["Close"].dropna()
+                if not df.empty and "Close" in df
+                else pd.Series(dtype=float)
+            )
+            price = float(close_series.iloc[-1]) if not close_series.empty else None
             if price is not None:
                 self._cache.set(cache_key, price)
+                self._cache.set(asof_cache_key, str(close_series.index[-1]))
             return price
         except asyncio.TimeoutError:
             logger.warning("yfinance timeout %s", symbol)
@@ -927,7 +935,12 @@ class DataFeed:
         if not connected:
             price = await self.get_price_yfinance(symbol)
             if price is not None:
-                snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
+                yfinance_asof = self._cache.get(f"yfinance_price:{symbol.upper()}:asof")
+                snapshot = {
+                    "price": float(price),
+                    "source": "yfinance",
+                    "fresh": _is_yfinance_quote_fresh(yfinance_asof),
+                }
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
@@ -974,7 +987,12 @@ class DataFeed:
             logger.warning("Timeout ao obter preço de %s.", contract.symbol)
             price = await self.get_price_yfinance(symbol)
             if price is not None:
-                snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
+                yfinance_asof = self._cache.get(f"yfinance_price:{symbol.upper()}:asof")
+                snapshot = {
+                    "price": float(price),
+                    "source": "yfinance",
+                    "fresh": _is_yfinance_quote_fresh(yfinance_asof),
+                }
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
@@ -999,7 +1017,12 @@ class DataFeed:
                 pass
             price = await self.get_price_yfinance(symbol)
             if price is not None:
-                snapshot = {"price": float(price), "source": "yfinance", "fresh": False}
+                yfinance_asof = self._cache.get(f"yfinance_price:{symbol.upper()}:asof")
+                snapshot = {
+                    "price": float(price),
+                    "source": "yfinance",
+                    "fresh": _is_yfinance_quote_fresh(yfinance_asof),
+                }
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
@@ -1432,3 +1455,45 @@ def _fmt(value: float | None) -> str:
     if value is None:
         return "N/A"
     return f"{value:.4f}"
+
+
+def _coerce_utc_date(value: Any) -> date | None:
+    """Converte timestamps diversos para data UTC."""
+    if value is None:
+        return None
+    try:
+        ts = pd.Timestamp(value)
+    except (TypeError, ValueError):
+        return None
+    if pd.isna(ts):
+        return None
+    if ts.tzinfo is None:
+        ts = ts.tz_localize("UTC")
+    else:
+        ts = ts.tz_convert("UTC")
+    return ts.date()
+
+
+def _previous_business_day(current_day: date) -> date:
+    """Obtém o dia útil anterior, ignorando fins-de-semana."""
+    previous_day = current_day - timedelta(days=1)
+    while previous_day.weekday() >= 5:
+        previous_day -= timedelta(days=1)
+    return previous_day
+
+
+def _is_yfinance_quote_fresh(asof: Any, *, now: datetime | None = None) -> bool:
+    """
+    Aceita quotes do yfinance do dia actual ou do último fecho disponível.
+
+    Mantém a lógica IB inalterada; este critério aplica-se apenas ao fallback
+    diário do yfinance, que não tem a mesma latência dos snapshots IB.
+    """
+    asof_date = _coerce_utc_date(asof)
+    if asof_date is None:
+        return False
+
+    current_day = (now or datetime.now(timezone.utc)).date()
+    if asof_date == current_day:
+        return True
+    return asof_date == _previous_business_day(current_day)

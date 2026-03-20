@@ -1335,6 +1335,15 @@ class TradingBot:
         if self._order_manager is None:
             raise RuntimeError("OrderManager nao inicializado.")
 
+        grid_engine = getattr(self, "_grid_engine", None)
+        local_has_open_positions = bool(getattr(self, "_orphan_positions", {}))
+        if grid_engine is not None:
+            local_has_open_positions = local_has_open_positions or any(
+                level.status == "bought"
+                for grid in grid_engine.get_active_grids()
+                for level in grid.levels
+            )
+
         for attempt in range(1, _RECONCILIATION_FETCH_ATTEMPTS + 1):
             positions = await self._order_manager.get_positions()
             if positions:
@@ -1342,6 +1351,12 @@ class TradingBot:
                     state="confirmed",
                     positions=positions,
                 )
+            if not local_has_open_positions:
+                logger.info(
+                    "Leitura de posicoes do IB vazia, mas o estado local nao tem "
+                    "posicoes abertas. Reconciliação confirmada sem posicoes."
+                )
+                return BrokerPositionsObservation(state="confirmed", positions=[])
             logger.warning(
                 "Leitura de posicoes do IB sem dados na tentativa %d/%d. Novo retry em %d s.",
                 attempt,

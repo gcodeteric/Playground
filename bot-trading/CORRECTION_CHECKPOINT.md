@@ -2,7 +2,7 @@
 Última actualização: 2026-03-20 03:00 UTC
 Commit actual: cc7c4990c2a22ae3e8b04d3024f84c957aeff7bb
 Python escolhido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe
-Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short -> 420 passed in 16.51s
+Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short -> 423 passed in 8.22s
 
 ## ESTADO DAS RONDAS
 [~] RONDA 0 — Baseline e congelamento (baseline capturado, validar git + OpenClaw ao retomar)
@@ -15,7 +15,7 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - Checkpoint inicial criado nesta ronda.
 - Baseline conhecido preservado do último estado validado:
   - Python: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe
-  - Testes: 420 passed in 16.51s
+  - Testes: 423 passed in 8.22s
   - Commit registado: cc7c4990c2a22ae3e8b04d3024f84c957aeff7bb
 - Tentativa de retoma nesta thread bloqueada por runner de shell:
   - `Get-Content ...CORRECTION_CHECKPOINT.md` -> exit code 1 sem stdout/stderr
@@ -25,7 +25,7 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 
 ## PRÓXIMO PASSO SE INTERROMPIDO
 1. Confirmar `git status` e `git log --oneline -5`
-2. Confirmar testes: 420 passed (baseline já validado)
+2. Confirmar testes: 423 passed (baseline já validado)
 3. Confirmar estado OpenClaw: `agents list`, `cron list`, `gateway status`
 4. Se tudo OK, iniciar RONDA 1 — C03 primeiro
 ## 2026-03-20 - H10
@@ -34,7 +34,7 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - `_run_reconciliation()`: passa a iniciar como inconclusiva e marca conclusiva apenas no fecho normal da rotina.
 - `_reconcile_startup()`: quando a reconciliacao de arranque nao fecha de forma conclusiva, ativa `self._entry_halt_reason = "reconciliation_failed"`.
 - `preflight_state.json`: passa a incluir `reconciliation_conclusive` e `reconciliation_halt_active`.
-- Validacao pendente: o executor de shell desta sessao devolve `exit 1` ate para comandos triviais, por isso a confirmacao local do gate de `_entry_halt_reason`, o `pytest` e o commit ficaram bloqueados.
+- Este subpasso ficou posteriormente validado e fechado na entrada `H10 / YFINANCE_STALE`.
 ## 2026-03-20 - H11
 
 - `main.py`: sanitizado `peak_equity` herdado do `metrics.json` em `_restore_runtime_capital()`.
@@ -70,3 +70,13 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - `src/ib_requests.py`: extraida a constante `_PACING_VIOLATION_RETRY_SECONDS = 600.0`.
 - O retry especifico para pacing violation deixou de usar `delay = 60.0` hardcoded e passou a usar a constante de modulo.
 - `pytest` nao foi executado por instrucao explicita desta correcao.
+## 2026-03-20 - H10 / YFINANCE_STALE (FECHADO)
+
+- `main.py`: `_fetch_positions_with_retry()` deixa de tratar `positions=[]` como inconclusivo quando o estado local nao tem posicoes abertas; nessa condicao passa a devolver `state="confirmed"` e permite que a reconciliacao de arranque feche de forma conclusiva.
+- Salvaguarda mantida: se o estado local tiver niveis `bought` ou posicoes orfas, `positions=[]` do IB continua a resultar em reconciliacao inconclusiva apos os retries.
+- `src/data_feed.py`: o fallback de preco por `yfinance` passa a guardar a data efectiva do quote e a marcar `fresh=True` quando o dado corresponde ao dia actual ou ao ultimo fecho util disponivel.
+- A logica de freshness para dados IB (`last`, `mid`, `close`) foi preservada sem alteracoes.
+- `tests/test_main_audit.py`: adicionada cobertura para `IB vazio + estado local vazio => confirmed` e para o caso protegido `IB vazio + posicao local aberta => unknown`.
+- `tests/test_data_feed.py`: adicionada cobertura para aceitar o ultimo fecho do `yfinance` como fresh.
+- Estado final: `FECHADO`.
+- Baseline novo registado: `423 passed in 8.22s`.

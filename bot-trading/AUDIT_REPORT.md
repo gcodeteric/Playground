@@ -1,6 +1,6 @@
 # AUDIT REPORT — bot-trading
 Branch actual: `main` | Commit actual: `cc7c4990c2a22ae3e8b04d3024f84c957aeff7bb` | Data/hora UTC: `2026-03-20T02:16:05Z` | Working tree no início da ronda: `clean`
-Score audit total actual: `72/100`
+Score audit total actual: `75/100`
 
 ## Delta audit total - 2026-03-20 persistência do gateway + auditoria operacional completa
 
@@ -75,8 +75,9 @@ Score audit total actual: `72/100`
 | `H05` | `FECHADO` | pre-trade gate real existe para sessão/frescura/NaN/risco |
 | `H06` | `FECHADO` | `grids_state.json` tem backup + recovery + fail-closed |
 | `H07` | `FECHADO` | exclusão mútua por instância e por contexto IB real confirmada |
-| `H08` | `FECHADO` | a suite está executável e passou (`420 passed`) |
+| `H08` | `FECHADO` | a suite está executável e passou (`423 passed`) |
 | `H09` | `FECHADO` | dashboard actual tem observabilidade melhor do que na auditoria antiga |
+| `H10` | `FECHADO` | a reconciliação de arranque já distingue correctamente conta vazia de estado local vazio; o fallback `yfinance` passou a ter freshness própria |
 | `M01` | `ABERTO` | continua sem gate real de type-check/CI |
 | `M02` | `ABERTO` | `datetime.utcnow` permanece em defaults de dataclasses de risco |
 | `M03` | `ABERTO` | falta cap explícito de gross exposure/notional agregado |
@@ -99,7 +100,7 @@ Score audit total actual: `72/100`
 #### Alto
 | ID | Finding | Evidência | Impacto |
 | --- | --- | --- | --- |
-| `H10` | A reconciliação de arranque pode ficar inconclusiva e o bot continua mesmo assim. | `_run_reconciliation()` retorna cedo com `positions not confirmed`, marca grids como `unknown`; `_reconcile_startup()` em seguida define sempre `_startup_reconciled = True`. `data/reconciliation.log` mostra vários eventos `Reconciliação inconclusiva`. | O bot pode arrancar com divergência não resolvida entre estado local e broker-side. |
+| `H10` | RESOLVIDO — a reconciliação de arranque deixava conta paper vazia bloqueada e o fallback `yfinance` era rejeitado como stale. | `main.py:1333-1368` confirma `positions=[]` quando o estado local está vazio; `src/data_feed.py:715-741` e `src/data_feed.py:935-1029` passam a avaliar freshness específica de `yfinance`; `tests/test_main_audit.py` e `tests/test_data_feed.py` cobrem os ramos novos. | Arranque com conta paper vazia deixa de falhar por reconciliação inconclusiva e o preço diário válido do `yfinance` deixa de ser rejeitado como stale. |
 | `H11` | Telemetria de equity/peak pode ficar presa num regime antigo e contaminar sizing/relatórios. | `metrics.json` real: `capital=1119.91`, `initial_capital=1120.0`, `peak_equity=100000.0`; `_restore_runtime_capital()` reaproveita `metrics_peak` e `apply_drawdown_scaling()` usa `peak_equity`. | O drawdown scaling pode ficar sempre activo e os relatórios ficam materialmente enganadores. |
 | `H12` | O setup OpenClaw continua frágil para administração local: o gateway está persistente, mas a auth/scope da CLI continua inconsistente. | `gateway health` e `cron list --url --token ...` funcionam; `status` simples continua com `missing scope: operator.read`; `cron list` simples continua a falhar. | Automação existe, mas a gestão/observabilidade do gateway não é consistente sem workarounds. |
 | `H13` | Os scripts Windows de automação continuam frágeis e orientados a UI. | `start_all.bat` depende de `tws_autologin.py` e pode cair em `pause`; `stop_and_report.bat` depende de `WINDOWTITLE` e abre Notepad no fim. | A operação diária sem vigilância continua arriscada em Windows real. |
@@ -123,14 +124,14 @@ Score audit total actual: `72/100`
 
 ### Score actualizado e justificação
 - Score anterior no topo do relatório: `90/100`.
-- Score actual após auditoria total: `72/100`.
+- Score actual após auditoria total e correcções posteriores: `75/100`.
 - Justificação da descida:
   - a ronda anterior era subset/delta e estava centrada em fixes específicos já fechados;
   - a auditoria total desta ronda encontrou riscos operacionais reais que não tinham sido classificados antes, sobretudo:
     - fecho diário forçado sem path gracioso garantido (`C03`)
-    - arranque permitido com reconciliação inconclusiva (`H10`)
     - telemetria de equity/peak incoerente com impacto em sizing/reporting (`H11`)
     - fragilidade da automação Windows e da administração OpenClaw (`H12`, `H13`)
+  - `H10` e o stale check específico do fallback `yfinance` ficaram entretanto resolvidos, recuperando parte do score sem eliminar os riscos operacionais remanescentes.
   - o core lógico continua significativamente melhor do que o relatório histórico mais antigo sugeria, mas a prontidão operacional diária continua abaixo do que um `90/100` implicaria.
 
 ### Regressões novas
@@ -1178,3 +1179,12 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - Corrigido `src/ib_requests.py` para remover o `delay = 60.0` hardcoded no retry apos pacing violation.
 - O cooldown passou a ser centralizado na constante `_PACING_VIOLATION_RETRY_SECONDS = 600.0`.
 - `pytest` nao foi executado por instrucao explicita desta correcao.
+## 2026-03-20 - H10 / YFINANCE_STALE (RESOLVIDO)
+
+- Corrigido `main.py` para que a reconciliacao de arranque trate `positions=[]` do broker como conclusivo quando o estado local nao tem posicoes abertas.
+- O comportamento fail-closed foi mantido quando existe exposicao local: com niveis `bought` ou posicoes orfas, `positions=[]` continua a permanecer inconclusivo.
+- Corrigido `src/data_feed.py` para distinguir freshness de `yfinance` da freshness IB: quotes diarios de `yfinance` passam a ser aceites quando sao do dia actual ou do ultimo fecho util disponivel.
+- A logica de stale check para dados IB nao foi alterada.
+- Cobertura adicionada em `tests/test_main_audit.py` e `tests/test_data_feed.py`.
+- Estado actual no audit: `H10 = FECHADO`, `YFINANCE_STALE = RESOLVIDO`.
+- Baseline registado para esta correcao: `423 passed in 8.22s`.

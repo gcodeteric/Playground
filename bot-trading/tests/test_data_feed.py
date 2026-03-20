@@ -425,6 +425,36 @@ class TestCurrentSnapshotFallbacks:
         data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
 
     @pytest.mark.asyncio
+    async def test_get_current_price_details_accepts_latest_yfinance_close_as_fresh(
+        self,
+        data_feed,
+        mock_connection,
+    ):
+        contract = SimpleNamespace(
+            secType="STK",
+            symbol="AAPL",
+            exchange="SMART",
+            primaryExchange="NASDAQ",
+            currency="USD",
+            lastTradeDateOrContractMonth="",
+        )
+        latest_close = pd.Timestamp.now(tz="UTC").normalize() - pd.offsets.BDay(1)
+        mock_connection.ensure_connected = AsyncMock(return_value=False)
+
+        with patch(
+            "src.data_feed.yf.download",
+            return_value=pd.DataFrame(
+                {"Close": [123.45]},
+                index=pd.DatetimeIndex([latest_close]),
+            ),
+        ):
+            result = await data_feed.get_current_price_details(contract)
+
+        assert result["price"] == pytest.approx(123.45, abs=1e-5)
+        assert result["source"] == "yfinance"
+        assert result["fresh"] is True
+
+    @pytest.mark.asyncio
     async def test_get_current_volume_uses_async_yfinance_when_ib_disconnected(
         self,
         data_feed,
