@@ -1,65 +1,35 @@
-# CHECKPOINT — AUDITORIA CLAUDE CODE
-Última actualização: 2026-03-20 22:41 UTC
-Commit actual: 4b32b58
+# CHECKPOINT — AUDITORIA AGENTES OPENCLAW
+Última actualização: 2026-03-21 02:40 UTC
 
-## FASE ACTUAL
-[x] FASE 1 — Leitura total e inventário — COMPLETA
-[x] FASE 2 — Auditoria profunda — COMPLETA (12 findings)
-[x] FASE 3 — Correcções implementadas — COMPLETA (9/12 corrigidos)
-[x] FASE 4 — Auditoria de verificação — COMPLETA → 100/100 CONFIRMADO
-[x] FASE 5 — Análise de elevação (120/100) — COMPLETA (16 sugestões)
-
-## BASELINE DOS TESTES
-- Python: 3.11.9
-- Total: 423 passed, 0 failed (antes e depois das correcções)
-- Regressões: ZERO
-
-## FINDINGS E ESTADO
-
-### CRÍTICO (1/1 RESOLVIDO)
-- F001: ✓ Callbacks IB movidos para __init__() — reconciliação pós-reconnect agora funcional
-
-### ALTO (3/3 RESOLVIDOS)
-- F002: ✓ Bloco `if False:` removido
-- F003: ✓ Main loop duplicado em string literal removido
-- F004: ✓ Shutdown duplicado em string literal removido
-
-### MÉDIO (3/4 RESOLVIDOS)
-- F005: ✓ 193+ comentários meta-auditoria removidos
-- F006: ✓ Mojibake em strings UTF-8 corrigido
-- F007: ✓ Directoria "dashboard 2/" removida
-- F008: ○ tws_autologin paths hardcoded — requer decisão do utilizador
-
-### BAIXO (1/2 RESOLVIDOS)
-- F009: ✓ Log Telegram elevado para WARNING
-- F010: ○ Dependências sem upper bounds — risco baixo, cosmético
-
-### INFO (1/2 RESOLVIDOS)
-- F011: ○ bot.log sem rotação — melhoria operacional (Fase 5)
-- F012: ✓ Scripts orphans movidos para tools/
+## ESTADO
+[x] FASE 1 — Inventário de openclaw, prompts, scripts, estado
+[x] FASE 2 — Auditoria estática dos agentes
+[x] FASE 3 — Testes reais R01-R10
+[x] FASE 4 — Problemas encontrados (9 findings)
+[x] FASE 5 — Melhorias aos prompts (3 propostas detalhadas)
+[x] FASE 6 — Correcções CRÍTICO/ALTO (A001 + A002 corrigidos)
+[x] FASE 7 — Relatório final
 
 ## CORRECÇÕES APLICADAS
-1. main.py: 5 callbacks IB movidos de _acquire_lock_file() para __init__()
-2. main.py: Bloco `if False:` (linhas 973-980) removido
-3. main.py: String literal com main loop duplicado (56 linhas) removida
-4. main.py: String literal com shutdown duplicado (44 linhas) removida
-5. main.py + src/grid_engine.py + src/risk_manager.py + src/signal_engine.py: 193+ comentários meta-auditoria removidos
-6. main.py: ~15 strings mojibake corrigidas para UTF-8
-7. dashboard 2/: Directoria removida
-8. src/logger.py: Log de falha Telegram elevado de DEBUG para WARNING
-9. detect_windows.py, fix_signal.py, find_fields.py: Movidos para tools/
 
-## VEREDICTO FASE 4
-100/100 — Todos os findings CRÍTICOS, ALTOS e MÉDIOS resolvidos.
-423 testes passam sem regressões.
+### A001 + A002 (CRÍTICO): Modelo e auth dos agentes
+- `openclaw.json`: Adicionado `"model": "openrouter/free"` a ops-scheduler, claude-briefing, ops-analyst
+- `models.json` (3 agentes): Adicionado modelo `free` (200k ctx), corrigido `apiKey`
+- `auth-profiles.json` (ops-scheduler, claude-briefing): Copiado auth funcional do ops-analyst
 
-## FASE 5 — ELEVAÇÃO 120/100
-16 sugestões organizadas em 4 tiers de prioridade.
-Catálogo completo em AUDIT_REPORT.md.
+### Resultado dos testes pós-correcção
+- ops-analyst: ✅ Executou generate_report.py, gerou daily_report_2026-03-21.txt
+- claude-briefing: ✅ Executou em embedded mode (gateway stale precisa restart)
+- ops-scheduler: ✅ Leu heartbeat.json e reportou estado do bot
 
-## ENTREGA FINAL
-AUDIT_REPORT.md actualizado com score 100/100, todos os findings, e catálogo 120/100.
-Todas as 5 fases completas. Auditoria terminada.
+## PROBLEMAS REMANESCENTES (MÉDIO/BAIXO)
+- A003 (ALTO): Prompt do claude-briefing demasiado passivo — requer decisão do utilizador
+- A004 (ALTO): Prompt do ops-scheduler sem verificação pós-arranque — requer decisão do utilizador
+- A005 (MÉDIO): tws_autologin.py não verifica sucesso do login
+- A006 (MÉDIO): ops-analyst não analisa conteúdo dos relatórios
+- A007 (MÉDIO): start_all.bat apaga lock incondicionalmente
+- A008 (BAIXO): stop_and_report.bat regista "gracioso" com bot já parado
+- A009 (BAIXO): gateway health CLI com timeout
 
 ## PRÓXIMO PASSO SE INTERROMPIDO
-Auditoria completa. Nenhum passo pendente.
+Auditoria de agentes completa. Próximo: reiniciar gateway para que leia nova config.

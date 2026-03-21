@@ -1,0 +1,134 @@
+Analisa o estado operacional do meu trading bot em paper trading com base no resumo abaixo.
+
+Tipo de relatório: DIÁRIO
+Data: 2026-03-21 02:35 UTC
+
+Quero uma resposta em 5 secções:
+
+1. ESTADO GERAL
+- O bot arrancou e operou bem hoje?
+- Houve halts, erros ou warnings críticos?
+- O estado geral parece saudável para continuar amanhã?
+
+2. RISCO
+- Quantos reconnects, fallbacks yfinance e reconciliacoes inconclusivas ocorreram hoje?
+- Houve sinais de risco operacional?
+- Kill switches, entry_halt, emergency_halt, reconnects, falhas de dados?
+- Alguma situação que deva bloquear a próxima sessão?
+
+3. EXECUÇÃO E COMPORTAMENTO
+- Houve grids abertas ou fechadas?
+- Os eventos parecem normais para paper trading supervisionado?
+- Algum comportamento inesperado?
+
+4. PROBLEMAS CONCRETOS
+- Lista curta do que correu mal (se houver)
+- Para cada ponto: severidade (baixa/média/alta) e causa provável
+
+5. PRÓXIMOS PASSOS
+- O que devo fazer amanhã?
+- Manter igual, ajustar watchlist, rever configuração, ou abrir fix?
+
+Regras:
+- Não inventes contexto que não esteja no resumo
+- Distingue claramente facto de inferência
+- Se algo estiver ambíguo, diz que está ambíguo
+- Responde em português europeu
+- Foco em operação prática, não em teoria
+
+================================================================================
+RESUMO OPERACIONAL:
+================================================================================
+
+================================================================================
+RELATÓRIO DIÁRIO — BOT DE TRADING
+Data: 2026-03-21 02:35 UTC
+Modo: PAPER TRADING
+================================================================================
+
+── ESTADO OPERACIONAL ──────────────────────────────────────────────────────────
+IB Conectado:          ✅ SIM
+Pausa manual:          ✅ NÃO
+Entry halt:            ✅ NENHUM
+Emergency halt:        ✅ NÃO
+Último erro:           IB 162: Mensagem de erro do servi\u00e7o de dados hist\u00f3ricos de mercado:Trading TWS session is connected from a different IP address
+Último ciclo:          2026-03-20T17:09:03.480466+00:00
+
+── CAPITAL ─────────────────────────────────────────────────────────────────────
+Capital actual:        1119.91
+Capital inicial:       1120.0
+Peak equity:           1120.0
+Baseline diário:       1119.91
+Baseline semanal:      619.91
+
+── PERFORMANCE ─────────────────────────────────────────────────────────────────
+P&L total:             0.0
+Número de trades:      0
+Win rate:              0.0%
+Max drawdown:          0.00%
+
+── GRIDS ───────────────────────────────────────────────────────────────────────
+Grids activas:         0
+Grids fechadas hoje:   0
+
+  (nenhuma grid activa)
+
+── PREFLIGHT ───────────────────────────────────────────────────────────────────
+Reconciliação:         ⚠️ INCONCLUSIVA
+Telegram:              OK
+Watchlist size:        43
+
+── ÚLTIMAS LINHAS DO LOG ───────────────────────────────────────────────────────
+-- EVENTOS DO DIA --------------------------------------------------------
+Sessao:   N/D -> em curso
+
+Erros/Criticos (0):
+  (nenhum)
+
+Reconnects ao IB (0):
+  (nenhum)
+
+Fallbacks yfinance (0):
+  (nenhum)
+
+Reconciliacoes inconclusivas (0):
+  (nenhuma)
+
+Entry halts (0):
+  (nenhum)
+
+Outros warnings (0):
+  (nenhum)
+
+2026-03-20 17:19:01 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-20 17:19:01 | DEBUG    | yfinance             | reusing cookie
+2026-03-20 17:19:01 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-20 17:19:01 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-20 17:19:01 | DEBUG    | yfinance             | reusing crumb
+2026-03-20 17:19:01 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-20 17:19:01 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-20 17:19:01 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-20 17:19:02 | DEBUG    | yfinance             | response code=200
+2026-03-20 17:19:02 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-20 17:19:02 | DEBUG    | yfinance             |    Exiting get()
+2026-03-20 17:19:02 | DEBUG    | yfinance             | AMD: yfinance received OHLC data: 2026-03-16 13:30:00 -> 2026-03-20 17:19:00
+2026-03-20 17:19:02 | DEBUG    | yfinance             | AMD: OHLC after cleaning: 2026-03-16 09:30:00-04:00 -> 2026-03-20 13:19:00-04:00
+2026-03-20 17:19:02 | DEBUG    | yfinance             | AMD: OHLC after combining events: 2026-03-16 00:00:00-04:00 -> 2026-03-20 00:00:00-04:00
+2026-03-20 17:19:02 | DEBUG    | yfinance             | AMD: yfinance returning OHLC: 2026-03-16 00:00:00-04:00 -> 2026-03-20 00:00:00-04:00
+2026-03-20 17:19:02 | DEBUG    | yfinance             |   Exiting history()
+2026-03-20 17:19:02 | DEBUG    | yfinance             |  Exiting history()
+2026-03-20 17:19:02 | DEBUG    | yfinance             | Exiting download()
+2026-03-20 17:19:02 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: AMD = 17401695
+2026-03-20 17:19:02 | INFO     | main                 | Sinal Kotegawa para AMD: signal=False | horizonte=LONG_TERM | desvio=0.21% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-20 17:19:02 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'down', 'magnitude_pct': -0.1851, 'magnitude_atr': 0.0416, 'fill_probability': 0.85, 'is_high_prob': False, 'prev_close': 205.27, 'today_open': 204.89, 'atr14': 9.128581355971983}
+2026-03-20 17:19:02 | INFO     | src.gap_fade         | Gap fade sem acção: gap não transaccionável.
+2026-03-20 17:19:02 | DEBUG    | main                 | A processar simbolo: JPM
+2026-03-20 17:19:02 | INFO     | src.data_feed        | A qualificar contrato: JPM…
+2026-03-20 17:19:02 | INFO     | src.data_feed        | Contrato qualificado: JPM (conId=1520593, exchange=SMART).
+2026-03-20 17:19:02 | INFO     | src.data_feed        | A obter barras históricas: JPM | duração=1 Y | tamanho=1 day
+2026-03-20 17:19:03 | INFO     | src.data_feed        | Barras obtidas com sucesso: JPM — 251 barras (de 2025-03-21 a 2026-03-20).
+2026-03-20 17:19:03 | INFO     | src.data_feed        | Indicadores calculados para JPM: close=290.4700 | preço actual=N/A | SMA25=295.7588 | SMA50=303.3032 | SMA200=301.3109 | RSI14=43.1106 | ATR14=6.9926 | BB=[306.5478, 292.8335, 279.1192] | VolAvg20=5631449.3000 | ATRavg60=7.1376
+2026-03-20 17:19:08 | WARNING  | main                 | Sinal SIGINT recebido — a iniciar encerramento gracioso...
+2026-03-20 17:19:28 | WARNING  | main                 | Sinal SIGINT recebido — a iniciar encerramento gracioso...
+
+================================================================================
