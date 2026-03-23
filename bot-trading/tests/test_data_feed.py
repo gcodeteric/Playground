@@ -1146,6 +1146,153 @@ class TestCurrentSnapshotFallbacks:
         assert result is None
         assert data_feed._cache.get("yfinance_volume:AAPL") is None
 
+    @pytest.mark.asyncio
+    async def test_current_price_and_volume_for_same_contract_are_serialized(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        real_sleep = asyncio.sleep
+        price_ticker = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=None,
+            volume=None,
+        )
+        volume_ticker = SimpleNamespace(volume=321_000.0)
+        tickers = iter([price_ticker, volume_ticker])
+        price_entered = asyncio.Event()
+        release_price = asyncio.Event()
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        def _req_mkt_data(*_args, **_kwargs):
+            return next(tickers)
+
+        async def _fake_sleep(_delay: float):
+            task = asyncio.current_task()
+            if task is not None and task.get_name() == "price-task" and not price_entered.is_set():
+                price_entered.set()
+                await release_price.wait()
+                price_ticker.last = 101.75
+            return None
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+        mock_ib.reqMktData.side_effect = _req_mkt_data
+
+        with patch("src.data_feed.asyncio.sleep", new=_fake_sleep):
+            price_task = asyncio.create_task(
+                data_feed.get_current_price_details(contract),
+                name="price-task",
+            )
+            await asyncio.wait_for(price_entered.wait(), timeout=1.0)
+
+            volume_task = asyncio.create_task(
+                data_feed.get_current_volume(contract),
+                name="volume-task",
+            )
+            for _ in range(3):
+                await real_sleep(0)
+
+            assert mock_ib.reqMktData.call_count == 1
+            assert volume_task.done() is False
+
+            release_price.set()
+            price_result, volume_result = await asyncio.gather(price_task, volume_task)
+
+        assert price_result == {
+            "price": 101.75,
+            "source": "last",
+            "fresh": True,
+            "volume": None,
+        }
+        assert volume_result == pytest.approx(321_000.0, abs=1e-5)
+        assert mock_ib.reqMktData.call_count == 2
+        assert mock_ib.cancelMktData.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_current_price_and_volume_for_different_contracts_do_not_share_lock(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        price_contract = _build_contract("AAPL")
+        volume_contract = _build_contract("MSFT")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        price_ticker = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=None,
+            volume=None,
+        )
+        volume_ticker = SimpleNamespace(volume=654_000.0)
+        price_entered = asyncio.Event()
+        volume_entered = asyncio.Event()
+        both_entered = asyncio.Event()
+        release_both = asyncio.Event()
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        def _req_mkt_data(contract, **_kwargs):
+            return price_ticker if contract.symbol == "AAPL" else volume_ticker
+
+        async def _fake_sleep(_delay: float):
+            task = asyncio.current_task()
+            if task is not None and task.get_name() == "price-task" and not price_entered.is_set():
+                price_entered.set()
+                if volume_entered.is_set():
+                    both_entered.set()
+                await release_both.wait()
+                price_ticker.last = 102.25
+            elif (
+                task is not None
+                and task.get_name() == "volume-task"
+                and not volume_entered.is_set()
+            ):
+                volume_entered.set()
+                if price_entered.is_set():
+                    both_entered.set()
+                await release_both.wait()
+            return None
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+        mock_ib.reqMktData.side_effect = _req_mkt_data
+
+        with patch("src.data_feed.asyncio.sleep", new=_fake_sleep):
+            price_task = asyncio.create_task(
+                data_feed.get_current_price_details(price_contract),
+                name="price-task",
+            )
+            volume_task = asyncio.create_task(
+                data_feed.get_current_volume(volume_contract),
+                name="volume-task",
+            )
+
+            await asyncio.wait_for(both_entered.wait(), timeout=1.0)
+            assert mock_ib.reqMktData.call_count == 2
+
+            release_both.set()
+            price_result, volume_result = await asyncio.gather(price_task, volume_task)
+
+        assert price_result == {
+            "price": 102.25,
+            "source": "last",
+            "fresh": True,
+            "volume": None,
+        }
+        assert volume_result == pytest.approx(654_000.0, abs=1e-5)
+        assert mock_ib.cancelMktData.call_count == 2
+
 
 class TestYfinanceFreshness:
     def test_is_yfinance_quote_fresh_for_today(self):

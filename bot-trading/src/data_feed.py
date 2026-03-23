@@ -46,6 +46,7 @@ from src.ib_requests import (
     IBRequestExecutor,
     classify_ib_error,
 )
+from src.market_hours import get_asset_type, is_market_open
 
 logger = logging.getLogger(__name__)
 
@@ -61,6 +62,8 @@ _DAILY_RESTART_WAIT_SECONDS: int = 65
 _RECONNECT_ALERT_INTERVAL_SECONDS: int = 600
 _RECONNECT_ESCALATION_AFTER_SECONDS: int = 1800
 _IB_PACING_ERROR_CODE: int = 162
+_DATA_FEED_CIRCUIT_BREAKER_THRESHOLD: int = 3
+_DATA_FEED_CIRCUIT_BREAKER_COOLDOWN_SECONDS: float = 30.0
 _WARMUP_MIN_BARS: dict[str, int] = {
     "SMA200": 200,
     "SMA50": 50,
@@ -671,6 +674,9 @@ class DataFeed:
         self._request_executor: IBRequestExecutor = connection.request_executor
         # Cache de longa duração para barras históricas (actualizadas menos vezes)
         self._bars_cache: _TTLCache = _TTLCache(ttl=60.0)
+        self._market_data_locks: dict[str, asyncio.Lock] = {}
+        self._data_feed_failure_counts: dict[str, int] = {}
+        self._data_feed_circuit_open_until: dict[str, float | None] = {}
 
     # ---- propriedade de conveniência ----
 
@@ -706,6 +712,52 @@ class DataFeed:
         currency = getattr(contract, "currency", None) or ""
         expiry = getattr(contract, "lastTradeDateOrContractMonth", None) or ""
         return f"{sec_type}:{symbol}:{exchange}:{currency}:{expiry}"
+
+    def _is_market_open_for_contract(
+        self,
+        contract: Stock | Forex | Future | CFD,
+    ) -> bool:
+        """Indica se a sessão do mercado está aberta para o contrato."""
+        try:
+            return is_market_open(
+                self._contract_market_symbol(contract),
+                asset_type=get_asset_type(contract),
+            )
+        except Exception:
+            return False
+
+    def _is_data_feed_circuit_open(self, operation_name: str) -> bool:
+        """Verifica se o circuit breaker do fluxo está activo."""
+        open_until = self._data_feed_circuit_open_until.get(operation_name)
+        if open_until is None:
+            return False
+        if time.monotonic() >= open_until:
+            self._data_feed_failure_counts[operation_name] = 0
+            self._data_feed_circuit_open_until.pop(operation_name, None)
+            return False
+        return True
+
+    def _record_data_feed_success(self, operation_name: str) -> None:
+        """Reinicia o estado do circuit breaker após sucesso real."""
+        self._data_feed_failure_counts[operation_name] = 0
+        self._data_feed_circuit_open_until.pop(operation_name, None)
+
+    def _record_data_feed_failure(
+        self,
+        operation_name: str,
+        contract: Stock | Forex | Future | CFD,
+    ) -> None:
+        """Conta uma falha real apenas durante mercado aberto."""
+        if not self._is_market_open_for_contract(contract):
+            self._data_feed_failure_counts[operation_name] = 0
+            return
+
+        failures = self._data_feed_failure_counts.get(operation_name, 0) + 1
+        self._data_feed_failure_counts[operation_name] = failures
+        if failures >= _DATA_FEED_CIRCUIT_BREAKER_THRESHOLD:
+            self._data_feed_circuit_open_until[operation_name] = (
+                time.monotonic() + _DATA_FEED_CIRCUIT_BREAKER_COOLDOWN_SECONDS
+            )
 
     def _yf_symbol(self, symbol: str) -> str:
         """Converte símbolo IB para símbolo Yahoo Finance."""
@@ -929,6 +981,8 @@ class DataFeed:
         cached = self._cache.get(cache_key)
         if cached is not None:
             return dict(cached)
+        if self._is_data_feed_circuit_open("current_price"):
+            return {"price": None, "source": None, "fresh": False}
 
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
@@ -947,34 +1001,41 @@ class DataFeed:
                     price,
                 )
                 self._cache.set(cache_key, snapshot)
+                self._record_data_feed_success("current_price")
                 return snapshot
+            self._record_data_feed_failure("current_price", contract)
             return {"price": None, "source": None, "fresh": False}
 
         async def _request_price() -> dict[str, Any]:
             logger.debug("A obter preço actual de %s…", contract.symbol)
+            late_snapshot: dict[str, Any] | None = None
+            lock = self._market_data_locks.setdefault(contract_key, asyncio.Lock())
 
-            # Pedir snapshot de mercado (ticker)
-            ticker = self.ib.reqMktData(contract, snapshot=True)
+            async with lock:
+                ticker = self.ib.reqMktData(contract, snapshot=True)
+                try:
+                    deadline = time.monotonic() + 10.0
+                    while time.monotonic() < deadline:
+                        await asyncio.sleep(0.1)
+                        snapshot = _build_price_snapshot_from_ticker(ticker)
+                        if snapshot is not None:
+                            self._cache.set(cache_key, snapshot)
+                            logger.debug(
+                                "Preço de %s: %.4f (%s).",
+                                contract.symbol,
+                                float(snapshot["price"]),
+                                snapshot["source"],
+                            )
+                            return snapshot
 
-            # Aguardar até receber dados (máx. 10 s)
-            deadline = time.monotonic() + 10.0
-            while time.monotonic() < deadline:
-                await asyncio.sleep(0.1)
-                snapshot = _build_price_snapshot_from_ticker(ticker)
-                if snapshot is not None:
-                    self._cache.set(cache_key, snapshot)
-                    self.ib.cancelMktData(contract)
-                    logger.debug(
-                        "Preço de %s: %.4f (%s).",
-                        contract.symbol,
-                        float(snapshot["price"]),
-                        snapshot["source"],
-                    )
-                    return snapshot
+                    late_snapshot = _build_price_snapshot_from_ticker(ticker)
+                finally:
+                    try:
+                        self.ib.cancelMktData(contract)
+                    except Exception:
+                        pass
 
-            # Timeout — cancelar subscrição
-            snapshot = _build_price_snapshot_from_ticker(ticker)
-            self.ib.cancelMktData(contract)
+            snapshot = late_snapshot
             if snapshot is not None:
                 self._cache.set(cache_key, snapshot)
                 logger.info(
@@ -983,6 +1044,7 @@ class DataFeed:
                     snapshot["source"],
                     float(snapshot["price"]),
                 )
+                self._record_data_feed_success("current_price")
                 return snapshot
             logger.warning("Timeout ao obter preço de %s.", contract.symbol)
             price = await self.get_price_yfinance(symbol)
@@ -1000,16 +1062,21 @@ class DataFeed:
                     price,
                 )
                 self._cache.set(cache_key, snapshot)
+                self._record_data_feed_success("current_price")
                 return snapshot
+            self._record_data_feed_failure("current_price", contract)
             return {"price": None, "source": None, "fresh": False}
 
         try:
-            return await self._request_executor.run(
+            snapshot = await self._request_executor.run(
                 "current_price",
                 cache_key,
                 _request_price,
                 request_cost=2,
             )
+            if snapshot.get("price") is not None:
+                self._record_data_feed_success("current_price")
+            return snapshot
         except Exception as exc:
             logger.error("Erro ao obter preço de %s: %s", contract.symbol, exc)
             try:
@@ -1031,7 +1098,9 @@ class DataFeed:
                     price,
                 )
                 self._cache.set(cache_key, snapshot)
+                self._record_data_feed_success("current_price")
                 return snapshot
+            self._record_data_feed_failure("current_price", contract)
             return {"price": None, "source": None, "fresh": False}
 
     async def get_current_price(
@@ -1083,6 +1152,8 @@ class DataFeed:
                     volume,
                 )
                 return volume
+        if self._is_data_feed_circuit_open("current_volume"):
+            return None
 
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
@@ -1095,24 +1166,32 @@ class DataFeed:
                     volume,
                 )
                 self._cache.set(cache_key, volume)
+                self._record_data_feed_success("current_volume")
+            else:
+                self._record_data_feed_failure("current_volume", contract)
             return volume
 
         async def _request_volume() -> float | None:
             logger.debug("A obter volume actual de %s…", contract.symbol)
+            lock = self._market_data_locks.setdefault(contract_key, asyncio.Lock())
 
-            ticker = self.ib.reqMktData(contract, snapshot=True)
+            async with lock:
+                ticker = self.ib.reqMktData(contract, snapshot=True)
+                try:
+                    deadline = time.monotonic() + 10.0
+                    while time.monotonic() < deadline:
+                        await asyncio.sleep(0.1)
+                        if _valid_price(ticker.volume):
+                            volume = float(ticker.volume)
+                            self._cache.set(cache_key, volume)
+                            logger.debug("Volume de %s: %.0f.", contract.symbol, volume)
+                            return volume
+                finally:
+                    try:
+                        self.ib.cancelMktData(contract)
+                    except Exception:
+                        pass
 
-            deadline = time.monotonic() + 10.0
-            while time.monotonic() < deadline:
-                await asyncio.sleep(0.1)
-                if _valid_price(ticker.volume):
-                    volume = float(ticker.volume)
-                    self._cache.set(cache_key, volume)
-                    self.ib.cancelMktData(contract)
-                    logger.debug("Volume de %s: %.0f.", contract.symbol, volume)
-                    return volume
-
-            self.ib.cancelMktData(contract)
             logger.warning("Timeout ao obter volume de %s.", contract.symbol)
             volume = await self.get_volume_yfinance(symbol)
             if volume is not None:
@@ -1122,15 +1201,21 @@ class DataFeed:
                     volume,
                 )
                 self._cache.set(cache_key, volume)
+                self._record_data_feed_success("current_volume")
+            else:
+                self._record_data_feed_failure("current_volume", contract)
             return volume
 
         try:
-            return await self._request_executor.run(
+            volume = await self._request_executor.run(
                 "current_volume",
                 cache_key,
                 _request_volume,
                 request_cost=2,
             )
+            if volume is not None:
+                self._record_data_feed_success("current_volume")
+            return volume
         except Exception as exc:
             logger.error("Erro ao obter volume de %s: %s", contract.symbol, exc)
             try:
@@ -1145,6 +1230,9 @@ class DataFeed:
                     volume,
                 )
                 self._cache.set(cache_key, volume)
+                self._record_data_feed_success("current_volume")
+            else:
+                self._record_data_feed_failure("current_volume", contract)
             return volume
 
     # ----------------------------------------------------------------
