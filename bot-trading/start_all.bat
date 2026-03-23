@@ -3,10 +3,11 @@ setlocal EnableExtensions EnableDelayedExpansion
 title Launcher - TWS + Bot + Dashboard
 cd /d "%~dp0"
 
-set "PYTHON_EXE=%~dp0venv\Scripts\python.exe"
 set "TWS_EXE=C:\Jts\tws.exe"
 set "TWS_PROCESS=tws.exe"
 set "TWS_WAIT_TIMEOUT=60"
+set "AUTOLOGIN_BUFFER_SECONDS=60"
+set "PYTHON_EXE="
 
 echo.
 echo ========================================
@@ -23,8 +24,9 @@ for %%f in ("%TEMP%\bot-trading-instance-locks\*.lock") do (
     del /f "%%f" 2>nul
 )
 
-if not exist "%PYTHON_EXE%" (
-    echo ERRO: Python do projeto nao encontrado: "%PYTHON_EXE%"
+call :resolve_python
+if errorlevel 1 (
+    echo ERRO: Python do projeto nao encontrado em venv\Scripts\python.exe nem venv2\Scripts\python.exe
     exit /b 1
 )
 
@@ -50,20 +52,16 @@ if errorlevel 1 (
 )
 
 echo TWS detectado. A executar auto-login...
-"%PYTHON_EXE%" "%~dp0tws_autologin.py" --skip-launch --timeout %TWS_WAIT_TIMEOUT%
-if errorlevel 1 (
-    echo.
-    echo AVISO: auto-login falhou - a continuar sem login automatico.
-    echo Faz login manualmente no TWS nos proximos 30 segundos.
-    timeout /t 30 /nobreak >nul
-)
+start "" /B "%PYTHON_EXE%" "%~dp0tws_autologin.py" --skip-launch --timeout %TWS_WAIT_TIMEOUT%
+echo A aguardar %AUTOLOGIN_BUFFER_SECONDS% segundos completos para o login automatico terminar...
+timeout /t %AUTOLOGIN_BUFFER_SECONDS% /nobreak >nul
 
 echo.
-echo TWS pronto. A arrancar dashboard e bot...
+echo Buffer de login concluido. A arrancar dashboard e bot...
 echo.
 
 rem Abrir dashboard numa janela separada
-start "Dashboard de Trading" cmd /k "cd /d "%~dp0" && "%~dp0venv\Scripts\python.exe" -m streamlit run dashboard/app.py --server.port 8501 --server.headless true --server.address 0.0.0.0"
+start "Dashboard de Trading" cmd /k "cd /d "%~dp0" && "%PYTHON_EXE%" -m streamlit run dashboard/app.py --server.port 8501 --server.headless true --server.address 0.0.0.0"
 
 rem Aguardar dashboard arrancar
 timeout /t 3 /nobreak >nul
@@ -74,7 +72,7 @@ start http://localhost:8501
 rem Arrancar bot nesta janela
 echo A arrancar bot...
 echo.
-"%~dp0venv\Scripts\python.exe" main.py
+"%PYTHON_EXE%" main.py
 
 goto :eof
 
@@ -82,6 +80,17 @@ goto :eof
 tasklist /FI "IMAGENAME eq %TWS_PROCESS%" 2>nul | find /I "%TWS_PROCESS%" >nul
 if errorlevel 1 exit /b 1
 exit /b 0
+
+:resolve_python
+if exist "%~dp0venv\Scripts\python.exe" (
+    set "PYTHON_EXE=%~dp0venv\Scripts\python.exe"
+    exit /b 0
+)
+if exist "%~dp0venv2\Scripts\python.exe" (
+    set "PYTHON_EXE=%~dp0venv2\Scripts\python.exe"
+    exit /b 0
+)
+exit /b 1
 
 :wait_for_tws_process
 set "WAIT_SECONDS=%~1"

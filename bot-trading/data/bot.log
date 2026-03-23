@@ -25812,3 +25812,92 @@ RuntimeError: Outra instÃ¢ncia parece activa para C:\Users\berna\Desktop\Playg
 2026-03-23 15:29:36 | INFO     | main                 | Sinal Kotegawa para TLT: signal=False | horizonte=SHORT_TERM | desvio=-2.16% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
 2026-03-23 15:29:36 | INFO     | src.data_feed        | A qualificar contrato: SPY…
 2026-03-23 15:29:36 | INFO     | src.data_feed        | Contrato qualificado: SPY (conId=756733, exchange=SMART).
+2026-03-23 15:31:28 | WARNING  | src.data_feed        | Codigo IB 2104: A conex\u00e3o do centro de dados de mercado est\u00e1 OK:usfarm.nj
+2026-03-23 15:31:43 | ERROR    | ib_insync.client     | Peer closed connection.
+2026-03-23 15:31:43 | WARNING  | src.data_feed        | Desconexão do IB detectada pelo callback.
+2026-03-23 15:31:43 | WARNING  | main                 | IB desconectado. Aguardar sequencia de reconexao.
+2026-03-23 15:31:43 | INFO     | src.data_feed        | A iniciar reconexão automática ao IB com espera inicial de 65 s…
+2026-03-23 15:31:43 | WARNING  | main                 | ALERTA OPERACIONAL: ⚠️ IB desconectado. A reconectar...
+2026-03-23 15:31:47 | WARNING  | main                 | Sinal SIGINT recebido — a iniciar encerramento gracioso...
+2026-03-23 15:32:17 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-23 15:32:17 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-23 15:32:17 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 3 | Posicoes max: 8
+2026-03-23 15:32:17 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-23 15:32:17 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 1120.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 8 | Max grids: 3 | R:R mínimo: 2.5
+2026-03-23 15:32:17 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: C:\Users\berna\Desktop\Playground\bot-trading\data)
+2026-03-23 15:32:17 | WARNING  | main                 | Telegram NAO configurado — notificacoes desactivadas. Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env.
+2026-03-23 15:32:17 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-23 15:32:17 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50.
+2026-03-23 15:32:17 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-23 15:32:17 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-23 15:32:17 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-23 15:32:17 | INFO     | main                 | Caminho de sinais activo: windows_signal_fallback (SIGINT, SIGTERM).
+2026-03-23 15:32:17 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-23 15:32:17 | INFO     | main                 | Bot a iniciar — watchlist: ['SPY', 'QQQ', 'EZU', 'GLD', 'TLT', 'IWM', 'VIX'] | capital: 1120.00 | ciclo: 300 s | paper: True
+2026-03-23 15:32:17 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-23 15:32:17 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-23 15:32:17 | INFO     | main                 | Lock de instÃ¢ncia adquirido: C:\Users\berna\Desktop\Playground\bot-trading\data\bot.instance.lock
+2026-03-23 15:32:17 | INFO     | main                 | Lock de contexto IB adquirido: C:\Users\berna\AppData\Local\Temp\bot-trading-instance-locks\ib-127_0_0_1-7497-client-1-781204e243c4ce97.lock
+2026-03-23 15:32:17 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-23 15:32:17 | INFO     | main                 | Estado de grids carregado â€” 0 grid(s) existente(s).
+2026-03-23 15:32:17 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-23 15:32:17 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-23 15:32:17 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-23 15:32:17 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1, estado=CONNECTING)…
+2026-03-23 15:32:19 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(22, 'O computador remoto recusou a ligação da rede', None, 1225, None)
+2026-03-23 15:32:19 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-23 15:32:19 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [WinError 1225] O computador remoto recusou a ligação da rede. Próxima tentativa em 5 s.
+2026-03-23 15:32:24 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=2, estado=CONNECTING)…
+2026-03-23 15:32:26 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(22, 'O computador remoto recusou a ligação da rede', None, 1225, None)
+2026-03-23 15:32:26 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-23 15:32:26 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [WinError 1225] O computador remoto recusou a ligação da rede. Próxima tentativa em 10 s.
+2026-03-23 15:32:56 | INFO     | main                 | Sistema de logging configurado — nivel: INFO
+2026-03-23 15:32:56 | INFO     | main                 | Configuracao carregada com sucesso.
+2026-03-23 15:32:56 | INFO     | main                 | IB: host=127.0.0.1, port=7497, paper=True, gateway=False | Risco: rpl=1.0%, daily=3.0%, monthly=10.0% | Grids max: 3 | Posicoes max: 8
+2026-03-23 15:32:56 | INFO     | src.data_feed        | Porta IB seleccionada: 7497 (paper=True, gateway=False).
+2026-03-23 15:32:56 | INFO     | risk_manager         | Gestor de risco inicializado — Capital: 1120.00 | Risco/nível: 1.0% | Kelly cap: 5.0% | Stop ATR: 1.00 | TP ATR: 2.50 | Kill switch mensal: 10.0% | Max posições: 8 | Max grids: 3 | R:R mínimo: 2.5
+2026-03-23 15:32:56 | INFO     | src.grid_engine      | Motor de grid inicializado (directoria de dados: C:\Users\berna\Desktop\Playground\bot-trading\data)
+2026-03-23 15:32:56 | WARNING  | main                 | Telegram NAO configurado — notificacoes desactivadas. Defina TELEGRAM_BOT_TOKEN e TELEGRAM_CHAT_ID no .env.
+2026-03-23 15:32:56 | INFO     | main                 | A executar validacoes de arranque...
+2026-03-23 15:32:56 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50.
+2026-03-23 15:32:56 | INFO     | risk_manager         | Risk of Ruin calculado: 0.000000% | Edge: 0.7500 | Unidades capital: 100 | Win rate: 0.50 | Payoff: 2.50 | Risco/trade: 1.00%
+2026-03-23 15:32:56 | INFO     | main                 | Risk of Ruin calculado: 0.000000% (limiar maximo: 1.00%)
+2026-03-23 15:32:56 | INFO     | main                 | Validacao de Risk of Ruin aprovada — RoR: 0.000000% (< 1.00%)
+2026-03-23 15:32:56 | INFO     | main                 | Caminho de sinais activo: windows_signal_fallback (SIGINT, SIGTERM).
+2026-03-23 15:32:56 | INFO     | main                 | 
+
+================================================================================
+   BOT DE TRADING AUTONOMO  v1.0.0
+   MODO: *** PAPER TRADING (SIMULACAO) ***
+   Nenhuma ordem real sera enviada ao mercado.
+================================================================================
+2026-03-23 15:32:56 | INFO     | main                 | Bot a iniciar — watchlist: ['SPY', 'QQQ', 'EZU', 'GLD', 'TLT', 'IWM', 'VIX'] | capital: 1120.00 | ciclo: 300 s | paper: True
+2026-03-23 15:32:56 | INFO     | main                 | sector_rotation: activo em modo informativo (execução directa: Fase 2+)
+2026-03-23 15:32:56 | INFO     | main                 | options_premium: módulo desactivado (Fase 3+). Activa em OPTIONS_PREMIUM_CONFIG['is_active'] = True.
+2026-03-23 15:32:56 | INFO     | main                 | Lock de instÃ¢ncia adquirido: C:\Users\berna\Desktop\Playground\bot-trading\data\bot.instance.lock
+2026-03-23 15:32:56 | INFO     | main                 | Lock de contexto IB adquirido: C:\Users\berna\AppData\Local\Temp\bot-trading-instance-locks\ib-127_0_0_1-7497-client-1-781204e243c4ce97.lock
+2026-03-23 15:32:56 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-23 15:32:56 | INFO     | main                 | Estado de grids carregado â€” 0 grid(s) existente(s).
+2026-03-23 15:32:56 | INFO     | src.grid_engine      | Estado carregado com sucesso: 0 grid(s) de C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-23 15:32:56 | INFO     | main                 | Estado de grids carregado — 0 grid(s) existente(s).
+2026-03-23 15:32:56 | INFO     | main                 | A executar preflight operacional antes do loop principal...
+2026-03-23 15:32:56 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=1, estado=CONNECTING)…
+2026-03-23 15:32:58 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(22, 'O computador remoto recusou a ligação da rede', None, 1225, None)
+2026-03-23 15:32:58 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-23 15:32:58 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [WinError 1225] O computador remoto recusou a ligação da rede. Próxima tentativa em 5 s.
+2026-03-23 15:33:03 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=2, estado=CONNECTING)…
+2026-03-23 15:33:05 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(22, 'O computador remoto recusou a ligação da rede', None, 1225, None)
+2026-03-23 15:33:05 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-23 15:33:05 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [WinError 1225] O computador remoto recusou a ligação da rede. Próxima tentativa em 10 s.
+2026-03-23 15:33:15 | WARNING  | main                 | Sinal SIGINT recebido — a iniciar encerramento gracioso...
+2026-03-23 15:33:15 | INFO     | src.data_feed        | A tentar ligar ao IB em 127.0.0.1:7497 (client_id=1, tentativa=3, estado=CONNECTING)…
+2026-03-23 15:33:17 | ERROR    | ib_insync.client     | API connection failed: ConnectionRefusedError(22, 'O computador remoto recusou a ligação da rede', None, 1225, None)
+2026-03-23 15:33:17 | ERROR    | ib_insync.client     | Make sure API port on TWS/IBG is open
+2026-03-23 15:33:17 | WARNING  | src.data_feed        | Falha ao ligar ao IB: [WinError 1225] O computador remoto recusou a ligação da rede. Próxima tentativa em 20 s.
+2026-03-23 15:33:17 | CRITICAL | main                 | Nao foi possivel ligar ao IB apos 3 tentativas
