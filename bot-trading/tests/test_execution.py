@@ -701,6 +701,67 @@ class TestOrderTracking:
         assert order_manager.get_order_info(1002).status == OrderStatus.SUBMITTED
         assert order_manager.get_order_info(1003).status == OrderStatus.SUBMITTED
 
+    def test_rehydrate_grid_orders_is_idempotent_on_repeat_startup_load(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        grid = SimpleNamespace(
+            id="grid_AAPL_20240101_0001",
+            status="active",
+            levels=[
+                SimpleNamespace(
+                    level=1,
+                    status="pending",
+                    quantity=10,
+                    buy_price=100.0,
+                    stop_price=95.0,
+                    sell_price=110.0,
+                    buy_order_id=1001,
+                    stop_order_id=1002,
+                    sell_order_id=1003,
+                ),
+            ],
+        )
+
+        first = order_manager.rehydrate_grid_orders(grid, mock_contract)
+        second = order_manager.rehydrate_grid_orders(grid, mock_contract)
+
+        assert first == 3
+        assert second == 0
+        assert len(order_manager._pending_orders) == 3
+        assert len(order_manager._brackets_by_key) == 1
+        assert order_manager.get_pending_count() == 1
+
+    def test_rehydrate_grid_orders_does_not_keep_completed_bracket_active(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        grid = SimpleNamespace(
+            id="grid_AAPL_20240101_0001",
+            status="active",
+            levels=[
+                SimpleNamespace(
+                    level=1,
+                    status="sold",
+                    quantity=10,
+                    buy_price=100.0,
+                    stop_price=95.0,
+                    sell_price=110.0,
+                    buy_order_id=1001,
+                    stop_order_id=1002,
+                    sell_order_id=1003,
+                ),
+            ],
+        )
+
+        restored = order_manager.rehydrate_grid_orders(grid, mock_contract)
+        trade_key = order_manager.build_logical_trade_key(grid.id, 1, "BUY")
+
+        assert restored == 3
+        assert trade_key not in order_manager._brackets_by_key
+        assert order_manager.get_pending_count() == 0
+        assert order_manager.get_order_info(1001).status == OrderStatus.CANCELLED
+        assert order_manager.get_order_info(1002).status == OrderStatus.CANCELLED
+        assert order_manager.get_order_info(1003).status == OrderStatus.FILLED
+
     @pytest.mark.asyncio
     async def test_submit_bracket_order_deduplicates_after_rehydration(
         self, order_manager, mock_ib, mock_contract
@@ -738,6 +799,71 @@ class TestOrderTracking:
         assert result is not None
         assert result["order_id"] == 1001
         assert mock_ib.placeOrder.call_count == 0
+
+    def test_sync_tracking_from_open_orders_restores_missing_bracket_identity(
+        self, order_manager, mock_ib, mock_contract
+    ):
+        grid = SimpleNamespace(
+            id="grid_AAPL_20240101_0001",
+            status="active",
+            levels=[
+                SimpleNamespace(
+                    level=1,
+                    status="pending",
+                    quantity=10,
+                    buy_price=100.0,
+                    stop_price=95.0,
+                    sell_price=110.0,
+                    buy_order_id=1001,
+                    stop_order_id=1002,
+                    sell_order_id=1003,
+                ),
+            ],
+        )
+        trade_key = order_manager.build_logical_trade_key(grid.id, 1, "BUY")
+        order_manager.rehydrate_grid_orders(grid, mock_contract)
+        order_manager._brackets_by_key.clear()
+
+        updated = order_manager.sync_tracking_from_open_orders(
+            [
+                {
+                    "order_id": 1001,
+                    "parent_id": 0,
+                    "order_ref": trade_key,
+                    "quantity": 10.0,
+                    "limit_price": 100.0,
+                    "status": "Submitted",
+                    "filled": 0.0,
+                    "avg_fill_price": 0.0,
+                },
+                {
+                    "order_id": 1002,
+                    "parent_id": 1001,
+                    "order_ref": trade_key,
+                    "quantity": 10.0,
+                    "stop_price": 95.0,
+                    "status": "Submitted",
+                    "filled": 0.0,
+                    "avg_fill_price": 0.0,
+                },
+                {
+                    "order_id": 1003,
+                    "parent_id": 1001,
+                    "order_ref": trade_key,
+                    "quantity": 10.0,
+                    "limit_price": 110.0,
+                    "status": "PreSubmitted",
+                    "filled": 0.0,
+                    "avg_fill_price": 0.0,
+                },
+            ],
+        )
+
+        assert updated == 6
+        assert trade_key in order_manager._brackets_by_key
+        assert order_manager.get_order_info(1001).status == OrderStatus.SUBMITTED
+        assert order_manager.get_order_info(1002).status == OrderStatus.SUBMITTED
+        assert order_manager.get_order_info(1003).status == OrderStatus.PRE_SUBMITTED
 
     def test_cleanup_removes_filled_orders(self, order_manager):
         """Cleanup should remove orders in terminal states."""

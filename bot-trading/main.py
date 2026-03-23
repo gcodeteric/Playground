@@ -118,6 +118,8 @@ _DATA_FILE_DEFAULTS: dict[str, dict[str, Any] | str] = {
 _RECONCILIATION_FETCH_ATTEMPTS = 3
 _RECONCILIATION_FETCH_DELAY_SECONDS = 5
 _INSTANCE_LOCK_FILENAME = "bot.instance.lock"
+_STATE_INCONSISTENCY_HALT_REASON = "state_inconsistency_detected"
+_STATE_VALIDATION_TOLERANCE_RATIO = 0.01
 
 
 def _get_broker_lock_root() -> Path:
@@ -1261,6 +1263,133 @@ class TradingBot:
         }
         return payload
 
+    @staticmethod
+    def _level_has_execution_evidence(level: GridLevel) -> bool:
+        """Detecta evidência persistida de execução real num nível."""
+        return (
+            level.status in {"bought", "sold", "stopped"}
+            or level.bought_at is not None
+            or level.sold_at is not None
+            or level.pnl is not None
+        )
+
+    @staticmethod
+    def _within_state_validation_tolerance(left: float, right: float) -> bool:
+        """Compara dois valores monetários com tolerância relativa conservadora."""
+        baseline = max(abs(left), abs(right), 1.0)
+        return abs(left - right) <= baseline * _STATE_VALIDATION_TOLERANCE_RATIO
+
+    @staticmethod
+    def _build_level_trade_key(grid_id: str, level: int) -> str:
+        """Constrói a chave lógica de trade para um nível de grid."""
+        return OrderManager.build_logical_trade_key(grid_id, level, "BUY")
+
+    def _matching_trades_for_level(
+        self,
+        trades: list[dict[str, Any]],
+        grid: Grid,
+        level: GridLevel,
+    ) -> list[dict[str, Any]]:
+        """Filtra trades do log que correspondem a um nível concreto."""
+        trade_key = self._build_level_trade_key(grid.id, level.level)
+        matches: list[dict[str, Any]] = []
+        for trade in trades:
+            if str(trade.get("grid_id", "") or "") != grid.id:
+                continue
+
+            if str(trade.get("logical_trade_key", "") or "") == trade_key:
+                matches.append(trade)
+                continue
+            if str(trade.get("order_ref", "") or "") == trade_key:
+                matches.append(trade)
+                continue
+
+            trade_level = trade.get("level")
+            try:
+                if trade_level is not None and int(trade_level) == int(level.level):
+                    matches.append(trade)
+            except (TypeError, ValueError):
+                continue
+        return matches
+
+    def _validate_cross_file_state(self) -> list[str]:
+        """Valida coerência entre grids, trade log e métricas sem corrigir estado."""
+        if not hasattr(self, "_grid_engine") or not hasattr(self, "_trade_logger"):
+            return []
+        if not hasattr(self._trade_logger, "get_trades") or not hasattr(self._trade_logger, "calculate_metrics"):
+            return []
+
+        try:
+            trades = self._trade_logger.get_trades()
+            trade_metrics = self._trade_logger.calculate_metrics()
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("Validação cross-file ignorada: trade log indisponível (%s).", exc)
+            return []
+
+        metrics_snapshot = self._load_metrics_snapshot()
+        issues: list[str] = []
+        realized_grid_pnl = 0.0
+        has_open_bought_levels = False
+
+        for grid in getattr(self._grid_engine, "grids", []):
+            for level in grid.levels:
+                if level.status == "bought":
+                    has_open_bought_levels = True
+                if not self._level_has_execution_evidence(level):
+                    continue
+
+                level_trades = self._matching_trades_for_level(trades, grid, level)
+                if not level_trades:
+                    issues.append(
+                        f"grid={grid.id} level={level.level}: execução persistida sem trade correspondente em trades_log.json"
+                    )
+
+            if any(level.pnl is not None for level in grid.levels):
+                realized_grid_pnl += float(grid.total_pnl or 0.0)
+
+        trade_total_pnl = float(trade_metrics.get("total_pnl", 0.0) or 0.0)
+        if not self._within_state_validation_tolerance(realized_grid_pnl, trade_total_pnl):
+            issues.append(
+                "divergência de pnl realizado entre grids_state.json "
+                f"({realized_grid_pnl:.4f}) e trades_log.json ({trade_total_pnl:.4f})"
+            )
+
+        metrics_total_pnl = self._coerce_float(metrics_snapshot.get("total_pnl"))
+        if (
+            metrics_total_pnl is not None
+            and not self._within_state_validation_tolerance(trade_total_pnl, metrics_total_pnl)
+        ):
+            issues.append(
+                "divergência de pnl realizado entre trades_log.json "
+                f"({trade_total_pnl:.4f}) e metrics.json ({metrics_total_pnl:.4f})"
+            )
+
+        metrics_capital = self._coerce_float(metrics_snapshot.get("capital"))
+        if (
+            metrics_capital is not None
+            and not has_open_bought_levels
+            and hasattr(self, "_risk_manager")
+        ):
+            expected_capital = float(self._risk_manager.initial_capital) + trade_total_pnl
+            if not self._within_state_validation_tolerance(metrics_capital, expected_capital):
+                issues.append(
+                    "divergência de capital entre metrics.json "
+                    f"({metrics_capital:.4f}) e capital esperado ({expected_capital:.4f})"
+                )
+
+        if issues:
+            for issue in issues:
+                logger.warning("Validação cross-file: %s", issue)
+            if self._entry_halt_reason in (None, _STATE_INCONSISTENCY_HALT_REASON):
+                self._entry_halt_reason = _STATE_INCONSISTENCY_HALT_REASON
+                logger.warning(
+                    "Novas entradas bloqueadas por inconsistência auditável entre ficheiros de estado."
+                )
+        elif self._entry_halt_reason == _STATE_INCONSISTENCY_HALT_REASON:
+            self._entry_halt_reason = None
+
+        return issues
+
     def _rehydrate_order_tracking(self) -> int:
         """Restaura tracking de ordens a partir das grids persistidas."""
         if (
@@ -1448,6 +1577,7 @@ class TradingBot:
         primary_account = accounts[0] if accounts else "UNKNOWN"
         self._enforce_account_context(primary_account, phase="startup")
         self._restore_runtime_capital(account_values)
+        self._validate_cross_file_state()
 
         await self._verify_market_data_permissions()
         self._schedule_telegram(
@@ -2380,6 +2510,8 @@ class TradingBot:
             return await self._handle_pause(payload)
         if command == "resume":
             return await self._handle_resume(payload)
+        if command == "clear_state_halt":
+            return await self._handle_clear_state_halt(payload)
         if command == "reconcile_now":
             return await self._handle_reconcile_now(payload)
         if command == "export_snapshot":
@@ -2407,6 +2539,18 @@ class TradingBot:
             if self._telegram else None
         )
         return {"action": "resumed"}
+
+    async def _handle_clear_state_halt(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """Limpa apenas o halt de inconsistência de estado após revisão manual."""
+        reason = str(payload.get("reason", "") or "").strip()
+        if not reason:
+            return {"error": "Campo obrigatório em falta: reason"}
+        if self._entry_halt_reason != _STATE_INCONSISTENCY_HALT_REASON:
+            return {"error": "Nenhum halt de inconsistência de estado activo."}
+
+        logger.warning("Halt de inconsistência de estado limpo manualmente: %s", reason)
+        self._entry_halt_reason = None
+        return {"action": "state_halt_cleared"}
 
     async def _handle_reconcile_now(self, payload: dict[str, Any]) -> dict[str, Any]:
         """Executa reconciliação on-demand."""
@@ -3629,6 +3773,8 @@ class TradingBot:
         """
         if self._emergency_halt:
             self._entry_halt_reason = self._entry_halt_reason or "monthly_kill_switch"
+            return True
+        if self._entry_halt_reason == _STATE_INCONSISTENCY_HALT_REASON:
             return True
 
         self._entry_halt_reason = None

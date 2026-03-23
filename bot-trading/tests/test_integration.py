@@ -17,6 +17,7 @@ import os
 import random
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -125,6 +126,28 @@ def _build_period_pnl_bot(trade_logger: TradeLogger) -> TradingBot:
     bot = object.__new__(TradingBot)
     bot._trade_logger = trade_logger
     bot._period_pnl = {"daily": 0.0, "weekly": 0.0, "monthly": 0.0}
+    return bot
+
+
+def _build_state_validation_bot(
+    tmp_data_dir: str,
+    grid_engine: GridEngine,
+    trade_logger: TradeLogger,
+    *,
+    initial_capital: float = 100_000.0,
+) -> TradingBot:
+    """Cria um stub mínimo do bot para validação cross-file de arranque."""
+    bot = object.__new__(TradingBot)
+    bot._config = SimpleNamespace(data_dir=Path(tmp_data_dir))
+    bot._grid_engine = grid_engine
+    bot._trade_logger = trade_logger
+    bot._risk_manager = SimpleNamespace(initial_capital=initial_capital)
+    bot._entry_halt_reason = None
+    bot._emergency_halt = False
+    bot._manual_pause = False
+    bot._capital = initial_capital
+    bot._schedule_telegram = lambda coro: None
+    bot._telegram = None
     return bot
 
 
@@ -918,6 +941,340 @@ class TestStatePersistenceAndRecovery:
         )
         seq = int(new_grid.id.split("_")[-1])
         assert seq >= 3  # Must be at least 3 (after 2 existing grids)
+
+
+# ===================================================================
+# Test: Cross-file startup validation + auditable halt
+# ===================================================================
+
+
+class TestStartupStateCrossValidation:
+    def test_consistent_state_does_not_trigger_halt(
+        self,
+        grid_engine: GridEngine,
+        trade_logger: TradeLogger,
+        tmp_data_dir: str,
+    ):
+        grid = grid_engine.create_grid(
+            symbol="AAPL",
+            center_price=100.0,
+            atr=2.0,
+            regime="BULL",
+            num_levels=3,
+            base_quantity=10,
+            confidence="ALTO",
+            size_multiplier=1.0,
+        )
+        level = grid.levels[0]
+        grid_engine.on_level_bought(
+            grid,
+            level.level,
+            level.buy_price,
+            "2026-03-23T10:00:00+00:00",
+        )
+        grid_engine.on_level_sold(
+            grid,
+            level.level,
+            level.sell_price,
+            "2026-03-23T11:00:00+00:00",
+        )
+        grid_engine.close_grid(grid)
+        realized_pnl = float(grid.total_pnl)
+
+        trade_key = TradingBot._build_level_trade_key(grid.id, level.level)
+        trade_logger.log_trade({
+            "timestamp": "2026-03-23T10:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "BUY",
+            "price": level.buy_price,
+            "quantity": level.quantity,
+            "order_id": 1001,
+            "grid_id": grid.id,
+            "level": level.level,
+            "pnl": None,
+            "regime": grid.regime,
+            "signal_confidence": grid.confidence,
+            "logical_trade_key": trade_key,
+            "order_ref": trade_key,
+            "order_leg": "parent",
+        })
+        trade_logger.log_trade({
+            "timestamp": "2026-03-23T11:00:00+00:00",
+            "symbol": "AAPL",
+            "side": "SELL",
+            "price": level.sell_price,
+            "quantity": level.quantity,
+            "order_id": 1002,
+            "grid_id": grid.id,
+            "level": level.level,
+            "pnl": realized_pnl,
+            "regime": grid.regime,
+            "signal_confidence": grid.confidence,
+            "logical_trade_key": trade_key,
+            "order_ref": trade_key,
+            "order_leg": "tp",
+        })
+        trade_logger.save_metrics({"total_pnl": realized_pnl, "capital": 100_000.0 + realized_pnl})
+
+        bot = _build_state_validation_bot(tmp_data_dir, grid_engine, trade_logger)
+
+        issues = TradingBot._validate_cross_file_state(bot)
+
+        assert issues == []
+        assert bot._entry_halt_reason is None
+
+    def test_closed_grid_without_fills_does_not_trigger_false_positive(
+        self,
+        grid_engine: GridEngine,
+        trade_logger: TradeLogger,
+        tmp_data_dir: str,
+    ):
+        grid = grid_engine.create_grid(
+            symbol="MSFT",
+            center_price=200.0,
+            atr=3.0,
+            regime="SIDEWAYS",
+            num_levels=3,
+            base_quantity=5,
+            confidence="MEDIO",
+            size_multiplier=1.0,
+        )
+        grid_engine.close_grid(grid)
+        trade_logger.save_metrics({"total_pnl": 0.0, "capital": 100_000.0})
+
+        bot = _build_state_validation_bot(tmp_data_dir, grid_engine, trade_logger)
+
+        issues = TradingBot._validate_cross_file_state(bot)
+
+        assert issues == []
+        assert bot._entry_halt_reason is None
+
+    def test_fill_evidence_without_matching_trade_triggers_halt(
+        self,
+        grid_engine: GridEngine,
+        trade_logger: TradeLogger,
+        tmp_data_dir: str,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        grid = grid_engine.create_grid(
+            symbol="GOOG",
+            center_price=150.0,
+            atr=2.5,
+            regime="BULL",
+            num_levels=3,
+            base_quantity=8,
+            confidence="ALTO",
+            size_multiplier=1.0,
+        )
+        grid_engine.on_level_bought(grid, 1, 148.0, "2026-03-23T10:00:00+00:00")
+        trade_logger.save_metrics({"total_pnl": 0.0, "capital": 100_000.0})
+
+        bot = _build_state_validation_bot(tmp_data_dir, grid_engine, trade_logger)
+
+        with caplog.at_level("WARNING"):
+            issues = TradingBot._validate_cross_file_state(bot)
+
+        assert issues
+        assert bot._entry_halt_reason == "state_inconsistency_detected"
+        assert any("execução persistida sem trade correspondente" in message for message in caplog.messages)
+
+    def test_material_pnl_divergence_triggers_halt(
+        self,
+        grid_engine: GridEngine,
+        trade_logger: TradeLogger,
+        tmp_data_dir: str,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        grid = grid_engine.create_grid(
+            symbol="QQQ",
+            center_price=100.0,
+            atr=2.0,
+            regime="BULL",
+            num_levels=3,
+            base_quantity=10,
+            confidence="ALTO",
+            size_multiplier=1.0,
+        )
+        level = grid.levels[0]
+        grid_engine.on_level_bought(
+            grid,
+            level.level,
+            level.buy_price,
+            "2026-03-23T10:00:00+00:00",
+        )
+        grid_engine.on_level_sold(
+            grid,
+            level.level,
+            level.sell_price,
+            "2026-03-23T11:00:00+00:00",
+        )
+        grid_engine.close_grid(grid)
+        realized_pnl = float(grid.total_pnl)
+
+        trade_key = TradingBot._build_level_trade_key(grid.id, level.level)
+        trade_logger.log_trade({
+            "timestamp": "2026-03-23T10:00:00+00:00",
+            "symbol": "QQQ",
+            "side": "BUY",
+            "price": level.buy_price,
+            "quantity": level.quantity,
+            "order_id": 2001,
+            "grid_id": grid.id,
+            "level": level.level,
+            "pnl": None,
+            "regime": grid.regime,
+            "signal_confidence": grid.confidence,
+            "logical_trade_key": trade_key,
+            "order_ref": trade_key,
+            "order_leg": "parent",
+        })
+        trade_logger.log_trade({
+            "timestamp": "2026-03-23T11:00:00+00:00",
+            "symbol": "QQQ",
+            "side": "SELL",
+            "price": level.sell_price,
+            "quantity": level.quantity,
+            "order_id": 2002,
+            "grid_id": grid.id,
+            "level": level.level,
+            "pnl": realized_pnl,
+            "regime": grid.regime,
+            "signal_confidence": grid.confidence,
+            "logical_trade_key": trade_key,
+            "order_ref": trade_key,
+            "order_leg": "tp",
+        })
+        trade_logger.save_metrics({"total_pnl": realized_pnl + 30.0, "capital": 100_000.0 + realized_pnl})
+
+        bot = _build_state_validation_bot(tmp_data_dir, grid_engine, trade_logger)
+
+        with caplog.at_level("WARNING"):
+            issues = TradingBot._validate_cross_file_state(bot)
+
+        assert issues
+        assert bot._entry_halt_reason == "state_inconsistency_detected"
+        assert any("divergência de pnl realizado" in message for message in caplog.messages)
+
+    def test_material_capital_divergence_triggers_halt(
+        self,
+        grid_engine: GridEngine,
+        trade_logger: TradeLogger,
+        tmp_data_dir: str,
+        caplog: pytest.LogCaptureFixture,
+    ):
+        grid = grid_engine.create_grid(
+            symbol="SPY",
+            center_price=100.0,
+            atr=2.0,
+            regime="BULL",
+            num_levels=3,
+            base_quantity=10,
+            confidence="ALTO",
+            size_multiplier=1.0,
+        )
+        level = grid.levels[0]
+        grid_engine.on_level_bought(
+            grid,
+            level.level,
+            level.buy_price,
+            "2026-03-23T10:00:00+00:00",
+        )
+        grid_engine.on_level_sold(
+            grid,
+            level.level,
+            level.sell_price,
+            "2026-03-23T11:00:00+00:00",
+        )
+        grid_engine.close_grid(grid)
+        realized_pnl = float(grid.total_pnl)
+
+        trade_key = TradingBot._build_level_trade_key(grid.id, level.level)
+        trade_logger.log_trade({
+            "timestamp": "2026-03-23T10:00:00+00:00",
+            "symbol": "SPY",
+            "side": "BUY",
+            "price": level.buy_price,
+            "quantity": level.quantity,
+            "order_id": 3001,
+            "grid_id": grid.id,
+            "level": level.level,
+            "pnl": None,
+            "regime": grid.regime,
+            "signal_confidence": grid.confidence,
+            "logical_trade_key": trade_key,
+            "order_ref": trade_key,
+            "order_leg": "parent",
+        })
+        trade_logger.log_trade({
+            "timestamp": "2026-03-23T11:00:00+00:00",
+            "symbol": "SPY",
+            "side": "SELL",
+            "price": level.sell_price,
+            "quantity": level.quantity,
+            "order_id": 3002,
+            "grid_id": grid.id,
+            "level": level.level,
+            "pnl": realized_pnl,
+            "regime": grid.regime,
+            "signal_confidence": grid.confidence,
+            "logical_trade_key": trade_key,
+            "order_ref": trade_key,
+            "order_leg": "tp",
+        })
+        trade_logger.save_metrics({"total_pnl": realized_pnl, "capital": 100_000.0 + realized_pnl + 1_500.0})
+
+        bot = _build_state_validation_bot(tmp_data_dir, grid_engine, trade_logger)
+
+        with caplog.at_level("WARNING"):
+            issues = TradingBot._validate_cross_file_state(bot)
+
+        assert issues
+        assert bot._entry_halt_reason == "state_inconsistency_detected"
+        assert any("divergência de capital" in message for message in caplog.messages)
+
+    @pytest.mark.asyncio
+    async def test_state_inconsistency_halt_blocks_entries_until_override(self):
+        bot = object.__new__(TradingBot)
+        bot._emergency_halt = False
+        bot._entry_halt_reason = "state_inconsistency_detected"
+
+        result = await TradingBot._check_risk_limits(bot)
+
+        assert result is True
+        assert bot._entry_halt_reason == "state_inconsistency_detected"
+
+    @pytest.mark.asyncio
+    async def test_manual_override_with_reason_clears_only_state_halt(self):
+        bot = object.__new__(TradingBot)
+        bot._entry_halt_reason = "state_inconsistency_detected"
+
+        result = await TradingBot._handle_clear_state_halt(
+            bot,
+            {"reason": "validated manually after audit"},
+        )
+
+        assert result["action"] == "state_halt_cleared"
+        assert bot._entry_halt_reason is None
+
+        other_bot = object.__new__(TradingBot)
+        other_bot._entry_halt_reason = "daily_limit"
+        other_result = await TradingBot._handle_clear_state_halt(
+            other_bot,
+            {"reason": "should not clear other halts"},
+        )
+
+        assert "error" in other_result
+        assert other_bot._entry_halt_reason == "daily_limit"
+
+    @pytest.mark.asyncio
+    async def test_manual_override_without_reason_is_rejected(self):
+        bot = object.__new__(TradingBot)
+        bot._entry_halt_reason = "state_inconsistency_detected"
+
+        result = await TradingBot._handle_clear_state_halt(bot, {})
+
+        assert "error" in result
+        assert bot._entry_halt_reason == "state_inconsistency_detected"
 
 
 # ===================================================================
