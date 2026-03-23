@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -E \"\\\\.py$\")",
+      "Bash(grep -l \"kotegawa\\\\|regime\\\\|structure\" /c/Users/berna/Desktop/Playground/bot-trading/src/*.py)",
+      "Bash(python -m pytest --collect-only)",
+      "Bash(grep -l \"reqMktData\\\\|reqHistoricalData\\\\|ticker\\\\|volume\\\\|price\" /c/Users/berna/Desktop/Playground/bot-trading/src/*.py)"
+    ]
+  }
+}
