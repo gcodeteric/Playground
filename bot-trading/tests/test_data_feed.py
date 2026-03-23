@@ -86,6 +86,18 @@ def sample_bars_df():
     return df
 
 
+def _build_contract(symbol: str = "AAPL") -> SimpleNamespace:
+    return SimpleNamespace(
+        secType="STK",
+        symbol=symbol,
+        exchange="SMART",
+        primaryExchange="NASDAQ",
+        currency="USD",
+        lastTradeDateOrContractMonth="",
+        localSymbol=symbol,
+    )
+
+
 # ===================================================================
 # Tests: IBConnection init
 # ===================================================================
@@ -175,6 +187,107 @@ class TestIBConnectionInit:
         assert len(events) == 1
         assert events[0].action == "symbol_skip"
         assert events[0].scope == "request"
+
+
+class TestIBConnectionConnect:
+    @pytest.mark.asyncio
+    async def test_connect_success(self, mock_ib):
+        mock_ib.isConnected.return_value = False
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=7)
+
+        result = await conn.connect(max_attempts=1, timeout=5)
+
+        assert result is True
+        mock_ib.connectAsync.assert_awaited_once_with(
+            host="127.0.0.1",
+            port=4002,
+            clientId=7,
+            timeout=5,
+        )
+        mock_ib.reqMarketDataType.assert_called_once_with(3)
+        assert conn._connected is True
+        assert conn._connection_state == "CONNECTED"
+
+    @pytest.mark.asyncio
+    async def test_connect_timeout_returns_false(self, mock_ib):
+        mock_ib.isConnected.return_value = False
+        mock_ib.connectAsync = AsyncMock(side_effect=asyncio.TimeoutError())
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=7)
+
+        with patch("src.data_feed.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await conn.connect(max_attempts=1, timeout=5)
+
+        assert result is False
+        mock_ib.connectAsync.assert_awaited_once()
+        mock_sleep.assert_not_awaited()
+        assert conn._connected is False
+        assert conn._connection_state == "DISCONNECTED"
+
+    @pytest.mark.asyncio
+    async def test_connect_retries_with_backoff_before_success(self, mock_ib):
+        mock_ib.isConnected.return_value = False
+        mock_ib.connectAsync = AsyncMock(side_effect=[OSError("down"), None])
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=7)
+
+        with patch("src.data_feed.asyncio.sleep", new_callable=AsyncMock) as mock_sleep:
+            result = await conn.connect(max_attempts=2, initial_delay=5, timeout=5)
+
+        assert result is True
+        assert mock_ib.connectAsync.await_count == 2
+        mock_sleep.assert_awaited_once_with(5)
+        mock_ib.reqMarketDataType.assert_called_once_with(3)
+        assert conn._connected is True
+        assert conn._connection_state == "CONNECTED"
+
+
+class TestIBConnectionEnsureConnected:
+    @pytest.mark.asyncio
+    async def test_ensure_connected_returns_true_when_already_connected(self, mock_ib):
+        mock_ib.isConnected.return_value = True
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=7)
+
+        with patch.object(conn, "connect", new=AsyncMock(return_value=False)) as mock_connect:
+            result = await conn.ensure_connected()
+
+        assert result is True
+        mock_connect.assert_not_awaited()
+        assert conn._connection_state == "CONNECTED"
+
+    @pytest.mark.asyncio
+    async def test_ensure_connected_reconnects_successfully(self, mock_ib):
+        mock_ib.isConnected.return_value = False
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=7)
+
+        with patch.object(conn, "connect", new=AsyncMock(return_value=True)) as mock_connect:
+            result = await conn.ensure_connected()
+
+        assert result is True
+        mock_connect.assert_awaited_once_with(max_attempts=3)
+        assert conn._connection_state == "DISCONNECTED"
+
+    @pytest.mark.asyncio
+    async def test_ensure_connected_returns_false_on_total_failure(self, mock_ib):
+        mock_ib.isConnected.return_value = False
+
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection(host="127.0.0.1", port=4002, client_id=7)
+
+        with patch.object(conn, "connect", new=AsyncMock(return_value=False)) as mock_connect:
+            result = await conn.ensure_connected()
+
+        assert result is False
+        mock_connect.assert_awaited_once_with(max_attempts=3)
+        assert conn._connection_state == "DISCONNECTED"
 
 
 # ===================================================================
@@ -354,6 +467,141 @@ class TestGetMarketData:
         result = data_feed.get_market_data(contract, df)
         assert result["sma200"] is None
         assert result["sma25"] is not None
+
+
+class TestHistoricalBars:
+    @pytest.mark.asyncio
+    async def test_get_historical_bars_returns_valid_dataframe(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        bars_df = pd.DataFrame(
+            {
+                "Date": [pd.Timestamp("2024-01-03"), pd.Timestamp("2024-01-02")],
+                "Open": [102.0, 101.0],
+                "High": [103.0, 102.0],
+                "Low": [100.0, 99.0],
+                "Close": [101.5, 100.5],
+                "Volume": [1500, 1200],
+            },
+        )
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqHistoricalDataAsync = AsyncMock(return_value=[object(), object()])
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with patch("src.data_feed.util.df", return_value=bars_df):
+            result = await data_feed.get_historical_bars(contract, duration="30 D")
+
+        assert list(result.columns) == ["date", "open", "high", "low", "close", "volume"]
+        assert result["date"].tolist() == [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")]
+        assert result["close"].tolist() == [100.5, 101.5]
+        mock_connection.ensure_connected.assert_awaited_once()
+        mock_ib.reqHistoricalDataAsync.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_get_historical_bars_returns_safe_empty_dataframe_on_error(
+        self,
+        data_feed,
+    ):
+        contract = _build_contract("AAPL")
+        data_feed._request_executor.run = AsyncMock(side_effect=Exception("boom"))
+
+        result = await data_feed.get_historical_bars(contract)
+
+        assert result.empty
+        assert list(result.columns) == ["date", "open", "high", "low", "close", "volume"]
+
+    @pytest.mark.asyncio
+    async def test_get_historical_bars_uses_cache_on_second_request(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        bars_df = pd.DataFrame(
+            {
+                "date": [pd.Timestamp("2024-01-02"), pd.Timestamp("2024-01-03")],
+                "open": [101.0, 102.0],
+                "high": [102.0, 103.0],
+                "low": [99.0, 100.0],
+                "close": [100.5, 101.5],
+                "volume": [1200, 1500],
+            },
+        )
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqHistoricalDataAsync = AsyncMock(return_value=[object(), object()])
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with patch("src.data_feed.util.df", return_value=bars_df):
+            first = await data_feed.get_historical_bars(contract, duration="30 D")
+            second = await data_feed.get_historical_bars(contract, duration="30 D")
+
+        assert first is second
+        mock_connection.ensure_connected.assert_awaited_once()
+        mock_ib.reqHistoricalDataAsync.assert_awaited_once()
+        assert data_feed._request_executor.run.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_get_historical_bars_cache_expires_after_ttl(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        first_df = pd.DataFrame(
+            {
+                "date": [pd.Timestamp("2024-01-02")],
+                "open": [101.0],
+                "high": [102.0],
+                "low": [99.0],
+                "close": [100.5],
+                "volume": [1200],
+            },
+        )
+        second_df = pd.DataFrame(
+            {
+                "date": [pd.Timestamp("2024-01-03")],
+                "open": [111.0],
+                "high": [112.0],
+                "low": [109.0],
+                "close": [110.5],
+                "volume": [2200],
+            },
+        )
+        clock = {"now": 100.0}
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqHistoricalDataAsync = AsyncMock(side_effect=[[object()], [object()]])
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch("src.data_feed.time.monotonic", side_effect=lambda: clock["now"]),
+            patch("src.data_feed.util.df", side_effect=[first_df, second_df]),
+        ):
+            first = await data_feed.get_historical_bars(contract, duration="30 D")
+            clock["now"] = 161.0
+            second = await data_feed.get_historical_bars(contract, duration="30 D")
+
+        assert first is not second
+        assert first["close"].tolist() == [100.5]
+        assert second["close"].tolist() == [110.5]
+        assert mock_ib.reqHistoricalDataAsync.await_count == 2
 
 
 # ===================================================================
@@ -560,6 +808,16 @@ class TestTTLCache:
         cache.clear()
         assert cache.get("a") is None
         assert cache.get("b") is None
+
+    def test_entry_expires_after_ttl_without_real_sleep(self):
+        clock = {"now": 100.0}
+        with patch("src.data_feed.time.monotonic", side_effect=lambda: clock["now"]):
+            cache = _TTLCache(ttl=10.0)
+            cache.set("key1", "value1")
+            clock["now"] = 109.9
+            assert cache.get("key1") == "value1"
+            clock["now"] = 110.1
+            assert cache.get("key1") is None
 
 
 class TestConnectionSerialization:
