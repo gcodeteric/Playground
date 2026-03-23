@@ -8,6 +8,7 @@ Covers: IBConnection init (mocked), contract creation (Stock, Forex, Futures, CF
 from __future__ import annotations
 
 import asyncio
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -19,6 +20,7 @@ from src.data_feed import (
     DataFeed,
     IBConnection,
     _TTLCache,
+    _is_yfinance_quote_fresh,
     _valid_price,
     compute_atr,
     compute_bollinger_bands,
@@ -381,6 +383,15 @@ class TestGetMarketData:
         assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
         assert result["current_price"] is None
 
+    def test_get_market_data_propagates_explicit_current_price(self, data_feed, sample_bars_df):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+
+        result = data_feed.get_market_data(contract, sample_bars_df, current_price=123.456789)
+
+        assert result["current_price"] == pytest.approx(123.456789, abs=1e-6)
+        assert result["current_volume"] is None
+
     @pytest.mark.asyncio
     async def test_get_market_data_live_uses_live_snapshot(
         self,
@@ -429,6 +440,25 @@ class TestGetMarketData:
         assert result["price_source"] == "last_close"
         assert result["price_fresh"] is False
         assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
+
+    @pytest.mark.asyncio
+    async def test_get_market_data_live_propagates_yfinance_snapshot_fields(
+        self,
+        data_feed,
+        sample_bars_df,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        data_feed.get_current_price_details = AsyncMock(
+            return_value={"price": 122.25, "source": "yfinance", "fresh": True, "volume": None},
+        )
+
+        result = await data_feed.get_market_data_live(contract, sample_bars_df)
+
+        assert result["current_price"] == pytest.approx(122.25, abs=1e-5)
+        assert result["current_volume"] is None
+        assert result["price_source"] == "yfinance"
+        assert result["price_fresh"] is True
 
     def test_sma_values_are_reasonable(self, data_feed, sample_bars_df):
         contract = MagicMock()
@@ -664,6 +694,52 @@ class TestCurrentSnapshotFallbacks:
         assert result == pytest.approx(100.5, abs=1e-5)
 
     @pytest.mark.asyncio
+    async def test_get_current_price_details_uses_last_price_source(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=101.75,
+            close=100.0,
+            bid=101.0,
+            ask=102.0,
+            markPrice=None,
+            volume=None,
+        )
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result == {"price": 101.75, "source": "last", "fresh": True, "volume": None}
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_uses_midpoint_source_when_last_missing(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=99.0,
+            bid=100.0,
+            ask=101.0,
+            markPrice=None,
+            volume=None,
+        )
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result == {"price": 100.5, "source": "mid", "fresh": True, "volume": None}
+
+    @pytest.mark.asyncio
     async def test_get_current_price_details_accepts_ib_mark_price_before_yfinance(
         self,
         data_feed,
@@ -690,6 +766,87 @@ class TestCurrentSnapshotFallbacks:
         assert result["fresh"] is True
         assert result["volume"] == pytest.approx(50_000.0, abs=1e-5)
         data_feed.get_price_yfinance.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_uses_yfinance_after_ib_timeout(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=None,
+            volume=None,
+        )
+        data_feed.get_price_yfinance = AsyncMock(return_value=123.45)
+        data_feed._cache.set(
+            "yfinance_price:AAPL:asof",
+            "2026-03-23 00:00:00+00:00",
+        )
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with patch("src.data_feed.time.monotonic", side_effect=[0.0, 10.1, 10.2, 10.3]):
+            result = await data_feed.get_current_price_details(contract)
+
+        assert result == {
+            "price": 123.45,
+            "source": "yfinance",
+            "fresh": True,
+            "volume": None,
+        }
+        data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_uses_yfinance_after_ib_exception(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        data_feed.get_price_yfinance = AsyncMock(return_value=111.11)
+        data_feed._cache.set(
+            "yfinance_price:AAPL:asof",
+            "2026-03-23 00:00:00+00:00",
+        )
+        data_feed._request_executor.run = AsyncMock(side_effect=Exception("ib exploded"))
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result == {
+            "price": 111.11,
+            "source": "yfinance",
+            "fresh": True,
+            "volume": None,
+        }
+        data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_returns_safe_none_when_ib_and_yfinance_fail(
+        self,
+        data_feed,
+        mock_connection,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=False)
+        data_feed.get_price_yfinance = AsyncMock(return_value=None)
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result == {"price": None, "source": None, "fresh": False}
+        data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
 
     @pytest.mark.asyncio
     async def test_get_current_price_uses_async_yfinance_when_ib_disconnected(
@@ -738,6 +895,88 @@ class TestCurrentSnapshotFallbacks:
         assert result["fresh"] is True
 
     @pytest.mark.asyncio
+    async def test_get_price_yfinance_success_sets_price_and_asof_cache(
+        self,
+        data_feed,
+    ):
+        latest_close = pd.Timestamp("2026-03-23 00:00:00+00:00")
+
+        with patch(
+            "src.data_feed.yf.download",
+            return_value=pd.DataFrame(
+                {"Close": [123.45]},
+                index=pd.DatetimeIndex([latest_close]),
+            ),
+        ):
+            result = await data_feed.get_price_yfinance("AAPL")
+
+        assert result == pytest.approx(123.45, abs=1e-5)
+        assert data_feed._cache.get("yfinance_price:AAPL") == pytest.approx(123.45, abs=1e-5)
+        assert data_feed._cache.get("yfinance_price:AAPL:asof") == str(latest_close)
+
+    @pytest.mark.asyncio
+    async def test_get_price_yfinance_returns_none_on_timeout(
+        self,
+        data_feed,
+    ):
+        mock_loop = MagicMock()
+        completed = asyncio.Future()
+        completed.set_result(None)
+        mock_loop.run_in_executor.return_value = completed
+
+        with (
+            patch("src.data_feed.asyncio.get_running_loop", return_value=mock_loop),
+            patch("src.data_feed.asyncio.wait_for", new=AsyncMock(side_effect=asyncio.TimeoutError())),
+        ):
+            result = await data_feed.get_price_yfinance("AAPL")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_price_yfinance_returns_none_on_generic_exception(
+        self,
+        data_feed,
+    ):
+        with patch("src.data_feed.yf.download", side_effect=RuntimeError("boom")):
+            result = await data_feed.get_price_yfinance("AAPL")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_price_yfinance_returns_none_when_no_close_data(
+        self,
+        data_feed,
+    ):
+        with patch(
+            "src.data_feed.yf.download",
+            return_value=pd.DataFrame(
+                {"Close": [np.nan]},
+                index=pd.DatetimeIndex([pd.Timestamp("2026-03-23 00:00:00+00:00")]),
+            ),
+        ):
+            result = await data_feed.get_price_yfinance("AAPL")
+
+        assert result is None
+        assert data_feed._cache.get("yfinance_price:AAPL") is None
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_returns_ib_volume(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(volume=321_000.0)
+
+        result = await data_feed.get_current_volume(contract)
+
+        assert result == pytest.approx(321_000.0, abs=1e-5)
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
     async def test_get_current_volume_reuses_price_snapshot_volume_cache(
         self,
         data_feed,
@@ -778,6 +1017,151 @@ class TestCurrentSnapshotFallbacks:
 
         assert result == pytest.approx(999_999.0, abs=1e-5)
         data_feed.get_volume_yfinance.assert_awaited_once_with("AAPL")
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_uses_yfinance_after_ib_timeout(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(volume=None)
+        data_feed.get_volume_yfinance = AsyncMock(return_value=555_000.0)
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+        clock = {"now": 0.0}
+
+        def _fake_monotonic():
+            current = clock["now"]
+            if current == 0.0:
+                clock["now"] = 10.1
+            return current
+
+        with patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic):
+            result = await data_feed.get_current_volume(contract)
+
+        assert result == pytest.approx(555_000.0, abs=1e-5)
+        data_feed.get_volume_yfinance.assert_awaited_once_with("AAPL")
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_uses_yfinance_after_ib_exception(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        data_feed.get_volume_yfinance = AsyncMock(return_value=777_000.0)
+        data_feed._request_executor.run = AsyncMock(side_effect=Exception("ib exploded"))
+
+        result = await data_feed.get_current_volume(contract)
+
+        assert result == pytest.approx(777_000.0, abs=1e-5)
+        data_feed.get_volume_yfinance.assert_awaited_once_with("AAPL")
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_returns_none_when_ib_and_yfinance_fail(
+        self,
+        data_feed,
+        mock_connection,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=False)
+        data_feed.get_volume_yfinance = AsyncMock(return_value=None)
+
+        result = await data_feed.get_current_volume(contract)
+
+        assert result is None
+        data_feed.get_volume_yfinance.assert_awaited_once_with("AAPL")
+
+    @pytest.mark.asyncio
+    async def test_get_volume_yfinance_success_sets_cache(
+        self,
+        data_feed,
+    ):
+        latest_close = pd.Timestamp("2026-03-23 00:00:00+00:00")
+
+        with patch(
+            "src.data_feed.yf.download",
+            return_value=pd.DataFrame(
+                {"Volume": [654_321.0]},
+                index=pd.DatetimeIndex([latest_close]),
+            ),
+        ):
+            result = await data_feed.get_volume_yfinance("AAPL")
+
+        assert result == pytest.approx(654_321.0, abs=1e-5)
+        assert data_feed._cache.get("yfinance_volume:AAPL") == pytest.approx(654_321.0, abs=1e-5)
+
+    @pytest.mark.asyncio
+    async def test_get_volume_yfinance_returns_none_on_timeout(
+        self,
+        data_feed,
+    ):
+        mock_loop = MagicMock()
+        completed = asyncio.Future()
+        completed.set_result(None)
+        mock_loop.run_in_executor.return_value = completed
+
+        with (
+            patch("src.data_feed.asyncio.get_running_loop", return_value=mock_loop),
+            patch("src.data_feed.asyncio.wait_for", new=AsyncMock(side_effect=asyncio.TimeoutError())),
+        ):
+            result = await data_feed.get_volume_yfinance("AAPL")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_volume_yfinance_returns_none_on_generic_exception(
+        self,
+        data_feed,
+    ):
+        with patch("src.data_feed.yf.download", side_effect=RuntimeError("boom")):
+            result = await data_feed.get_volume_yfinance("AAPL")
+
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_get_volume_yfinance_returns_none_when_no_volume_data(
+        self,
+        data_feed,
+    ):
+        with patch(
+            "src.data_feed.yf.download",
+            return_value=pd.DataFrame(
+                {"Volume": [np.nan]},
+                index=pd.DatetimeIndex([pd.Timestamp("2026-03-23 00:00:00+00:00")]),
+            ),
+        ):
+            result = await data_feed.get_volume_yfinance("AAPL")
+
+        assert result is None
+        assert data_feed._cache.get("yfinance_volume:AAPL") is None
+
+
+class TestYfinanceFreshness:
+    def test_is_yfinance_quote_fresh_for_today(self):
+        now = datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc)
+
+        assert _is_yfinance_quote_fresh("2026-03-23 00:00:00+00:00", now=now) is True
+
+    def test_is_yfinance_quote_fresh_for_previous_business_day(self):
+        now = datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc)
+
+        assert _is_yfinance_quote_fresh("2026-03-20 00:00:00+00:00", now=now) is True
+
+    def test_is_yfinance_quote_fresh_is_false_for_stale_quote(self):
+        now = datetime(2026, 3, 23, 12, 0, tzinfo=timezone.utc)
+
+        assert _is_yfinance_quote_fresh("2026-03-19 00:00:00+00:00", now=now) is False
 
 
 # ===================================================================
