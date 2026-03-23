@@ -24292,3 +24292,316 @@ RuntimeError: Outra instÃ¢ncia parece activa para C:\Users\berna\Desktop\Playg
 2026-03-23 14:57:32 | ERROR    | ib_insync.wrapper    | Error 300, reqId 328: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:328
 2026-03-23 14:57:32 | WARNING  | src.execution        | Erro IB — reqId=328, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:328 (contrato=None)
 2026-03-23 14:57:33 | WARNING  | src.execution        | Erro IB — reqId=329, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=9579970, symbol='IWM', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='IWM', tradingClass='IWM'))
+2026-03-23 14:57:43 | WARNING  | src.data_feed        | Timeout ao obter volume de IWM.
+2026-03-23 14:57:43 | DEBUG    | yfinance             | Entering download()
+2026-03-23 14:57:43 | ERROR    | ib_insync.wrapper    | Error 300, reqId 329: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:329
+2026-03-23 14:57:43 | WARNING  | src.execution        | Erro IB — reqId=329, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:329 (contrato=None)
+2026-03-23 14:57:43 | DEBUG    | yfinance             | Disabling multithreading because DEBUG logging enabled
+2026-03-23 14:57:43 | DEBUG    | yfinance             |  Entering history()
+2026-03-23 14:57:43 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['IWM', 1, 0])
+2026-03-23 14:57:43 | DEBUG    | yfinance             |   Entering history()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | IWM: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 14:57:43 | DEBUG    | yfinance             |    Entering get()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |     Entering _make_request()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/IWM
+2026-03-23 14:57:43 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 14:57:43 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-23 14:57:43 | DEBUG    | yfinance             |       Entering _get_cookie_and_crumb_basic()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | reusing cookie
+2026-03-23 14:57:43 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | reusing crumb
+2026-03-23 14:57:43 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | response code=200
+2026-03-23 14:57:43 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |    Exiting get()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | IWM: yfinance received OHLC data: 2026-03-17 13:30:00 -> 2026-03-23 14:57:42
+2026-03-23 14:57:43 | DEBUG    | yfinance             | IWM: OHLC after cleaning: 2026-03-17 09:30:00-04:00 -> 2026-03-23 10:57:42-04:00
+2026-03-23 14:57:43 | DEBUG    | yfinance             | IWM: OHLC after combining events: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 14:57:43 | DEBUG    | yfinance             | IWM: yfinance returning OHLC: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 14:57:43 | DEBUG    | yfinance             |   Exiting history()
+2026-03-23 14:57:43 | DEBUG    | yfinance             |  Exiting history()
+2026-03-23 14:57:43 | DEBUG    | yfinance             | Exiting download()
+2026-03-23 14:57:43 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: IWM = 31254092
+2026-03-23 14:57:43 | INFO     | main                 | Sinal Kotegawa para IWM: signal=False | horizonte=LONG_TERM | desvio=-2.59% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-23 14:57:43 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 2.0436, 'magnitude_atr': 0.8458, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 242.22, 'today_open': 247.17, 'atr14': 5.85238985627029}
+2026-03-23 14:57:43 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-23 14:57:43 | INFO     | main                 | Sinal multi-instrumento para IWM: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-23 14:57:43 | WARNING  | main                 | Execução directa de sinais multi-instrumento desactivada por segurança até integração na state machine persistente: IWM (SHORT).
+2026-03-23 14:57:43 | DEBUG    | main                 | A processar simbolo: VIX
+2026-03-23 14:57:44 | INFO     | src.data_feed        | A qualificar contrato: VIX…
+2026-03-23 14:57:44 | INFO     | src.data_feed        | Contrato qualificado: VIX (conId=13455763, exchange=CBOE).
+2026-03-23 14:57:44 | INFO     | src.data_feed        | A obter barras históricas: VIX | duração=1 Y | tamanho=1 day
+2026-03-23 14:57:44 | INFO     | src.data_feed        | Barras obtidas com sucesso: VIX — 251 barras (de 2025-03-24 a 2026-03-23).
+2026-03-23 14:57:44 | INFO     | main                 | Símbolo de referência VIX actualizado — sem lógica de trading directa.
+2026-03-23 14:57:44 | DEBUG    | main                 | --- Fim de ciclo ---
+2026-03-23 14:57:44 | DEBUG    | src.grid_engine      | Backup do estado criado: C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json.bak
+2026-03-23 14:57:44 | INFO     | src.grid_engine      | Estado gravado com sucesso: 0 grid(s) em C:\Users\berna\Desktop\Playground\bot-trading\data\grids_state.json
+2026-03-23 15:02:44 | DEBUG    | main                 | --- Inicio de ciclo ---
+2026-03-23 15:02:44 | DEBUG    | risk_manager         | Win rate dinâmico: 0 trades (mínimo 20). A usar 0.50.
+2026-03-23 15:02:44 | INFO     | risk_manager         | Capital actualizado — Anterior: 1119.91 | Novo: 1119.91 | Variação: +0.00 (+0.00%) | Desde início: -0.01%
+2026-03-23 15:02:44 | DEBUG    | risk_manager         | Limite diário OK — P&L: 0.00 (0.00%) | Limite: 3.00%.
+2026-03-23 15:02:44 | DEBUG    | risk_manager         | Limite semanal OK — P&L: 0.00 (0.00%) | Limite: 6.00%.
+2026-03-23 15:02:44 | DEBUG    | risk_manager         | Kill switch OK — P&L mensal: 500.00 (0.00%) | Limite: 10.00%.
+2026-03-23 15:02:44 | DEBUG    | main                 | A processar simbolo: SPY
+2026-03-23 15:02:45 | INFO     | src.data_feed        | A qualificar contrato: SPY…
+2026-03-23 15:02:45 | INFO     | src.data_feed        | Contrato qualificado: SPY (conId=756733, exchange=SMART).
+2026-03-23 15:02:45 | INFO     | src.data_feed        | A obter barras históricas: SPY | duração=1 Y | tamanho=1 day
+2026-03-23 15:02:45 | INFO     | src.data_feed        | Barras obtidas com sucesso: SPY — 251 barras (de 2025-03-24 a 2026-03-23).
+2026-03-23 15:02:45 | INFO     | src.data_feed        | Indicadores calculados para SPY: close=661.6000 | preço actual=N/A | SMA25=676.7244 | SMA50=683.3326 | SMA200=660.6926 | RSI14=41.4184 | ATR14=9.8829 | BB=[698.5504, 674.6335, 650.7166] | VolAvg20=63983931.8000 | ATRavg60=7.4495
+2026-03-23 15:02:45 | DEBUG    | src.data_feed        | A obter preço actual de SPY…
+2026-03-23 15:02:45 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 334: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.SPY ARCA/TOP/ALL, contract: Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY')
+2026-03-23 15:02:45 | WARNING  | src.execution        | Erro IB — reqId=334, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.SPY ARCA/TOP/ALL (contrato=Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY'))
+2026-03-23 15:02:55 | WARNING  | src.data_feed        | Timeout ao obter preço de SPY.
+2026-03-23 15:02:55 | DEBUG    | yfinance             | Entering download()
+2026-03-23 15:02:55 | ERROR    | ib_insync.wrapper    | Error 300, reqId 334: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:334
+2026-03-23 15:02:55 | WARNING  | src.execution        | Erro IB — reqId=334, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:334 (contrato=None)
+2026-03-23 15:02:55 | DEBUG    | yfinance             | Disabling multithreading because DEBUG logging enabled
+2026-03-23 15:02:55 | DEBUG    | yfinance             |  Entering history()
+2026-03-23 15:02:55 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['SPY', 1, 0])
+2026-03-23 15:02:55 | DEBUG    | yfinance             |   Entering history()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | SPY: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:02:55 | DEBUG    | yfinance             |    Entering get()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |     Entering _make_request()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/SPY
+2026-03-23 15:02:55 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:02:55 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-23 15:02:55 | DEBUG    | yfinance             |       Entering _get_cookie_and_crumb_basic()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | reusing cookie
+2026-03-23 15:02:55 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | reusing crumb
+2026-03-23 15:02:55 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | response code=200
+2026-03-23 15:02:55 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |    Exiting get()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | SPY: yfinance received OHLC data: 2026-03-17 13:30:00 -> 2026-03-23 15:02:55
+2026-03-23 15:02:55 | DEBUG    | yfinance             | SPY: OHLC after cleaning: 2026-03-17 09:30:00-04:00 -> 2026-03-23 11:02:55-04:00
+2026-03-23 15:02:55 | DEBUG    | yfinance             | SPY: OHLC after combining events: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:02:55 | DEBUG    | yfinance             | SPY: yfinance returning OHLC: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:02:55 | DEBUG    | yfinance             |   Exiting history()
+2026-03-23 15:02:55 | DEBUG    | yfinance             |  Exiting history()
+2026-03-23 15:02:55 | DEBUG    | yfinance             | Exiting download()
+2026-03-23 15:02:55 | INFO     | src.data_feed        | Preço IB indisponível — yfinance fallback: SPY = 662.4900
+2026-03-23 15:02:55 | INFO     | main                 | Regime de SPY: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-23 15:02:55 | INFO     | main                 | Mercado SPY: preço actual=662.4900 | último fecho=661.6000
+2026-03-23 15:02:55 | DEBUG    | src.data_feed        | A obter volume actual de SPY…
+2026-03-23 15:02:55 | ERROR    | ib_insync.wrapper    | Error 10089, reqId 335: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.SPY ARCA/TOP/ALL, contract: Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY')
+2026-03-23 15:02:55 | WARNING  | src.execution        | Erro IB — reqId=335, codigo=10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.SPY ARCA/TOP/ALL (contrato=Stock(conId=756733, symbol='SPY', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='SPY', tradingClass='SPY'))
+2026-03-23 15:03:05 | WARNING  | src.data_feed        | Timeout ao obter volume de SPY.
+2026-03-23 15:03:05 | DEBUG    | yfinance             | Entering download()
+2026-03-23 15:03:05 | ERROR    | ib_insync.wrapper    | Error 300, reqId 335: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:335
+2026-03-23 15:03:05 | WARNING  | src.execution        | Erro IB — reqId=335, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:335 (contrato=None)
+2026-03-23 15:03:05 | DEBUG    | yfinance             | Disabling multithreading because DEBUG logging enabled
+2026-03-23 15:03:05 | DEBUG    | yfinance             |  Entering history()
+2026-03-23 15:03:05 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['SPY', 1, 0])
+2026-03-23 15:03:05 | DEBUG    | yfinance             |   Entering history()
+2026-03-23 15:03:05 | DEBUG    | yfinance             | SPY: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:05 | DEBUG    | yfinance             |    Entering get()
+2026-03-23 15:03:05 | DEBUG    | yfinance             |     Entering _make_request()
+2026-03-23 15:03:05 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/SPY
+2026-03-23 15:03:05 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:05 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb()
+2026-03-23 15:03:05 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-23 15:03:05 | DEBUG    | yfinance             |       Entering _get_cookie_and_crumb_basic()
+2026-03-23 15:03:05 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-23 15:03:05 | DEBUG    | yfinance             | reusing cookie
+2026-03-23 15:03:05 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-23 15:03:05 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-23 15:03:05 | DEBUG    | yfinance             | reusing crumb
+2026-03-23 15:03:05 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-23 15:03:05 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-23 15:03:05 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-23 15:03:06 | DEBUG    | yfinance             | response code=200
+2026-03-23 15:03:06 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-23 15:03:06 | DEBUG    | yfinance             |    Exiting get()
+2026-03-23 15:03:06 | DEBUG    | yfinance             | SPY: yfinance received OHLC data: 2026-03-17 13:30:00 -> 2026-03-23 15:03:05
+2026-03-23 15:03:06 | DEBUG    | yfinance             | SPY: OHLC after cleaning: 2026-03-17 09:30:00-04:00 -> 2026-03-23 11:03:05-04:00
+2026-03-23 15:03:06 | DEBUG    | yfinance             | SPY: OHLC after combining events: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:06 | DEBUG    | yfinance             | SPY: yfinance returning OHLC: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:06 | DEBUG    | yfinance             |   Exiting history()
+2026-03-23 15:03:06 | DEBUG    | yfinance             |  Exiting history()
+2026-03-23 15:03:06 | DEBUG    | yfinance             | Exiting download()
+2026-03-23 15:03:06 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: SPY = 45700038
+2026-03-23 15:03:06 | INFO     | main                 | Sinal Kotegawa para SPY: signal=False | horizonte=LONG_TERM | desvio=-2.10% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-23 15:03:06 | INFO     | src.data_feed        | A qualificar contrato: VIX…
+2026-03-23 15:03:06 | INFO     | src.data_feed        | Contrato qualificado: VIX (conId=13455763, exchange=CBOE).
+2026-03-23 15:03:06 | INFO     | src.data_feed        | A obter barras históricas: VIX | duração=1 Y | tamanho=1 day
+2026-03-23 15:03:06 | INFO     | src.data_feed        | Barras obtidas com sucesso: VIX — 251 barras (de 2025-03-24 a 2026-03-23).
+2026-03-23 15:03:06 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 1.4601, 'magnitude_atr': 0.9582, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 648.57, 'today_open': 658.04, 'atr14': 9.88289769976088}
+2026-03-23 15:03:06 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-23 15:03:06 | INFO     | main                 | Sinal multi-instrumento para SPY: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-23 15:03:06 | WARNING  | main                 | Execução directa de sinais multi-instrumento desactivada por segurança até integração na state machine persistente: SPY (SHORT).
+2026-03-23 15:03:06 | DEBUG    | main                 | A processar simbolo: QQQ
+2026-03-23 15:03:06 | INFO     | src.data_feed        | A qualificar contrato: QQQ…
+2026-03-23 15:03:06 | INFO     | src.data_feed        | Contrato qualificado: QQQ (conId=320227571, exchange=SMART).
+2026-03-23 15:03:06 | INFO     | src.data_feed        | A obter barras históricas: QQQ | duração=1 Y | tamanho=1 day
+2026-03-23 15:03:07 | INFO     | src.data_feed        | Barras obtidas com sucesso: QQQ — 251 barras (de 2025-03-24 a 2026-03-23).
+2026-03-23 15:03:07 | INFO     | src.data_feed        | Indicadores calculados para QQQ: close=593.9000 | preço actual=N/A | SMA25=602.9084 | SMA50=610.4168 | SMA200=593.1544 | RSI14=44.4215 | ATR14=10.5246 | BB=[619.0016, 602.5965, 586.1914] | VolAvg20=53966807.0000 | ATRavg60=9.2471
+2026-03-23 15:03:07 | DEBUG    | src.data_feed        | A obter preço actual de QQQ…
+2026-03-23 15:03:07 | WARNING  | src.execution        | Erro IB — reqId=340, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'))
+2026-03-23 15:03:07 | DEBUG    | src.data_feed        | Preço de QQQ: 592.8700 (mid).
+2026-03-23 15:03:07 | INFO     | main                 | Regime de QQQ: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-23 15:03:07 | INFO     | main                 | Mercado QQQ: preço actual=592.8700 | último fecho=593.9000
+2026-03-23 15:03:07 | DEBUG    | src.data_feed        | A obter volume actual de QQQ…
+2026-03-23 15:03:08 | WARNING  | src.execution        | Erro IB — reqId=341, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=320227571, symbol='QQQ', exchange='SMART', primaryExchange='NASDAQ', currency='USD', localSymbol='QQQ', tradingClass='NMS'))
+2026-03-23 15:03:17 | WARNING  | src.data_feed        | Timeout ao obter volume de QQQ.
+2026-03-23 15:03:17 | DEBUG    | yfinance             | Entering download()
+2026-03-23 15:03:17 | ERROR    | ib_insync.wrapper    | Error 300, reqId 341: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:341
+2026-03-23 15:03:17 | WARNING  | src.execution        | Erro IB — reqId=341, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:341 (contrato=None)
+2026-03-23 15:03:17 | DEBUG    | yfinance             | Disabling multithreading because DEBUG logging enabled
+2026-03-23 15:03:17 | DEBUG    | yfinance             |  Entering history()
+2026-03-23 15:03:17 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['QQQ', 1, 0])
+2026-03-23 15:03:17 | DEBUG    | yfinance             |   Entering history()
+2026-03-23 15:03:17 | DEBUG    | yfinance             | QQQ: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:17 | DEBUG    | yfinance             |    Entering get()
+2026-03-23 15:03:17 | DEBUG    | yfinance             |     Entering _make_request()
+2026-03-23 15:03:17 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/QQQ
+2026-03-23 15:03:17 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:17 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb()
+2026-03-23 15:03:17 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-23 15:03:17 | DEBUG    | yfinance             |       Entering _get_cookie_and_crumb_basic()
+2026-03-23 15:03:17 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-23 15:03:17 | DEBUG    | yfinance             | reusing cookie
+2026-03-23 15:03:17 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-23 15:03:17 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-23 15:03:17 | DEBUG    | yfinance             | reusing crumb
+2026-03-23 15:03:17 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-23 15:03:17 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-23 15:03:17 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-23 15:03:18 | DEBUG    | yfinance             | response code=200
+2026-03-23 15:03:18 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-23 15:03:18 | DEBUG    | yfinance             |    Exiting get()
+2026-03-23 15:03:18 | DEBUG    | yfinance             | QQQ: yfinance received OHLC data: 2026-03-17 13:30:00 -> 2026-03-23 15:03:16
+2026-03-23 15:03:18 | DEBUG    | yfinance             | QQQ: OHLC after cleaning: 2026-03-17 09:30:00-04:00 -> 2026-03-23 11:03:16-04:00
+2026-03-23 15:03:18 | DEBUG    | yfinance             | QQQ: OHLC after combining events: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:18 | DEBUG    | yfinance             | QQQ: yfinance returning OHLC: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:18 | DEBUG    | yfinance             |   Exiting history()
+2026-03-23 15:03:18 | DEBUG    | yfinance             |  Exiting history()
+2026-03-23 15:03:18 | DEBUG    | yfinance             | Exiting download()
+2026-03-23 15:03:18 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: QQQ = 31155235
+2026-03-23 15:03:18 | INFO     | main                 | Sinal Kotegawa para QQQ: signal=False | horizonte=MEDIUM_TERM | desvio=-1.66% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-23 15:03:18 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 1.4535, 'magnitude_atr': 0.8038, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 582.06, 'today_open': 590.52, 'atr14': 10.52461317934256}
+2026-03-23 15:03:18 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=3.
+2026-03-23 15:03:18 | INFO     | main                 | Sinal multi-instrumento para QQQ: signal=SHORT | confidence=3 | módulo=gap_fade
+2026-03-23 15:03:18 | WARNING  | main                 | Execução directa de sinais multi-instrumento desactivada por segurança até integração na state machine persistente: QQQ (SHORT).
+2026-03-23 15:03:18 | DEBUG    | main                 | A processar simbolo: EZU
+2026-03-23 15:03:18 | INFO     | src.data_feed        | A qualificar contrato: EZU…
+2026-03-23 15:03:18 | INFO     | src.data_feed        | Contrato qualificado: EZU (conId=10435397, exchange=SMART).
+2026-03-23 15:03:18 | INFO     | src.data_feed        | A obter barras históricas: EZU | duração=1 Y | tamanho=1 day
+2026-03-23 15:03:19 | INFO     | src.data_feed        | Barras obtidas com sucesso: EZU — 251 barras (de 2025-03-24 a 2026-03-23).
+2026-03-23 15:03:19 | INFO     | src.data_feed        | Indicadores calculados para EZU: close=62.5500 | preço actual=N/A | SMA25=65.2664 | SMA50=66.0346 | SMA200=62.4181 | RSI14=41.6405 | ATR14=1.4353 | BB=[69.6909, 64.5370, 59.3831] | VolAvg20=1973962.6500 | ATRavg60=0.7887
+2026-03-23 15:03:19 | WARNING  | src.data_feed        | Pacing rule aplicada em current_price: espera 0.78 s para price_snapshot:STK:EZU:BATS:USD: (historical_window=0.78s)
+2026-03-23 15:03:19 | DEBUG    | src.data_feed        | A obter preço actual de EZU…
+2026-03-23 15:03:20 | WARNING  | src.execution        | Erro IB — reqId=344, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=10435397, symbol='EZU', exchange='SMART', primaryExchange='BATS', currency='USD', localSymbol='EZU', tradingClass='EZU'))
+2026-03-23 15:03:20 | DEBUG    | src.data_feed        | Preço de EZU: 60.6250 (mid).
+2026-03-23 15:03:20 | INFO     | main                 | Regime de EZU: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-23 15:03:20 | INFO     | main                 | Mercado EZU: preço actual=60.6250 | último fecho=62.5500
+2026-03-23 15:03:20 | DEBUG    | src.data_feed        | A obter volume actual de EZU…
+2026-03-23 15:03:20 | WARNING  | src.execution        | Erro IB — reqId=345, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=10435397, symbol='EZU', exchange='SMART', primaryExchange='BATS', currency='USD', localSymbol='EZU', tradingClass='EZU'))
+2026-03-23 15:03:30 | WARNING  | src.data_feed        | Timeout ao obter volume de EZU.
+2026-03-23 15:03:30 | DEBUG    | yfinance             | Entering download()
+2026-03-23 15:03:30 | ERROR    | ib_insync.wrapper    | Error 300, reqId 345: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:345
+2026-03-23 15:03:30 | WARNING  | src.execution        | Erro IB — reqId=345, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:345 (contrato=None)
+2026-03-23 15:03:30 | DEBUG    | yfinance             | Disabling multithreading because DEBUG logging enabled
+2026-03-23 15:03:30 | DEBUG    | yfinance             |  Entering history()
+2026-03-23 15:03:30 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['EZU', 1, 0])
+2026-03-23 15:03:30 | DEBUG    | yfinance             |   Entering history()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | EZU: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:30 | DEBUG    | yfinance             |    Entering get()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |     Entering _make_request()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/EZU
+2026-03-23 15:03:30 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:30 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-23 15:03:30 | DEBUG    | yfinance             |       Entering _get_cookie_and_crumb_basic()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | reusing cookie
+2026-03-23 15:03:30 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | reusing crumb
+2026-03-23 15:03:30 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | response code=200
+2026-03-23 15:03:30 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |    Exiting get()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | EZU: yfinance received OHLC data: 2026-03-17 13:30:00 -> 2026-03-23 15:03:24
+2026-03-23 15:03:30 | DEBUG    | yfinance             | EZU: OHLC after cleaning: 2026-03-17 09:30:00-04:00 -> 2026-03-23 11:03:24-04:00
+2026-03-23 15:03:30 | DEBUG    | yfinance             | EZU: OHLC after combining events: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:30 | DEBUG    | yfinance             | EZU: yfinance returning OHLC: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:30 | DEBUG    | yfinance             |   Exiting history()
+2026-03-23 15:03:30 | DEBUG    | yfinance             |  Exiting history()
+2026-03-23 15:03:30 | DEBUG    | yfinance             | Exiting download()
+2026-03-23 15:03:30 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: EZU = 1400173
+2026-03-23 15:03:30 | INFO     | main                 | Sinal Kotegawa para EZU: signal=False | horizonte=MEDIUM_TERM | desvio=-7.11% | confirmacoes=0 | confianca=BAIXO | multiplicador=0.00
+2026-03-23 15:03:30 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'up', 'magnitude_pct': 2.409, 'magnitude_atr': 1.0103, 'fill_probability': 0.6, 'is_high_prob': True, 'prev_close': 60.19, 'today_open': 61.64, 'atr14': 1.4352597234167777}
+2026-03-23 15:03:30 | INFO     | src.gap_fade         | Gap fade gerou sinal SHORT com confidence=2.
+2026-03-23 15:03:30 | INFO     | main                 | Sinal multi-instrumento para EZU: signal=SHORT | confidence=2 | módulo=gap_fade
+2026-03-23 15:03:30 | WARNING  | main                 | Execução directa de sinais multi-instrumento desactivada por segurança até integração na state machine persistente: EZU (SHORT).
+2026-03-23 15:03:30 | DEBUG    | main                 | A processar simbolo: GLD
+2026-03-23 15:03:32 | INFO     | src.data_feed        | A qualificar contrato: GLD…
+2026-03-23 15:03:32 | INFO     | src.data_feed        | Contrato qualificado: GLD (conId=51529211, exchange=SMART).
+2026-03-23 15:03:32 | INFO     | src.data_feed        | A obter barras históricas: GLD | duração=1 Y | tamanho=1 day
+2026-03-23 15:03:32 | INFO     | src.data_feed        | Barras obtidas com sucesso: GLD — 251 barras (de 2025-03-24 a 2026-03-23).
+2026-03-23 15:03:32 | INFO     | src.data_feed        | Indicadores calculados para GLD: close=411.1600 | preço actual=N/A | SMA25=462.5808 | SMA50=456.0808 | SMA200=374.6381 | RSI14=29.2123 | ATR14=12.2319 | BB=[506.3887, 462.4290, 418.4693] | VolAvg20=9436595.6500 | ATRavg60=10.9706
+2026-03-23 15:03:40 | WARNING  | src.data_feed        | Pacing rule aplicada em current_price: espera 8.31 s para price_snapshot:STK:GLD:ARCA:USD: (historical_window=8.31s)
+2026-03-23 15:03:40 | DEBUG    | src.data_feed        | A obter preço actual de GLD…
+2026-03-23 15:03:41 | WARNING  | src.execution        | Erro IB — reqId=348, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=51529211, symbol='GLD', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='GLD', tradingClass='GLD'))
+2026-03-23 15:03:41 | DEBUG    | src.data_feed        | Preço de GLD: 411.4300 (last).
+2026-03-23 15:03:41 | INFO     | main                 | Regime de GLD: SIDEWAYS — Condições mistas — sem tendência clara definida
+2026-03-23 15:03:41 | INFO     | main                 | Mercado GLD: preço actual=411.4300 | último fecho=411.1600
+2026-03-23 15:03:41 | ERROR    | ib_insync.wrapper    | Error 300, reqId 348: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:348
+2026-03-23 15:03:41 | WARNING  | src.execution        | Erro IB — reqId=348, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:348 (contrato=None)
+2026-03-23 15:03:41 | WARNING  | src.data_feed        | Pacing rule aplicada em current_volume: espera 0.45 s para volume:STK:GLD:ARCA:USD: (historical_window=0.45s)
+2026-03-23 15:03:41 | DEBUG    | src.data_feed        | A obter volume actual de GLD…
+2026-03-23 15:03:42 | WARNING  | src.execution        | Erro IB — reqId=349, codigo=10167: N\u00e3o h\u00e1 inscri\u00e7\u00e3o dos dados de mercado solicitados. Exibi\u00e7\u00e3o de dados de mercado atrasados. (contrato=Stock(conId=51529211, symbol='GLD', exchange='SMART', primaryExchange='ARCA', currency='USD', localSymbol='GLD', tradingClass='GLD'))
+2026-03-23 15:03:51 | WARNING  | src.data_feed        | Timeout ao obter volume de GLD.
+2026-03-23 15:03:51 | DEBUG    | yfinance             | Entering download()
+2026-03-23 15:03:51 | ERROR    | ib_insync.wrapper    | Error 300, reqId 349: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:349
+2026-03-23 15:03:51 | WARNING  | src.execution        | Erro IB — reqId=349, codigo=300: N\u00e3o \u00e9 poss\u00edvel encontrar o Eid com o tickerId:349 (contrato=None)
+2026-03-23 15:03:51 | DEBUG    | yfinance             | Disabling multithreading because DEBUG logging enabled
+2026-03-23 15:03:51 | DEBUG    | yfinance             |  Entering history()
+2026-03-23 15:03:51 | DEBUG    | peewee               | ('SELECT "t1"."key", "t1"."value" FROM "_tz_kv" AS "t1" WHERE ("t1"."key" = ?) LIMIT ? OFFSET ?', ['GLD', 1, 0])
+2026-03-23 15:03:51 | DEBUG    | yfinance             |   Entering history()
+2026-03-23 15:03:51 | DEBUG    | yfinance             | GLD: Yahoo GET parameters: {'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:51 | DEBUG    | yfinance             |    Entering get()
+2026-03-23 15:03:51 | DEBUG    | yfinance             |     Entering _make_request()
+2026-03-23 15:03:51 | DEBUG    | yfinance             | url=https://query2.finance.yahoo.com/v8/finance/chart/GLD
+2026-03-23 15:03:51 | DEBUG    | yfinance             | params={'range': '5d', 'interval': '1d', 'includePrePost': False, 'events': 'div,splits,capitalGains'}
+2026-03-23 15:03:51 | DEBUG    | yfinance             |      Entering _get_cookie_and_crumb()
+2026-03-23 15:03:51 | DEBUG    | yfinance             | cookie_mode = 'basic'
+2026-03-23 15:03:51 | DEBUG    | yfinance             |       Entering _get_cookie_and_crumb_basic()
+2026-03-23 15:03:51 | DEBUG    | yfinance             |        Entering _get_cookie_basic()
+2026-03-23 15:03:51 | DEBUG    | yfinance             | reusing cookie
+2026-03-23 15:03:51 | DEBUG    | yfinance             |        Exiting _get_cookie_basic()
+2026-03-23 15:03:51 | DEBUG    | yfinance             |        Entering _get_crumb_basic()
+2026-03-23 15:03:51 | DEBUG    | yfinance             | reusing crumb
+2026-03-23 15:03:51 | DEBUG    | yfinance             |        Exiting _get_crumb_basic()
+2026-03-23 15:03:51 | DEBUG    | yfinance             |       Exiting _get_cookie_and_crumb_basic()
+2026-03-23 15:03:51 | DEBUG    | yfinance             |      Exiting _get_cookie_and_crumb()
+2026-03-23 15:03:52 | DEBUG    | yfinance             | response code=200
+2026-03-23 15:03:52 | DEBUG    | yfinance             |     Exiting _make_request()
+2026-03-23 15:03:52 | DEBUG    | yfinance             |    Exiting get()
+2026-03-23 15:03:52 | DEBUG    | yfinance             | GLD: yfinance received OHLC data: 2026-03-17 13:30:00 -> 2026-03-23 15:03:50
+2026-03-23 15:03:52 | DEBUG    | yfinance             | GLD: OHLC after cleaning: 2026-03-17 09:30:00-04:00 -> 2026-03-23 11:03:50-04:00
+2026-03-23 15:03:52 | DEBUG    | yfinance             | GLD: OHLC after combining events: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:52 | DEBUG    | yfinance             | GLD: yfinance returning OHLC: 2026-03-17 00:00:00-04:00 -> 2026-03-23 00:00:00-04:00
+2026-03-23 15:03:52 | DEBUG    | yfinance             |   Exiting history()
+2026-03-23 15:03:52 | DEBUG    | yfinance             |  Exiting history()
+2026-03-23 15:03:52 | DEBUG    | yfinance             | Exiting download()
+2026-03-23 15:03:52 | INFO     | src.data_feed        | Volume IB indisponível — yfinance fallback: GLD = 14849327
+2026-03-23 15:03:52 | INFO     | main                 | Sinal Kotegawa para GLD: signal=False | horizonte=LONG_TERM | desvio=-11.06% | confirmacoes=3 | confianca=ALTO | multiplicador=1.00
+2026-03-23 15:03:52 | DEBUG    | src.gap_fade         | Gap classificado: {'valid': True, 'gap_type': 'down', 'magnitude_pct': -1.9982, 'magnitude_atr': 0.6753, 'fill_probability': 0.75, 'is_high_prob': True, 'prev_close': 413.38, 'today_open': 405.12, 'atr14': 12.231910836994173}
+2026-03-23 15:03:52 | INFO     | src.gap_fade         | Gap fade gerou sinal LONG com confidence=3.
+2026-03-23 15:03:52 | INFO     | main                 | Sinal multi-instrumento para GLD: signal=LONG | confidence=3 | módulo=gap_fade
+2026-03-23 15:03:52 | WARNING  | main                 | Execução directa de sinais multi-instrumento desactivada por segurança até integração na state machine persistente: GLD (LONG).
+2026-03-23 15:03:52 | DEBUG    | main                 | A processar simbolo: TLT
