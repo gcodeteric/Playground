@@ -19,6 +19,8 @@ import pytest
 from src.data_feed import (
     DataFeed,
     IBConnection,
+    _DATA_FEED_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+    _DATA_FEED_CIRCUIT_BREAKER_THRESHOLD,
     _TTLCache,
     _is_yfinance_quote_fresh,
     _valid_price,
@@ -1292,6 +1294,247 @@ class TestCurrentSnapshotFallbacks:
         }
         assert volume_result == pytest.approx(654_000.0, abs=1e-5)
         assert mock_ib.cancelMktData.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_current_price_opens_circuit_breaker_after_open_session_failures(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=None,
+            volume=None,
+        )
+        data_feed.get_price_yfinance = AsyncMock(return_value=None)
+        clock = {"now": 0.0}
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        async def _fake_sleep(_delay: float):
+            clock["now"] += 10.1
+            return None
+
+        def _fake_monotonic():
+            return clock["now"]
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch.object(data_feed, "_is_market_open_for_contract", return_value=True),
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic),
+        ):
+            for _ in range(_DATA_FEED_CIRCUIT_BREAKER_THRESHOLD):
+                result = await data_feed.get_current_price_details(contract)
+                assert result == {"price": None, "source": None, "fresh": False}
+
+            open_until = data_feed._data_feed_circuit_open_until.get("current_price")
+            assert open_until is not None
+            assert open_until == pytest.approx(
+                clock["now"] + _DATA_FEED_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+                abs=1e-6,
+            )
+            assert data_feed._data_feed_failure_counts["current_price"] == _DATA_FEED_CIRCUIT_BREAKER_THRESHOLD
+
+            mock_ib.reqMktData.reset_mock()
+            data_feed.get_price_yfinance.reset_mock()
+
+            blocked = await data_feed.get_current_price_details(contract)
+            assert blocked == {"price": None, "source": None, "fresh": False}
+            mock_ib.reqMktData.assert_not_called()
+            data_feed.get_price_yfinance.assert_not_awaited()
+
+            clock["now"] = open_until + 0.1
+            mock_ib.reqMktData.return_value = SimpleNamespace(
+                last=101.5,
+                close=None,
+                bid=None,
+                ask=None,
+                markPrice=None,
+                volume=None,
+            )
+            recovered = await data_feed.get_current_price_details(contract)
+
+        assert recovered == {
+            "price": 101.5,
+            "source": "last",
+            "fresh": True,
+            "volume": None,
+        }
+        assert data_feed._data_feed_failure_counts["current_price"] == 0
+        assert data_feed._data_feed_circuit_open_until.get("current_price") is None
+
+    @pytest.mark.asyncio
+    async def test_current_volume_opens_circuit_breaker_after_open_session_failures(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(volume=None)
+        data_feed.get_volume_yfinance = AsyncMock(return_value=None)
+        clock = {"now": 0.0}
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        async def _fake_sleep(_delay: float):
+            clock["now"] += 10.1
+            return None
+
+        def _fake_monotonic():
+            return clock["now"]
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch.object(data_feed, "_is_market_open_for_contract", return_value=True),
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic),
+        ):
+            for _ in range(_DATA_FEED_CIRCUIT_BREAKER_THRESHOLD):
+                result = await data_feed.get_current_volume(contract)
+                assert result is None
+
+            open_until = data_feed._data_feed_circuit_open_until.get("current_volume")
+            assert open_until is not None
+            assert open_until == pytest.approx(
+                clock["now"] + _DATA_FEED_CIRCUIT_BREAKER_COOLDOWN_SECONDS,
+                abs=1e-6,
+            )
+            assert data_feed._data_feed_failure_counts["current_volume"] == _DATA_FEED_CIRCUIT_BREAKER_THRESHOLD
+
+            mock_ib.reqMktData.reset_mock()
+            data_feed.get_volume_yfinance.reset_mock()
+
+            blocked = await data_feed.get_current_volume(contract)
+            assert blocked is None
+            mock_ib.reqMktData.assert_not_called()
+            data_feed.get_volume_yfinance.assert_not_awaited()
+
+            clock["now"] = open_until + 0.1
+            mock_ib.reqMktData.return_value = SimpleNamespace(volume=321_000.0)
+            recovered = await data_feed.get_current_volume(contract)
+
+        assert recovered == pytest.approx(321_000.0, abs=1e-5)
+        assert data_feed._data_feed_failure_counts["current_volume"] == 0
+        assert data_feed._data_feed_circuit_open_until.get("current_volume") is None
+
+    @pytest.mark.asyncio
+    async def test_current_price_success_resets_failure_counter(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        data_feed.get_price_yfinance = AsyncMock(return_value=None)
+        clock = {"now": 0.0}
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        async def _fake_sleep(_delay: float):
+            clock["now"] += 10.1
+            return None
+
+        def _fake_monotonic():
+            return clock["now"]
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch.object(data_feed, "_is_market_open_for_contract", return_value=True),
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic),
+        ):
+            mock_ib.reqMktData.return_value = SimpleNamespace(
+                last=None,
+                close=None,
+                bid=None,
+                ask=None,
+                markPrice=None,
+                volume=None,
+            )
+            failed = await data_feed.get_current_price_details(contract)
+            assert failed == {"price": None, "source": None, "fresh": False}
+            assert data_feed._data_feed_failure_counts["current_price"] == 1
+
+            mock_ib.reqMktData.return_value = SimpleNamespace(
+                last=100.25,
+                close=None,
+                bid=None,
+                ask=None,
+                markPrice=None,
+                volume=None,
+            )
+            recovered = await data_feed.get_current_price_details(contract)
+
+        assert recovered == {
+            "price": 100.25,
+            "source": "last",
+            "fresh": True,
+            "volume": None,
+        }
+        assert data_feed._data_feed_failure_counts["current_price"] == 0
+        assert data_feed._data_feed_circuit_open_until.get("current_price") is None
+
+    @pytest.mark.asyncio
+    async def test_current_price_failures_outside_session_do_not_open_breaker(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("AAPL")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=None,
+            volume=None,
+        )
+        data_feed.get_price_yfinance = AsyncMock(return_value=None)
+        clock = {"now": 0.0}
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        async def _fake_sleep(_delay: float):
+            clock["now"] += 10.1
+            return None
+
+        def _fake_monotonic():
+            return clock["now"]
+
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch.object(data_feed, "_is_market_open_for_contract", return_value=False),
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic),
+        ):
+            for _ in range(_DATA_FEED_CIRCUIT_BREAKER_THRESHOLD + 1):
+                result = await data_feed.get_current_price_details(contract)
+                assert result == {"price": None, "source": None, "fresh": False}
+
+        assert data_feed._data_feed_failure_counts["current_price"] == 0
+        assert data_feed._data_feed_circuit_open_until.get("current_price") is None
+        assert mock_ib.reqMktData.call_count == _DATA_FEED_CIRCUIT_BREAKER_THRESHOLD + 1
+        assert data_feed.get_price_yfinance.await_count == _DATA_FEED_CIRCUIT_BREAKER_THRESHOLD + 1
 
 
 class TestYfinanceFreshness:
