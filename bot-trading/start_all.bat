@@ -51,9 +51,18 @@ if errorlevel 1 (
     exit /b 1
 )
 
+echo A aguardar 5 segundos para a janela do TWS estabilizar...
+timeout /t 5 /nobreak >nul
+
 echo TWS detectado. A executar auto-login...
-start "" /B "%PYTHON_EXE%" "%~dp0tws_autologin.py" --skip-launch --timeout %TWS_WAIT_TIMEOUT%
-echo A aguardar %AUTOLOGIN_BUFFER_SECONDS% segundos completos para o login automatico terminar...
+call "%PYTHON_EXE%" "%~dp0tws_autologin.py"
+if errorlevel 1 (
+    echo.
+    echo ERRO: tws_autologin.py falhou. Launcher abortado.
+    exit /b 1
+)
+
+echo Auto-login concluido. A aguardar %AUTOLOGIN_BUFFER_SECONDS% segundos completos antes de arrancar dashboard e bot...
 timeout /t %AUTOLOGIN_BUFFER_SECONDS% /nobreak >nul
 
 echo.
