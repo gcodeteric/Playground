@@ -2,6 +2,7 @@
 tws_autologin.py
 Auto-login para o TWS Interactive Brokers.
 """
+import argparse
 import json
 import subprocess
 import sys
@@ -22,6 +23,24 @@ pyautogui.PAUSE = 0.6
 pyautogui.FAILSAFE = True
 
 
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Auto-login para o TWS Interactive Brokers.",
+    )
+    parser.add_argument(
+        "--skip-launch",
+        action="store_true",
+        help="Nao tenta abrir o TWS; assume que foi iniciado externamente.",
+    )
+    parser.add_argument(
+        "--timeout",
+        type=int,
+        default=60,
+        help="Timeout em segundos para detectar a janela de login.",
+    )
+    return parser.parse_args()
+
+
 def load_credentials():
     if not CREDENTIALS_FILE.exists():
         print(f"ERRO: ficheiro de credenciais nao encontrado: {CREDENTIALS_FILE}")
@@ -34,10 +53,24 @@ def load_credentials():
         sys.exit(1)
 
 
+def find_login_windows():
+    windows = []
+    for title in ("Iniciar sessão", "Login"):
+        windows.extend(gw.getWindowsWithTitle(title))
+    return windows
+
+
+def find_tws_windows():
+    return [
+        w for w in gw.getAllWindows()
+        if "TWS" in w.title or "Trader Workstation" in w.title
+    ]
+
+
 def wait_for_login_window(timeout=60):
     print("A aguardar janela de login...")
     for _ in range(timeout):
-        windows = gw.getWindowsWithTitle("Iniciar sessão")
+        windows = find_login_windows()
         if windows:
             print("Janela de login detectada.")
             return windows[0]
@@ -79,7 +112,18 @@ def do_login(win, username, password):
     return True
 
 
+def launch_tws():
+    if not TWS_PATH.exists():
+        print(f"ERRO: executavel do TWS nao encontrado: {TWS_PATH}")
+        sys.exit(1)
+    print(f"A abrir TWS: {TWS_PATH}")
+    subprocess.Popen([str(TWS_PATH)])
+    time.sleep(6)
+
+
 def main():
+    args = parse_args()
+
     print("=" * 50)
     print("TWS AUTO-LOGIN")
     print("=" * 50)
@@ -87,9 +131,8 @@ def main():
     username, password = load_credentials()
 
     # Verificar se TWS já está aberto e logado
-    existing = [w for w in gw.getAllWindows()
-                if "TWS" in w.title or "Trader Workstation" in w.title]
-    login_open = gw.getWindowsWithTitle("Iniciar sessão")
+    existing = find_tws_windows()
+    login_open = find_login_windows()
 
     if existing and not login_open:
         print("TWS já está aberto e logado.")
@@ -97,12 +140,13 @@ def main():
 
     # Abrir TWS se necessário
     if not login_open:
-        print(f"A abrir TWS: {TWS_PATH}")
-        subprocess.Popen([str(TWS_PATH)])
-        time.sleep(6)
+        if args.skip_launch:
+            print("TWS iniciado externamente. A aguardar janela de login...")
+        else:
+            launch_tws()
 
     # Aguardar janela de login
-    win = wait_for_login_window(timeout=60)
+    win = wait_for_login_window(timeout=args.timeout)
     if not win:
         print("ERRO: janela de login nao detectada no timeout. A sair sem login.")
         sys.exit(1)
