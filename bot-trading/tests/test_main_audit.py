@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
@@ -55,6 +56,7 @@ def _build_bot_stub() -> TradingBot:
     bot._instance_lock_path = pathlib.Path.cwd() / "bot.instance.lock"
     bot._broker_context_lock_fd = None
     bot._broker_context_lock_path = None
+    bot._dynamic_win_rate = 0.50
     bot._connection = SimpleNamespace(
         operational_events_since=MagicMock(return_value=[]),
     )
@@ -114,12 +116,15 @@ def _build_runtime_config(tmp_path):
             use_gateway=False,
         ),
         risk=SimpleNamespace(
+            risk_per_level=0.01,
+            min_rr=2.5,
             daily_loss_limit=0.03,
             weekly_loss_limit=0.06,
             monthly_dd_limit=0.10,
             stop_atr_mult=1.0,
             tp_atr_mult=2.5,
         ),
+        telegram=SimpleNamespace(is_configured=False),
     )
 
 
@@ -140,6 +145,89 @@ def test_first_run_files_are_created(tmp_path):
     assert (tmp_path / "metrics.json").exists()
     assert (tmp_path / "reconciliation.log").exists()
     assert (tmp_path / "bot.log").exists()
+
+
+def test_validate_startup_with_valid_runtime_configuration_logs_ok(tmp_path, caplog):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._config.telegram = SimpleNamespace(is_configured=True)
+    bot.refresh_dynamic_win_rate = MagicMock()
+    bot._risk_manager = SimpleNamespace(
+        calculate_risk_of_ruin=MagicMock(return_value=0.005),
+    )
+
+    with caplog.at_level(logging.INFO, logger="main"):
+        result = TradingBot.validate_startup(bot)
+
+    assert result is True
+    bot.refresh_dynamic_win_rate.assert_called_once_with()
+    bot._risk_manager.calculate_risk_of_ruin.assert_called_once_with(
+        win_rate=0.5,
+        payoff_ratio=2.5,
+        risk_per_trade=0.01,
+    )
+    assert "Modo operacional: PAPER" in caplog.text
+    assert "Telegram: configurado" in caplog.text
+    assert "Validacao de configuracao: OK sem warnings" in caplog.text
+
+
+def test_validate_startup_logs_warning_for_optional_telegram_gap(tmp_path, caplog):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot.refresh_dynamic_win_rate = MagicMock()
+    bot._risk_manager = SimpleNamespace(
+        calculate_risk_of_ruin=MagicMock(return_value=0.005),
+    )
+
+    with caplog.at_level(logging.INFO, logger="main"):
+        result = TradingBot.validate_startup(bot)
+
+    assert result is True
+    assert "Validacao de configuracao: OK com warnings (1)" in caplog.text
+    assert "Validacao de configuracao concluida com warnings:" in caplog.text
+    assert "Telegram nao configurado" in caplog.text
+
+
+def test_validate_startup_rejects_invalid_data_dir_before_risk_checks(tmp_path, caplog):
+    blocked_path = tmp_path / "invalid_data_dir"
+    blocked_path.write_text("not a directory", encoding="utf-8")
+
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._config.data_dir = blocked_path
+    bot._config.telegram = SimpleNamespace(is_configured=True)
+    bot.refresh_dynamic_win_rate = MagicMock()
+    bot._risk_manager = SimpleNamespace(
+        calculate_risk_of_ruin=MagicMock(return_value=0.0),
+    )
+
+    with caplog.at_level(logging.INFO, logger="main"):
+        result = TradingBot.validate_startup(bot)
+
+    assert result is False
+    bot.refresh_dynamic_win_rate.assert_not_called()
+    bot._risk_manager.calculate_risk_of_ruin.assert_not_called()
+    assert "Validacao de configuracao: FAIL (1 erro(s) fatal(is))" in caplog.text
+    assert "nao e uma directoria" in caplog.text
+
+
+def test_validate_startup_banner_reflects_live_mode(tmp_path, caplog):
+    bot = _build_bot_stub()
+    bot._config = _build_runtime_config(tmp_path)
+    bot._config.ib.paper_trading = False
+    bot._config.ib.port = 7496
+    bot._config.telegram = SimpleNamespace(is_configured=True)
+    bot.refresh_dynamic_win_rate = MagicMock()
+    bot._risk_manager = SimpleNamespace(
+        calculate_risk_of_ruin=MagicMock(return_value=0.005),
+    )
+
+    with caplog.at_level(logging.INFO, logger="main"):
+        result = TradingBot.validate_startup(bot)
+
+    assert result is True
+    assert "Modo operacional: LIVE" in caplog.text
+    assert "Execucao directa multi-instrumento: desactivada por politica" in caplog.text
 
 
 @pytest.mark.asyncio

@@ -740,6 +740,95 @@ class TradingBot:
     # Validacao de arranque
     # ------------------------------------------------------------------
 
+    def _validate_runtime_configuration(self) -> tuple[list[str], list[str]]:
+        """Valida configuração estrutural e opcional relevante antes do primeiro ciclo útil."""
+        errors: list[str] = []
+        warnings: list[str] = []
+
+        data_dir_raw = getattr(self._config, "data_dir", None)
+        try:
+            data_dir = Path(data_dir_raw) if data_dir_raw is not None else None
+        except (TypeError, ValueError):
+            data_dir = None
+
+        if data_dir is None:
+            errors.append("DATA_DIR invalido ou ausente.")
+        else:
+            if data_dir.exists() and not data_dir.is_dir():
+                errors.append(f"DATA_DIR invalido: {data_dir} nao e uma directoria.")
+            else:
+                try:
+                    data_dir.mkdir(parents=True, exist_ok=True)
+                    with tempfile.NamedTemporaryFile(dir=data_dir, prefix=".cfg-check-", delete=True):
+                        pass
+                except Exception as exc:  # noqa: BLE001
+                    errors.append(f"DATA_DIR indisponivel ou nao gravavel ({data_dir}): {exc}")
+
+        ib_cfg = getattr(self._config, "ib", None)
+        host = str(getattr(ib_cfg, "host", "") or "").strip()
+        if not host:
+            errors.append("IB_HOST invalido: valor em branco.")
+
+        try:
+            port = self._effective_ib_port()
+        except Exception as exc:  # noqa: BLE001
+            errors.append(f"IB_PORT invalido ou irresoluvel: {exc}")
+        else:
+            if port <= 0 or port > 65535:
+                errors.append(f"IB_PORT invalido: {port}.")
+
+        client_id_raw = getattr(ib_cfg, "client_id", None)
+        try:
+            client_id = int(client_id_raw)
+        except (TypeError, ValueError):
+            errors.append(f"IB client_id invalido: {client_id_raw!r}.")
+        else:
+            if client_id < 0:
+                errors.append(f"IB client_id invalido: {client_id}.")
+
+        telegram_cfg = getattr(self._config, "telegram", None)
+        if not bool(getattr(telegram_cfg, "is_configured", False)):
+            warnings.append("Telegram nao configurado; notificacoes operacionais ficam desactivadas.")
+
+        return errors, warnings
+
+    def _log_operational_banner(
+        self,
+        *,
+        config_errors: list[str],
+        config_warnings: list[str],
+    ) -> None:
+        """Resume o modo operacional efectivo e o estado da configuração."""
+        mode = "PAPER" if bool(getattr(self._config.ib, "paper_trading", True)) else "LIVE"
+        telegram_status = (
+            "configurado"
+            if bool(getattr(getattr(self._config, "telegram", None), "is_configured", False))
+            else "nao configurado"
+        )
+        active_auxiliary_modules = ", ".join(
+            sorted(
+                module_name
+                for module_name, module_cfg in MODULE_CONFIG.items()
+                if bool(module_cfg.get("is_active"))
+            )
+        ) or "nenhum"
+
+        if config_errors:
+            config_status = f"FAIL ({len(config_errors)} erro(s) fatal(is))"
+        elif config_warnings:
+            config_status = f"OK com warnings ({len(config_warnings)})"
+        else:
+            config_status = "OK sem warnings"
+
+        logger.info(
+            "Modo operacional: %s | Execucao directa multi-instrumento: desactivada por politica | "
+            "Modulos auxiliares activos: %s | Telegram: %s | Validacao de configuracao: %s",
+            mode,
+            active_auxiliary_modules,
+            telegram_status,
+            config_status,
+        )
+
     def validate_startup(self) -> bool:
         """
         Validacoes de seguranca antes de arrancar o bot.
@@ -748,6 +837,25 @@ class TradingBot:
         - Recusa arrancar se RoR > 1%
         """
         logger.info("A executar validacoes de arranque...")
+        config_errors, config_warnings = self._validate_runtime_configuration()
+        self._log_operational_banner(
+            config_errors=config_errors,
+            config_warnings=config_warnings,
+        )
+
+        if config_errors:
+            logger.critical(
+                "Validacao de configuracao falhou: %s",
+                " | ".join(config_errors),
+            )
+            return False
+
+        if config_warnings:
+            logger.warning(
+                "Validacao de configuracao concluida com warnings: %s",
+                " | ".join(config_warnings),
+            )
+
         self.refresh_dynamic_win_rate()
 
         # Calcular Risk of Ruin com parametros por defeito conservadores
