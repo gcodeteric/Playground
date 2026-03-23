@@ -19,6 +19,8 @@ except ImportError:
 BASE_DIR = Path(__file__).parent
 TWS_PATH = Path("C:/Jts/tws.exe")
 CREDENTIALS_FILE = BASE_DIR / "tws_credentials.json"
+LOGGED_IN_CONFIRMATION_SECONDS = 30
+LOGGED_IN_CONFIRMATION_POLL_SECONDS = 2
 pyautogui.PAUSE = 0.6
 pyautogui.FAILSAFE = True
 
@@ -112,6 +114,31 @@ def do_login(win, username, password):
     return True
 
 
+def confirm_tws_already_logged_in():
+    """Exige uma janela principal estável sem ecrã de login antes de concluir sucesso."""
+    print(
+        "Janela principal do TWS detectada sem ecrã de login. "
+        f"A confirmar durante {LOGGED_IN_CONFIRMATION_SECONDS}s para evitar falso positivo de arranque...",
+    )
+    deadline = time.monotonic() + LOGGED_IN_CONFIRMATION_SECONDS
+    while time.monotonic() < deadline:
+        if find_login_windows():
+            print("Janela de login detectada durante a confirmacao. A continuar fluxo normal de login.")
+            return False
+        if not find_tws_windows():
+            print("Janela principal do TWS desapareceu durante a confirmacao. A continuar fluxo normal.")
+            return False
+        time.sleep(LOGGED_IN_CONFIRMATION_POLL_SECONDS)
+
+    if find_login_windows():
+        print("Janela de login detectada na verificacao final. A continuar fluxo normal de login.")
+        return False
+    if not find_tws_windows():
+        print("Sem janela principal do TWS na verificacao final. A continuar fluxo normal.")
+        return False
+    return True
+
+
 def launch_tws():
     if not TWS_PATH.exists():
         print(f"ERRO: executavel do TWS nao encontrado: {TWS_PATH}")
@@ -135,11 +162,14 @@ def main():
     login_open = find_login_windows()
 
     if existing and not login_open:
-        print("TWS já está aberto e logado.")
-        return
+        if confirm_tws_already_logged_in():
+            print("TWS já está aberto e logado.")
+            return
+        login_open = find_login_windows()
+        existing = find_tws_windows()
 
     # Abrir TWS se necessário
-    if not login_open:
+    if not login_open and not existing:
         if args.skip_launch:
             print("TWS iniciado externamente. A aguardar janela de login...")
         else:
