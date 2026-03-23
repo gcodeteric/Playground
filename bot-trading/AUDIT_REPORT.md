@@ -1336,3 +1336,40 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - `P2` e `P3` eram limitacoes operacionais: o bot estava a desperdiçar dados do IB e a gerar fallback/pacing desnecessarios.
 - `P4` era deficit de observabilidade: o sistema fazia a coisa certa por seguranca, mas comunicava mal esse bloqueio.
 - `P5` continua a ser decisao de design: sem execucao automatica multi-instrumento nesta ronda.
+
+## 2026-03-23 - Delta final de endurecimento operacional no startup
+
+### Escopo
+- Ronda limitada a endurecimento operacional do arranque e consistencia de configuracao.
+- Sem alteracoes na logica economica de trading.
+- Sem alteracoes em `src/data_feed.py`, `src/execution.py`, `src/grid_engine.py`, `src/risk_manager.py` ou estrategias.
+
+### Alteracoes aplicadas
+- `main.py`: `validate_startup()` passou a executar validacao explicita de configuracao critica antes do primeiro ciclo util.
+- A validacao foi separada em duas classes reais:
+  - `fatal startup errors` -> bloqueiam o arranque
+  - `non-fatal operational warnings` -> deixam rasto auditavel mas permitem continuar
+- `main.py`: o startup passou a emitir um banner operacional explicito com:
+  - modo efectivo `PAPER` vs `LIVE`
+  - execucao directa multi-instrumento `desactivada por politica`
+  - estado do Telegram
+  - estado final da validacao de configuracao (`OK sem warnings`, `OK com warnings`, `FAIL`)
+- `Telegram` continua opcional por design; ausencia de configuracao permanece warning e nao erro fatal.
+- `tests/test_main_audit.py`: cobertura nova para:
+  - configuracao valida
+  - warning opcional de Telegram
+  - erro estrutural fatal
+  - banner operacional a reflectir modo `LIVE`
+
+### Validacao
+- Teste alvo:
+  - `C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/test_main_audit.py -q --tb=short`
+  - resultado real: `57 passed in 3.07s`
+- Suite completa:
+  - `C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short`
+  - resultado real: `480 passed in 9.97s`
+
+### Leitura honesta
+- Esta fase nao mudou o que o bot negoceia; mudou apenas a forma como falha cedo quando a configuracao estrutural esta errada.
+- O projecto continua a permitir arranque sem Telegram, porque isso ja era opcional no desenho real e endurecer esse ponto teria sido rigidez artificial.
+- O estado operacional no arranque fica agora explicitamente legivel e auditavel sem depender de inferencia a partir de logs dispersos.

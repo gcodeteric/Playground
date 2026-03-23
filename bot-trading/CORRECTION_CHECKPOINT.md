@@ -2,7 +2,7 @@
 Última actualização: 2026-03-23 14:49:36 UTC
 Commit actual: c519678e4801f17dd176ec5343262a660fa5c51c
 Python escolhido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe
-Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short -> 426 passed in 9.54s
+Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short -> 480 passed in 9.97s
 
 ## ESTADO DAS RONDAS
 [~] RONDA 0 — Baseline e congelamento (baseline capturado, validar git + OpenClaw ao retomar)
@@ -96,3 +96,15 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
   - `P4` = `RESOLVIDO`
   - `P5` = `MANTIDO POR DESIGN`
 - Baseline novo validado: `426 passed in 9.54s`.
+## 2026-03-23 - FASE 5 CONFIG_VALIDATION / BANNER OPERACIONAL
+
+- `main.py`: `validate_startup()` passou a incluir validacao explicita de configuracao critica antes do primeiro ciclo util.
+- A validacao passou a separar `fatal startup errors` de `non-fatal operational warnings`.
+- O arranque passa a emitir um banner operacional explicito com:
+  - modo `PAPER` vs `LIVE`
+  - estado da execucao directa multi-instrumento (continua desactivada por politica)
+  - estado do Telegram
+  - estado final da validacao de configuracao
+- `Telegram` continua opcional; ausencia de configuracao gera warning auditavel e nao bloqueia o arranque.
+- `tests/test_main_audit.py`: cobertura nova para configuracao valida, warning opcional, erro estrutural fatal e banner operacional em modo `LIVE`.
+- Total actual validado: `480 passed in 9.97s`.
