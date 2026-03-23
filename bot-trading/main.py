@@ -586,6 +586,7 @@ class TradingBot:
         self._last_cycle_started_at: datetime | None = None
         self._last_cycle_completed_at: datetime | None = None
         self._last_error: str | None = None
+        self._last_blocked_multi_signal: dict[str, Any] | None = None
         self._reference_history_cache: dict[str, list[float]] = {}
         self._defensive_state: dict[str, Any] = {"mode": "NORMAL", "days_in_defensive": 0}
         self._defensive_state_date = datetime.now(timezone.utc).date()
@@ -2434,6 +2435,7 @@ class TradingBot:
             "orphan_positions": list(self._orphan_positions.keys()) if hasattr(self, "_orphan_positions") else [],
             "dynamic_win_rate": getattr(self, "_dynamic_win_rate", None),
             "last_error": self._last_error,
+            "last_blocked_multi_signal": getattr(self, "_last_blocked_multi_signal", None),
         }
         snapshot_path = self._config.data_dir / "snapshot.json"
         try:
@@ -2472,6 +2474,7 @@ class TradingBot:
                 else False
             ),
             "last_error": self._last_error,
+            "last_blocked_multi_signal": getattr(self, "_last_blocked_multi_signal", None),
         }
         heartbeat_path = self._config.data_dir / "heartbeat.json"
         try:
@@ -2800,15 +2803,22 @@ class TradingBot:
             )
         self._last_regimes[spec.display] = new_regime
 
-        # Obter volume actual
-        volume_started_at = time.monotonic()
-        current_volume = await self._data_feed.get_current_volume(contract)
-        if not await self._apply_ib_request_events(
-            self._connection.operational_events_since(volume_started_at),
-            spec=spec,
-            phase="live_volume",
-        ):
-            return
+        current_volume = indicators.get("current_volume")
+        if current_volume is not None:
+            logger.debug(
+                "Volume live reutilizado do snapshot de preço para %s: %.0f.",
+                spec.display,
+                float(current_volume),
+            )
+        else:
+            volume_started_at = time.monotonic()
+            current_volume = await self._data_feed.get_current_volume(contract)
+            if not await self._apply_ib_request_events(
+                self._connection.operational_events_since(volume_started_at),
+                spec=spec,
+                phase="live_volume",
+            ):
+                return
         volume: float = current_volume if current_volume is not None else 0.0
         closes = bars_df["close"].astype(float).tolist()
         rsi2 = calculate_rsi2(closes)
@@ -2898,6 +2908,11 @@ class TradingBot:
 
             action = str(new_signal.get("signal", "FLAT"))
             if action == "SELL_PUT":
+                self._record_blocked_multi_signal(
+                    spec,
+                    new_signal,
+                    reason="options_premium_audit_only_phase_3",
+                )
                 logger.info(
                     "Options Premium detectado para %s com strike=%s. "
                     "Modo auditável nesta fase; submissão automática fica para Fase 3.",
@@ -2905,11 +2920,18 @@ class TradingBot:
                     new_signal.get("metadata", {}).get("strike"),
                 )
             else:
+                self._record_blocked_multi_signal(
+                    spec,
+                    new_signal,
+                    reason="multi_instrument_execution_disabled_by_policy",
+                )
                 logger.warning(
-                    "Execução directa de sinais multi-instrumento desactivada por segurança "
-                    "até integração na state machine persistente: %s (%s).",
+                    "Sinal multi-instrumento detectado mas bloqueado por política: "
+                    "%s | action=%s | module=%s | reason=%s.",
                     spec.display,
                     action,
+                    new_signal.get("metadata", {}).get("module"),
+                    "multi_instrument_execution_disabled_by_policy",
                 )
 
         # 5. SE sinal valido E risco ok → criar grid
@@ -2934,6 +2956,24 @@ class TradingBot:
                 data_fresh=price_fresh,
                 warmup_ok=True,
             )
+
+    def _record_blocked_multi_signal(
+        self,
+        spec: InstrumentSpec,
+        signal_payload: dict[str, Any],
+        *,
+        reason: str,
+    ) -> None:
+        """Regista o último sinal multi-instrumento bloqueado por política operacional."""
+        self._last_blocked_multi_signal = {
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "symbol": spec.display,
+            "action": str(signal_payload.get("signal", "FLAT")),
+            "confidence": signal_payload.get("confidence"),
+            "module": signal_payload.get("metadata", {}).get("module"),
+            "reason": reason,
+            "policy_blocked": True,
+        }
 
     async def _submit_grid_level_bracket(
         self,

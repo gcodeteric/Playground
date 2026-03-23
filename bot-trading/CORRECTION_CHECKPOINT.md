@@ -1,8 +1,8 @@
 # CHECKPOINT — CORRECÇÃO DO BOT
-Última actualização: 2026-03-20 03:00 UTC
-Commit actual: cc7c4990c2a22ae3e8b04d3024f84c957aeff7bb
+Última actualização: 2026-03-23 14:49:36 UTC
+Commit actual: c519678e4801f17dd176ec5343262a660fa5c51c
 Python escolhido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe
-Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short -> 423 passed in 8.22s
+Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short -> 426 passed in 9.54s
 
 ## ESTADO DAS RONDAS
 [~] RONDA 0 — Baseline e congelamento (baseline capturado, validar git + OpenClaw ao retomar)
@@ -80,3 +80,19 @@ Testes baseline: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\pyth
 - `tests/test_data_feed.py`: adicionada cobertura para aceitar o ultimo fecho do `yfinance` como fresh.
 - Estado final: `FECHADO`.
 - Baseline novo registado: `423 passed in 8.22s`.
+## 2026-03-23 - OPERACIONAL P1-P5
+
+- Escopo desta ronda limitado a problemas operacionais visíveis em log; nenhuma activacao de execucao multi-instrumento foi introduzida.
+- `src/data_feed.py`: removido o `FutureWarning` de pandas ao extrair o ultimo valor numerico de Series/DataFrame devolvidos por `yfinance`; comportamento funcional mantido.
+- `src/data_feed.py`: a hierarquia de preco IB passou a aceitar `markPrice` antes de cair em `yfinance` e tambem reaproveita um snapshot IB tardio mas utilizavel antes do fallback externo.
+- `src/data_feed.py` + `main.py`: o volume do mesmo snapshot IB passa a ser reutilizado, evitando um pedido redundante de `current_volume` quando esse dado ja veio com o preco.
+- `main.py`: sinais multi-instrumento bloqueados por politica passam a ficar expostos em `heartbeat.json` e `snapshot.json` via `last_blocked_multi_signal`, alem de log estruturado com motivo explicito.
+- `tests/test_data_feed.py`: cobertura adicionada para `markPrice` IB utilizavel, propagacao de `current_volume` no snapshot live e reutilizacao de volume do snapshot.
+- `tests/test_main_audit.py`: cobertura adicionada para registo de sinal multi-instrumento bloqueado sem activar execucao e sem exigir pedido extra de volume quando o snapshot ja o traz.
+- Estado por problema:
+  - `P1` = `RESOLVIDO`
+  - `P2` = `RESOLVIDO`
+  - `P3` = `MITIGADO` (duplicacao obvia de volume reduzida; arquitectura global de pacing nao foi reescrita)
+  - `P4` = `RESOLVIDO`
+  - `P5` = `MANTIDO POR DESIGN`
+- Baseline novo validado: `426 passed in 9.54s`.

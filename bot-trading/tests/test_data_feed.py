@@ -234,7 +234,7 @@ class TestGetMarketData:
         expected_keys = {
             "sma25", "sma50", "sma200", "rsi14", "atr14",
             "bb_upper", "bb_middle", "bb_lower",
-            "volume_avg_20", "last_close", "current_price", "atr_avg_60",
+            "volume_avg_20", "last_close", "current_price", "current_volume", "atr_avg_60",
         }
         assert set(result.keys()) == expected_keys
 
@@ -277,12 +277,18 @@ class TestGetMarketData:
         contract = MagicMock()
         contract.symbol = "AAPL"
         data_feed.get_current_price_details = AsyncMock(
-            return_value={"price": 123.4567, "source": "last", "fresh": True},
+            return_value={
+                "price": 123.4567,
+                "source": "last",
+                "fresh": True,
+                "volume": 98_765.0,
+            },
         )
 
         result = await data_feed.get_market_data_live(contract, sample_bars_df)
 
         assert result["current_price"] == pytest.approx(123.4567, abs=1e-5)
+        assert result["current_volume"] == pytest.approx(98_765.0, abs=1e-5)
         assert result["price_source"] == "last"
         assert result["price_fresh"] is True
         assert result["last_close"] == pytest.approx(
@@ -299,13 +305,14 @@ class TestGetMarketData:
         contract = MagicMock()
         contract.symbol = "AAPL"
         data_feed.get_current_price_details = AsyncMock(
-            return_value={"price": None, "source": None, "fresh": False},
+            return_value={"price": None, "source": None, "fresh": False, "volume": None},
         )
 
         result = await data_feed.get_market_data_live(contract, sample_bars_df)
 
         expected_price = round(float(sample_bars_df["close"].iloc[-1]), 6)
         assert result["current_price"] == pytest.approx(expected_price, abs=1e-5)
+        assert result["current_volume"] is None
         assert result["price_source"] == "last_close"
         assert result["price_fresh"] is False
         assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
@@ -409,6 +416,34 @@ class TestCurrentSnapshotFallbacks:
         assert result == pytest.approx(100.5, abs=1e-5)
 
     @pytest.mark.asyncio
+    async def test_get_current_price_details_accepts_ib_mark_price_before_yfinance(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=101.25,
+            volume=50_000.0,
+        )
+        data_feed.get_price_yfinance = AsyncMock(return_value=99.99)
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result["price"] == pytest.approx(101.25, abs=1e-5)
+        assert result["source"] == "mark"
+        assert result["fresh"] is True
+        assert result["volume"] == pytest.approx(50_000.0, abs=1e-5)
+        data_feed.get_price_yfinance.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_get_current_price_uses_async_yfinance_when_ib_disconnected(
         self,
         data_feed,
@@ -453,6 +488,32 @@ class TestCurrentSnapshotFallbacks:
         assert result["price"] == pytest.approx(123.45, abs=1e-5)
         assert result["source"] == "yfinance"
         assert result["fresh"] is True
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_reuses_price_snapshot_volume_cache(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=100.0,
+            close=99.0,
+            bid=99.5,
+            ask=100.5,
+            markPrice=None,
+            volume=123_456.0,
+        )
+
+        price_details = await data_feed.get_current_price_details(contract)
+        volume = await data_feed.get_current_volume(contract)
+
+        assert price_details["volume"] == pytest.approx(123_456.0, abs=1e-5)
+        assert volume == pytest.approx(123_456.0, abs=1e-5)
+        mock_ib.reqMktData.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_current_volume_uses_async_yfinance_when_ib_disconnected(

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+from dataclasses import replace
 from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,7 +42,10 @@ def _build_bot_stub() -> TradingBot:
     bot._last_cycle_started_at = None
     bot._last_cycle_completed_at = None
     bot._last_error = None
+    bot._last_blocked_multi_signal = None
+    bot._last_regimes = {}
     bot._reference_history_cache = {}
+    bot._defensive_state = {"mode": "NORMAL", "days_in_defensive": 0}
     bot._running = True
     bot._shutdown_event = asyncio.Event()
     bot._capital = 100_000.0
@@ -605,6 +609,7 @@ async def test_handle_export_snapshot_writes_file(tmp_path):
     assert "timestamp" in snapshot
     assert snapshot["manual_pause"] is False
     assert snapshot["capital"] == 100_000.0
+    assert snapshot["last_blocked_multi_signal"] is None
 
 
 @pytest.mark.asyncio
@@ -1606,6 +1611,79 @@ async def test_process_symbol_blocks_entries_on_stale_price(monkeypatch):
     bot._attempt_grid_creation.assert_not_awaited()
 
 
+@pytest.mark.asyncio
+async def test_process_symbol_records_blocked_multi_signal_without_extra_volume_call(monkeypatch):
+    bot = _build_bot_stub()
+    spec = parse_watchlist_entry("AAPL")
+    bars_df = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=250, freq="B"),
+            "open": [100.0] * 250,
+            "high": [101.0] * 250,
+            "low": [99.0] * 250,
+            "close": [100.0] * 250,
+            "volume": [1000.0] * 250,
+        },
+    )
+    signal_result = replace(_build_signal_result(), signal=False)
+    bot._data_feed = SimpleNamespace(
+        qualify_contract=AsyncMock(return_value=True),
+        get_historical_bars=AsyncMock(return_value=bars_df),
+        get_market_data_live=AsyncMock(
+            return_value={
+                "last_close": 100.0,
+                "current_price": 100.0,
+                "current_volume": 1500.0,
+                "sma25": 100.0,
+                "sma50": 100.0,
+                "sma200": 100.0,
+                "rsi14": 45.0,
+                "atr14": 2.0,
+                "bb_lower": 95.0,
+                "volume_avg_20": 1000.0,
+                "atr_avg_60": 2.0,
+                "price_source": "mark",
+                "price_fresh": True,
+            },
+        ),
+    )
+    bot._handle_session_transition = AsyncMock()
+    bot._check_warmup = AsyncMock(return_value=True)
+    bot._attempt_grid_creation = AsyncMock()
+
+    monkeypatch.setattr("main.is_market_open", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "main.get_session_state",
+        lambda _spec: SimpleNamespace(
+            can_open_new_grid=True,
+            is_pre_close=False,
+            status="ABERTA",
+        ),
+    )
+    monkeypatch.setattr("main.build_contract", lambda _spec: MagicMock(symbol="AAPL"))
+    monkeypatch.setattr("main.detect_regime", lambda **_kwargs: _build_regime_info())
+    monkeypatch.setattr("main.kotegawa_signal", lambda **_kwargs: signal_result)
+    monkeypatch.setattr(
+        "main.process_new_modules",
+        AsyncMock(
+            return_value={
+                "signal": "LONG",
+                "confidence": "ALTO",
+                "metadata": {"module": "gap_fade"},
+            },
+        ),
+    )
+
+    await TradingBot._process_symbol(bot, spec)
+
+    assert bot._last_blocked_multi_signal is not None
+    assert bot._last_blocked_multi_signal["symbol"] == "AAPL"
+    assert bot._last_blocked_multi_signal["action"] == "LONG"
+    assert bot._last_blocked_multi_signal["module"] == "gap_fade"
+    assert bot._last_blocked_multi_signal["reason"] == "multi_instrument_execution_disabled_by_policy"
+    bot._attempt_grid_creation.assert_not_awaited()
+
+
 # ------------------------------------------------------------------
 # _write_heartbeat tests
 # ------------------------------------------------------------------
@@ -1629,9 +1707,19 @@ def test_write_heartbeat_captures_error_state(tmp_path):
     bot._config = SimpleNamespace(data_dir=tmp_path)
     bot._connection = SimpleNamespace(is_connected=False)
     bot._last_error = "timeout"
+    bot._last_blocked_multi_signal = {
+        "symbol": "AAPL",
+        "action": "LONG",
+        "module": "gap_fade",
+        "reason": "multi_instrument_execution_disabled_by_policy",
+        "policy_blocked": True,
+        "timestamp": "2026-03-23T10:00:00+00:00",
+        "confidence": "ALTO",
+    }
 
     TradingBot._write_heartbeat(bot)
 
     hb = json.loads((tmp_path / "heartbeat.json").read_text(encoding="utf-8"))
     assert hb["ib_connected"] is False
     assert hb["last_error"] == "timeout"
+    assert hb["last_blocked_multi_signal"]["reason"] == "multi_instrument_execution_disabled_by_policy"

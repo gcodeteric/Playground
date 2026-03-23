@@ -1,5 +1,5 @@
 # AUDIT REPORT — bot-trading
-Branch actual: `main` | Commit actual: `4b32b58f88432d0aebd6c86fadb4aa384c9c2d0c` | Data/hora UTC: `2026-03-20T22:41:00Z` | Working tree no início da ronda: `clean`
+Branch actual: `main` | Commit actual: `c519678e4801f17dd176ec5343262a660fa5c51c` | Data/hora UTC: `2026-03-23T14:49:36Z` | Working tree no início da ronda: `dirty (artefactos runtime + alteracoes desta ronda)`
 Score audit total actual: `100/100`
 
 ---
@@ -1302,3 +1302,37 @@ metrics[2].metric("PnL não realizado", _fmt_eur(kpis.get("unrealized_pnl")))
 - Cobertura adicionada em `tests/test_main_audit.py` e `tests/test_data_feed.py`.
 - Estado actual no audit: `H10 = FECHADO`, `YFINANCE_STALE = RESOLVIDO`.
 - Baseline registado para esta correcao: `423 passed in 8.22s`.
+## 2026-03-23 - Delta operacional dos logs actuais
+
+### Escopo
+- Ronda limitada a 5 pontos operacionais observados em runtime: `FutureWarning`, aceitacao de delayed/dados IB utilizaveis antes de `yfinance`, reducao de chamadas redundantes, observabilidade de sinais multi-instrumento bloqueados e preservacao do modo audit-only desses sinais.
+- Nao houve alteracoes em `src/risk_manager.py` nem `src/execution.py`.
+- Nao foi activada execucao automatica de `gap_fade` nem de qualquer modulo multi-instrumento.
+
+### Estado desta ronda
+| ID | Estado | Nota |
+| --- | --- | --- |
+| `P1` | `RESOLVIDO` | `src/data_feed.py` deixou de chamar `float()` sobre `Series` de um elemento; a extraccao passou a ser explicita e compatível com pandas futuro. |
+| `P2` | `RESOLVIDO` | O feed aceita `markPrice` do IB como preco utilizavel e tenta um ultimo snapshot IB tardio antes de recorrer a `yfinance`. |
+| `P3` | `MITIGADO` | O volume do mesmo snapshot live passou a ser reutilizado, reduzindo um pedido redundante por simbolo; nao houve reescrita mais ampla de pacing/historical bars. |
+| `P4` | `RESOLVIDO` | Sinais multi-instrumento bloqueados por politica passam a ficar visiveis em log estruturado, `heartbeat.json` e `snapshot.json`. |
+| `P5` | `MANTIDO POR DESIGN` | `gap_fade` continua audit-only; a ronda melhorou observabilidade, nao execucao. |
+
+### Evidencia tecnica
+- `src/data_feed.py`: adicionadas helpers para extraccao numerica segura e construcao de snapshot IB (`last`, `mid`, `mark`, `close`) com volume associado quando disponivel.
+- `src/data_feed.py`: `get_market_data_live()` passou a expor `current_volume` quando o ticker IB o fornece, evitando um segundo pedido obvio no mesmo ciclo.
+- `main.py`: `_process_symbol()` reutiliza `current_volume` do snapshot antes de chamar `get_current_volume()`.
+- `main.py`: novo registo `last_blocked_multi_signal` com `symbol`, `action`, `module`, `reason`, `confidence`, `policy_blocked` e `timestamp`.
+- `tests/test_data_feed.py` e `tests/test_main_audit.py`: cobertura adicional para os ramos novos.
+
+### Validacao
+- Suite completa executada com:
+  - `C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe -m pytest tests/ -q --tb=short`
+- Resultado real:
+  - `426 passed in 9.54s`
+
+### Leitura honesta
+- `P1` era bug real de compatibilidade futura com pandas.
+- `P2` e `P3` eram limitacoes operacionais: o bot estava a desperdiçar dados do IB e a gerar fallback/pacing desnecessarios.
+- `P4` era deficit de observabilidade: o sistema fazia a coisa certa por seguranca, mas comunicava mal esse bloqueio.
+- `P5` continua a ser decisao de design: sem execucao automatica multi-instrumento nesta ronda.

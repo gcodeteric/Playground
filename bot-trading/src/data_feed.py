@@ -735,7 +735,7 @@ class DataFeed:
                 if not df.empty and "Close" in df
                 else pd.Series(dtype=float)
             )
-            price = float(close_series.iloc[-1]) if not close_series.empty else None
+            price = _extract_last_numeric_value(close_series)
             if price is not None:
                 self._cache.set(cache_key, price)
                 self._cache.set(asof_cache_key, str(close_series.index[-1]))
@@ -765,8 +765,8 @@ class DataFeed:
                 timeout=5.0,
             )
             volume = (
-                float(df["Volume"].dropna().iloc[-1])
-                if not df.empty and "Volume" in df and not df["Volume"].dropna().empty
+                _extract_last_numeric_value(df["Volume"].dropna())
+                if not df.empty and "Volume" in df
                 else None
             )
             if volume is not None:
@@ -922,7 +922,7 @@ class DataFeed:
         Obtém o preço actual com metadados de fonte/frescura.
 
         Returns:
-            ``{"price": float|None, "source": str|None, "fresh": bool}``
+            ``{"price": float|None, "source": str|None, "fresh": bool, "volume": float|None}``
         """
         contract_key = self._contract_cache_key(contract)
         cache_key = f"price_snapshot:{contract_key}"
@@ -960,30 +960,30 @@ class DataFeed:
             deadline = time.monotonic() + 10.0
             while time.monotonic() < deadline:
                 await asyncio.sleep(0.1)
-                if _valid_price(ticker.last):
-                    price = float(ticker.last)
-                    snapshot = {"price": price, "source": "last", "fresh": True}
+                snapshot = _build_price_snapshot_from_ticker(ticker)
+                if snapshot is not None:
                     self._cache.set(cache_key, snapshot)
                     self.ib.cancelMktData(contract)
-                    logger.debug("Preço de %s: %.4f (last).", contract.symbol, price)
-                    return snapshot
-                if _valid_price(ticker.bid) and _valid_price(ticker.ask):
-                    price = round((float(ticker.bid) + float(ticker.ask)) / 2.0, 6)
-                    snapshot = {"price": price, "source": "mid", "fresh": True}
-                    self._cache.set(cache_key, snapshot)
-                    self.ib.cancelMktData(contract)
-                    logger.debug("Preço de %s: %.4f (mid).", contract.symbol, price)
-                    return snapshot
-                if _valid_price(ticker.close):
-                    price = float(ticker.close)
-                    snapshot = {"price": price, "source": "close", "fresh": False}
-                    self._cache.set(cache_key, snapshot)
-                    self.ib.cancelMktData(contract)
-                    logger.debug("Preço de %s: %.4f (close).", contract.symbol, price)
+                    logger.debug(
+                        "Preço de %s: %.4f (%s).",
+                        contract.symbol,
+                        float(snapshot["price"]),
+                        snapshot["source"],
+                    )
                     return snapshot
 
             # Timeout — cancelar subscrição
+            snapshot = _build_price_snapshot_from_ticker(ticker)
             self.ib.cancelMktData(contract)
+            if snapshot is not None:
+                self._cache.set(cache_key, snapshot)
+                logger.info(
+                    "Preço IB tardio mas utilizável para %s — a usar %s %.4f.",
+                    contract.symbol,
+                    snapshot["source"],
+                    float(snapshot["price"]),
+                )
+                return snapshot
             logger.warning("Timeout ao obter preço de %s.", contract.symbol)
             price = await self.get_price_yfinance(symbol)
             if price is not None:
@@ -992,6 +992,7 @@ class DataFeed:
                     "price": float(price),
                     "source": "yfinance",
                     "fresh": _is_yfinance_quote_fresh(yfinance_asof),
+                    "volume": None,
                 }
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
@@ -1022,6 +1023,7 @@ class DataFeed:
                     "price": float(price),
                     "source": "yfinance",
                     "fresh": _is_yfinance_quote_fresh(yfinance_asof),
+                    "volume": None,
                 }
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
@@ -1068,6 +1070,19 @@ class DataFeed:
         cached = self._cache.get(cache_key)
         if cached is not None:
             return cached
+
+        price_snapshot = self._cache.get(f"price_snapshot:{contract_key}")
+        if isinstance(price_snapshot, dict):
+            cached_volume = price_snapshot.get("volume")
+            if cached_volume is not None:
+                volume = float(cached_volume)
+                self._cache.set(cache_key, volume)
+                logger.debug(
+                    "Volume reutilizado do snapshot de preço para %s: %.0f.",
+                    contract.symbol,
+                    volume,
+                )
+                return volume
 
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
@@ -1309,6 +1324,7 @@ class DataFeed:
             "volume_avg_20": None,
             "last_close": None,
             "current_price": None,
+            "current_volume": None,
             "atr_avg_60": None,
         }
 
@@ -1420,6 +1436,11 @@ class DataFeed:
         indicators["current_price"] = (
             round(float(live_price), 6) if live_price is not None else None
         )
+        indicators["current_volume"] = (
+            float(price_details["volume"])
+            if price_details.get("volume") is not None
+            else None
+        )
         indicators["price_source"] = price_source
         indicators["price_fresh"] = price_fresh
         return indicators
@@ -1455,6 +1476,76 @@ def _fmt(value: float | None) -> str:
     if value is None:
         return "N/A"
     return f"{value:.4f}"
+
+
+def _extract_last_numeric_value(values: Any) -> float | None:
+    """Extrai o último valor numérico de Series/DataFrame sem depender de coerções implícitas."""
+    if values is None:
+        return None
+
+    if isinstance(values, pd.DataFrame):
+        if values.empty:
+            return None
+        return _extract_last_numeric_value(values.iloc[-1])
+
+    if isinstance(values, pd.Series):
+        if values.empty:
+            return None
+        last = values.iloc[-1]
+        if isinstance(last, pd.Series):
+            return _extract_last_numeric_value(last.dropna())
+        if pd.isna(last):
+            return None
+        return float(last)
+
+    if pd.isna(values):
+        return None
+    return float(values)
+
+
+def _extract_ticker_volume(ticker: Any) -> float | None:
+    """Extrai volume utilizável do ticker quando disponível no mesmo snapshot."""
+    volume = getattr(ticker, "volume", None)
+    return float(volume) if _valid_price(volume) else None
+
+
+def _build_price_snapshot_from_ticker(ticker: Any) -> dict[str, Any] | None:
+    """Constrói o snapshot de preço a partir do ticker IB, priorizando dados IB antes de fallback externo."""
+    volume = _extract_ticker_volume(ticker)
+
+    if _valid_price(getattr(ticker, "last", None)):
+        return {
+            "price": float(ticker.last),
+            "source": "last",
+            "fresh": True,
+            "volume": volume,
+        }
+
+    if _valid_price(getattr(ticker, "bid", None)) and _valid_price(getattr(ticker, "ask", None)):
+        return {
+            "price": round((float(ticker.bid) + float(ticker.ask)) / 2.0, 6),
+            "source": "mid",
+            "fresh": True,
+            "volume": volume,
+        }
+
+    if _valid_price(getattr(ticker, "markPrice", None)):
+        return {
+            "price": float(ticker.markPrice),
+            "source": "mark",
+            "fresh": True,
+            "volume": volume,
+        }
+
+    if _valid_price(getattr(ticker, "close", None)):
+        return {
+            "price": float(ticker.close),
+            "source": "close",
+            "fresh": False,
+            "volume": volume,
+        }
+
+    return None
 
 
 def _coerce_utc_date(value: Any) -> date | None:
