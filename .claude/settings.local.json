@@ -4,7 +4,12 @@
       "Bash(grep -E \"\\\\.py$\")",
       "Bash(grep -l \"kotegawa\\\\|regime\\\\|structure\" /c/Users/berna/Desktop/Playground/bot-trading/src/*.py)",
       "Bash(python -m pytest --collect-only)",
-      "Bash(grep -l \"reqMktData\\\\|reqHistoricalData\\\\|ticker\\\\|volume\\\\|price\" /c/Users/berna/Desktop/Playground/bot-trading/src/*.py)"
+      "Bash(grep -l \"reqMktData\\\\|reqHistoricalData\\\\|ticker\\\\|volume\\\\|price\" /c/Users/berna/Desktop/Playground/bot-trading/src/*.py)",
+      "Bash(find /c/Users/berna/Desktop/Playground/bot-trading -maxdepth 3 \\\\\\(-name *.bat -o -name *.cmd -o -name *.ps1 \\\\\\) -type f)",
+      "Bash(find C:UsersbernaDesktopPlaygroundbot-tradingtests -type f -name *.py)",
+      "Bash(grep -n \"def rehydrate_grid_orders\\\\|def sync_tracking_from_open_orders\" *.py)",
+      "Bash(find /c/Users/berna/Desktop/Playground/bot-trading -maxdepth 3 -name *autologin* -o -name *auto_login*)",
+      "Bash(xargs grep:*)"
     ]
   }
 }
