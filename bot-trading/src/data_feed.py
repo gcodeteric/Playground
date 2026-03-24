@@ -419,7 +419,10 @@ class IBConnection:
             self._dispatch_error_callback(decision)
             return
 
-        if error_code in {1100, 1102, 2104, 2106, 354, 10197, _IB_PACING_ERROR_CODE}:
+        # Codigos informativos (centro de dados OK/lost/inactive) — nivel DEBUG
+        if error_code in {2103, 2104, 2105, 2106, 2107, 2108, 2119, 2157, 2158}:
+            logger.debug("Codigo IB %d: %s", error_code, error_string)
+        elif error_code in {1100, 1102, 354, 10197, _IB_PACING_ERROR_CODE}:
             logger.warning("Codigo IB %d: %s", error_code, error_string)
 
     def _dispatch_error_callback(self, decision: IBErrorPolicyDecision) -> None:

@@ -589,6 +589,7 @@ class TradingBot:
         self._last_cycle_completed_at: datetime | None = None
         self._last_error: str | None = None
         self._last_blocked_multi_signal: dict[str, Any] | None = None
+        self._cycle_count: int = 0
         self._reference_history_cache: dict[str, list[float]] = {}
         self._defensive_state: dict[str, Any] = {"mode": "NORMAL", "days_in_defensive": 0}
         self._defensive_state_date = datetime.now(timezone.utc).date()
@@ -1696,7 +1697,10 @@ class TradingBot:
             ) if self._telegram else None
         )
 
-        # Persistir estado do preflight para observabilidade externa
+        self._persist_preflight_state()
+
+    def _persist_preflight_state(self) -> None:
+        """Persiste estado do preflight/reconciliacao para observabilidade externa."""
         state_file = self._config.data_dir / "preflight_state.json"
         telegram_status = "disabled"
         if self._telegram is not None:
@@ -2558,6 +2562,7 @@ class TradingBot:
                 "entradas bloqueadas ate confirmacao manual."
             )
             self._entry_halt_reason = "reconciliation_failed"
+        self._persist_preflight_state()
 
     # ------------------------------------------------------------------
     # Command consumer — ficheiros em data/commands/
@@ -2726,6 +2731,7 @@ class TradingBot:
                 else False
             ),
             "last_error": self._last_error,
+            "cycle_count": getattr(self, "_cycle_count", 0),
             "last_blocked_multi_signal": getattr(self, "_last_blocked_multi_signal", None),
         }
         heartbeat_path = self._config.data_dir / "heartbeat.json"
@@ -2864,7 +2870,8 @@ class TradingBot:
         self._last_cycle_started_at = datetime.now(timezone.utc)
 
         await self._process_command_queue()
-        logger.debug("--- Inicio de ciclo ---")
+        self._cycle_count += 1
+        logger.debug("--- Inicio de ciclo #%d ---", self._cycle_count)
         self._reference_history_cache.clear()
         self._advance_defensive_day_counter()
         self._refresh_period_pnl()

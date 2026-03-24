@@ -265,7 +265,11 @@ class OrderManager:
     ) -> None:
         """Callback invocado pelo ib_insync quando ocorre um erro do IB API."""
         # Codigos informativos (nao sao erros reais)
-        informational_codes = {2104, 2106, 2158, 2119}
+        # 2103/2105/2157 = farm/HMDS/sec-def lost (reconexao automatica)
+        # 2104/2106/2158 = farm/HMDS/sec-def OK
+        # 2107/2108 = HMDS/farm inactivo sob demanda
+        # 2119 = market data re-route
+        informational_codes = {2103, 2104, 2105, 2106, 2107, 2108, 2119, 2157, 2158}
         if errorCode in informational_codes:
             return
 

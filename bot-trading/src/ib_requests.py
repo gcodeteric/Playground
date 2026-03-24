@@ -98,6 +98,13 @@ def classify_ib_error(error_code: int, error_string: str) -> IBErrorPolicyDecisi
             scope="order",
             severity="warning",
         ),
+        10089: IBErrorPolicyDecision(
+            error_code=10089,
+            message=error_string,
+            action="symbol_skip_no_retry",
+            scope="request",
+            severity="info",
+        ),
     }
     return policy.get(error_code)
 

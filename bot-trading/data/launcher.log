@@ -1,0 +1,36 @@
+[2026-03-24 06:51:14] LAUNCHER INICIADO (teste simulado)
+[2026-03-24 06:51:14] ETAPA 1: TWS nao disponivel (teste)
+[2026-03-24 06:51:14] ETAPA 4: Probe TCP em 127.0.0.1:7497 (timeout=5s)
+[2026-03-24 06:51:20] ERRO: API TWS nao respondeu na porta 7497
+ 
+============================================================ 
+[24/03/2026  9:07:01,44] LAUNCHER INICIADO 
+[24/03/2026  9:07:01,45] Python resolvido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe 
+[24/03/2026  9:07:01,59] ETAPA 1: A abrir TWS (C:\Jts\tws.exe) 
+[24/03/2026  9:07:01,75] ETAPA 1: TWS detectado como processo activo 
+[24/03/2026  9:07:06,15] ETAPA 2: A executar tws_autologin.py 
+[24/03/2026  9:07:51,34] ETAPA 2: Auto-login concluido com sucesso 
+[24/03/2026  9:07:51,36] ETAPA 3: Buffer pos-login iniciado (60s) 
+[24/03/2026  9:08:51,20] ETAPA 3: Buffer pos-login concluido 
+[24/03/2026  9:08:51,21] ETAPA 4: Probe TCP em 127.0.0.1:7497 (timeout=120s) 
+[24/03/2026  9:08:51,34] ETAPA 4: API TWS pronta na porta 7497 
+[24/03/2026  9:08:51,35] ETAPA 5: A lancar dashboard (Streamlit porta 8501) 
+[24/03/2026  9:08:54,33] ETAPA 5: Dashboard lancado e browser aberto 
+[24/03/2026  9:08:54,34] ETAPA 6: A lancar bot (main.py) 
+[24/03/2026 11:41:47,22] ETAPA 6: Bot terminou com exit code 1073807364 
+ 
+============================================================ 
+[24/03/2026 11:45:40,90] LAUNCHER INICIADO 
+[24/03/2026 11:45:40,91] Lock anterior removido: data\bot.instance.lock 
+[24/03/2026 11:45:40,92] Python resolvido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe 
+[24/03/2026 11:45:41,04] ETAPA 1: A abrir TWS (C:\Jts\tws.exe) 
+[24/03/2026 11:45:41,16] ETAPA 1: TWS detectado como processo activo 
+[24/03/2026 11:45:46,12] ETAPA 2: A executar tws_autologin.py 
+[24/03/2026 11:46:28,68] ETAPA 2: Auto-login concluido com sucesso 
+[24/03/2026 11:46:28,69] ETAPA 3: Buffer pos-login iniciado (60s) 
+[24/03/2026 11:47:28,15] ETAPA 3: Buffer pos-login concluido 
+[24/03/2026 11:47:28,16] ETAPA 4: Probe TCP em 127.0.0.1:7497 (timeout=120s) 
+[24/03/2026 11:47:28,30] ETAPA 4: API TWS pronta na porta 7497 
+[24/03/2026 11:47:28,31] ETAPA 5: A lancar dashboard (Streamlit porta 8501) 
+[24/03/2026 11:47:31,28] ETAPA 5: Dashboard lancado e browser aberto 
+[24/03/2026 11:47:31,28] ETAPA 6: A lancar bot (main.py) 

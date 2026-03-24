@@ -44,6 +44,7 @@ def _build_bot_stub() -> TradingBot:
     bot._last_cycle_completed_at = None
     bot._last_error = None
     bot._last_blocked_multi_signal = None
+    bot._cycle_count = 0
     bot._last_regimes = {}
     bot._reference_history_cache = {}
     bot._defensive_state = {"mode": "NORMAL", "days_in_defensive": 0}
