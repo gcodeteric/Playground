@@ -139,6 +139,42 @@ async def test_order_error_sends_operational_alert(order_manager):
     alert_cb.assert_awaited_once()
 
 
+@pytest.mark.asyncio
+async def test_order_error_ignores_market_data_cleanup_300(order_manager, caplog):
+    alert_cb = AsyncMock()
+    order_manager._request_executor.set_alert_callback(alert_cb)
+
+    with caplog.at_level("DEBUG", logger="src.execution"):
+        order_manager._on_error(
+            reqId=7,
+            errorCode=300,
+            errorString="Can't find EId with tickerId:7",
+            contract=None,
+        )
+        await asyncio.sleep(0)
+
+    alert_cb.assert_not_awaited()
+    assert "Erro IB de cleanup de market data ignorado" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_order_error_ignores_request_scoped_market_data_event(order_manager, caplog):
+    alert_cb = AsyncMock()
+    order_manager._request_executor.set_alert_callback(alert_cb)
+
+    with caplog.at_level("DEBUG", logger="src.execution"):
+        order_manager._on_error(
+            reqId=9,
+            errorCode=10167,
+            errorString="Requested market data is not subscribed. Delayed market data is available.",
+            contract=MagicMock(symbol="QQQ"),
+        )
+        await asyncio.sleep(0)
+
+    alert_cb.assert_not_awaited()
+    assert "Erro IB request-scoped delegado para data_feed" in caplog.text
+
+
 # ===================================================================
 # Tests: submit_bracket_order (mocked IB)
 # ===================================================================

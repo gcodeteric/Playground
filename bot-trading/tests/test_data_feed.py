@@ -31,7 +31,7 @@ from src.data_feed import (
     get_warmup_missing_rules,
     validate_warmup,
 )
-from src.ib_requests import IBRateLimiter
+from src.ib_requests import IBErrorPolicyDecision, IBRateLimiter
 
 
 # ===================================================================
@@ -192,6 +192,22 @@ class TestIBConnectionInit:
         assert events[0].action == "symbol_skip"
         assert events[0].scope == "request"
 
+    def test_on_error_records_delayed_subscription_as_degraded_market_data(self, mock_ib):
+        with patch("src.data_feed.IB", return_value=mock_ib):
+            conn = IBConnection()
+
+        conn._on_error(
+            req_id=4,
+            error_code=10167,
+            error_string="Requested market data is not subscribed. Delayed market data is available.",
+            contract=None,
+        )
+
+        events = conn.operational_events_since(0.0)
+        assert len(events) == 1
+        assert events[0].action == "degraded_market_data"
+        assert events[0].scope == "request"
+
 
 class TestIBConnectionConnect:
     @pytest.mark.asyncio
@@ -213,6 +229,7 @@ class TestIBConnectionConnect:
         mock_ib.reqMarketDataType.assert_called_once_with(3)
         assert conn._connected is True
         assert conn._connection_state == "CONNECTED"
+        assert conn._market_data_type == 3
 
     @pytest.mark.asyncio
     async def test_connect_timeout_returns_false(self, mock_ib):
@@ -408,6 +425,8 @@ class TestGetMarketData:
                 "source": "last",
                 "fresh": True,
                 "volume": 98_765.0,
+                "quality": "ib_reliable",
+                "execution_ready": True,
             },
         )
 
@@ -417,6 +436,8 @@ class TestGetMarketData:
         assert result["current_volume"] == pytest.approx(98_765.0, abs=1e-5)
         assert result["price_source"] == "last"
         assert result["price_fresh"] is True
+        assert result["price_quality"] == "ib_reliable"
+        assert result["price_execution_ready"] is True
         assert result["last_close"] == pytest.approx(
             float(sample_bars_df["close"].iloc[-1]),
             abs=1e-5,
@@ -431,7 +452,14 @@ class TestGetMarketData:
         contract = MagicMock()
         contract.symbol = "AAPL"
         data_feed.get_current_price_details = AsyncMock(
-            return_value={"price": None, "source": None, "fresh": False, "volume": None},
+            return_value={
+                "price": None,
+                "source": None,
+                "fresh": False,
+                "volume": None,
+                "quality": "unavailable",
+                "execution_ready": False,
+            },
         )
 
         result = await data_feed.get_market_data_live(contract, sample_bars_df)
@@ -441,6 +469,8 @@ class TestGetMarketData:
         assert result["current_volume"] is None
         assert result["price_source"] == "last_close"
         assert result["price_fresh"] is False
+        assert result["price_quality"] == "unavailable"
+        assert result["price_execution_ready"] is False
         assert result["last_close"] == pytest.approx(expected_price, abs=1e-5)
 
     @pytest.mark.asyncio
@@ -452,7 +482,14 @@ class TestGetMarketData:
         contract = MagicMock()
         contract.symbol = "AAPL"
         data_feed.get_current_price_details = AsyncMock(
-            return_value={"price": 122.25, "source": "yfinance", "fresh": True, "volume": None},
+            return_value={
+                "price": 122.25,
+                "source": "yfinance",
+                "fresh": True,
+                "volume": None,
+                "quality": "yfinance_fallback",
+                "execution_ready": False,
+            },
         )
 
         result = await data_feed.get_market_data_live(contract, sample_bars_df)
@@ -461,6 +498,8 @@ class TestGetMarketData:
         assert result["current_volume"] is None
         assert result["price_source"] == "yfinance"
         assert result["price_fresh"] is True
+        assert result["price_quality"] == "yfinance_fallback"
+        assert result["price_execution_ready"] is False
 
     def test_sma_values_are_reasonable(self, data_feed, sample_bars_df):
         contract = MagicMock()
@@ -716,7 +755,14 @@ class TestCurrentSnapshotFallbacks:
 
         result = await data_feed.get_current_price_details(contract)
 
-        assert result == {"price": 101.75, "source": "last", "fresh": True, "volume": None}
+        assert result == {
+            "price": 101.75,
+            "source": "last",
+            "fresh": True,
+            "volume": None,
+            "quality": "ib_reliable",
+            "execution_ready": True,
+        }
 
     @pytest.mark.asyncio
     async def test_get_current_price_details_uses_midpoint_source_when_last_missing(
@@ -739,7 +785,79 @@ class TestCurrentSnapshotFallbacks:
 
         result = await data_feed.get_current_price_details(contract)
 
-        assert result == {"price": 100.5, "source": "mid", "fresh": True, "volume": None}
+        assert result == {
+            "price": 100.5,
+            "source": "mid",
+            "fresh": True,
+            "volume": None,
+            "quality": "ib_reliable",
+            "execution_ready": True,
+        }
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_marks_delayed_mode_as_not_execution_ready(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_connection._market_data_type = 3
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=101.25,
+            close=100.0,
+            bid=101.0,
+            ask=101.5,
+            markPrice=None,
+            volume=None,
+        )
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result["price"] == pytest.approx(101.25, abs=1e-5)
+        assert result["source"] == "last"
+        assert result["fresh"] is True
+        assert result["quality"] == "ib_delayed_mode"
+        assert result["execution_ready"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_marks_subscription_limited_ib_snapshot_as_not_execution_ready(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("SPY")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_connection.operational_events_since = MagicMock(
+            return_value=[
+                IBErrorPolicyDecision(
+                    error_code=10089,
+                    message="subscription required",
+                    action="symbol_skip_no_retry",
+                    scope="request",
+                    severity="warning",
+                ),
+            ],
+        )
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=653.18,
+            close=652.5,
+            bid=653.0,
+            ask=653.36,
+            markPrice=None,
+            volume=None,
+        )
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result["price"] == pytest.approx(653.18, abs=1e-5)
+        assert result["source"] == "last"
+        assert result["fresh"] is True
+        assert result["quality"] == "ib_subscription_limited"
+        assert result["execution_ready"] is False
 
     @pytest.mark.asyncio
     async def test_get_current_price_details_accepts_ib_mark_price_before_yfinance(
@@ -767,6 +885,8 @@ class TestCurrentSnapshotFallbacks:
         assert result["source"] == "mark"
         assert result["fresh"] is True
         assert result["volume"] == pytest.approx(50_000.0, abs=1e-5)
+        assert result["quality"] == "ib_reliable"
+        assert result["execution_ready"] is True
         data_feed.get_price_yfinance.assert_not_awaited()
 
     @pytest.mark.asyncio
@@ -787,16 +907,28 @@ class TestCurrentSnapshotFallbacks:
             volume=None,
         )
         data_feed.get_price_yfinance = AsyncMock(return_value=123.45)
+        latest_close = pd.Timestamp.now(tz="UTC").normalize() - pd.offsets.BDay(1)
         data_feed._cache.set(
             "yfinance_price:AAPL:asof",
-            "2026-03-23 00:00:00+00:00",
+            str(latest_close),
         )
         async def _run(_operation_name, _request_key, func, **_kwargs):
             return await func()
 
         data_feed._request_executor.run = AsyncMock(side_effect=_run)
+        clock = {"now": 0.0}
 
-        with patch("src.data_feed.time.monotonic", side_effect=[0.0, 10.1, 10.2, 10.3]):
+        async def _fake_sleep(_delay: float):
+            clock["now"] += 10.1
+            return None
+
+        def _fake_monotonic():
+            return clock["now"]
+
+        with (
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic),
+        ):
             result = await data_feed.get_current_price_details(contract)
 
         assert result == {
@@ -804,8 +936,70 @@ class TestCurrentSnapshotFallbacks:
             "source": "yfinance",
             "fresh": True,
             "volume": None,
+            "quality": "yfinance_fallback",
+            "execution_ready": False,
         }
         data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_short_circuits_subscription_limited_request_to_yfinance(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("SPY")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_connection.operational_events_since = MagicMock(
+            return_value=[
+                IBErrorPolicyDecision(
+                    error_code=10089,
+                    message="subscription required",
+                    action="symbol_skip_no_retry",
+                    scope="request",
+                    severity="warning",
+                ),
+            ],
+        )
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            last=None,
+            close=None,
+            bid=None,
+            ask=None,
+            markPrice=None,
+            volume=None,
+        )
+        data_feed.get_price_yfinance = AsyncMock(return_value=653.18)
+        latest_close = pd.Timestamp.now(tz="UTC").normalize() - pd.offsets.BDay(1)
+        data_feed._cache.set(
+            "yfinance_price:SPY:asof",
+            str(latest_close),
+        )
+        sleep_calls: list[float] = []
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        async def _fake_sleep(delay: float):
+            sleep_calls.append(delay)
+            return None
+
+        monotonic_values = iter([0.0, 0.0, 0.1])
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=lambda: next(monotonic_values, 0.1)),
+        ):
+            result = await data_feed.get_current_price_details(contract)
+
+        assert result["price"] == pytest.approx(653.18, abs=1e-5)
+        assert result["source"] == "yfinance"
+        assert result["quality"] == "yfinance_fallback"
+        assert result["execution_ready"] is False
+        assert sleep_calls == [0.1]
+        data_feed.get_price_yfinance.assert_awaited_once_with("SPY")
         mock_ib.cancelMktData.assert_called_once_with(contract)
 
     @pytest.mark.asyncio
@@ -818,9 +1012,10 @@ class TestCurrentSnapshotFallbacks:
         contract = _build_contract("AAPL")
         mock_connection.ensure_connected = AsyncMock(return_value=True)
         data_feed.get_price_yfinance = AsyncMock(return_value=111.11)
+        latest_close = pd.Timestamp.now(tz="UTC").normalize() - pd.offsets.BDay(1)
         data_feed._cache.set(
             "yfinance_price:AAPL:asof",
-            "2026-03-23 00:00:00+00:00",
+            str(latest_close),
         )
         data_feed._request_executor.run = AsyncMock(side_effect=Exception("ib exploded"))
 
@@ -831,6 +1026,8 @@ class TestCurrentSnapshotFallbacks:
             "source": "yfinance",
             "fresh": True,
             "volume": None,
+            "quality": "yfinance_fallback",
+            "execution_ready": False,
         }
         data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
         mock_ib.cancelMktData.assert_called_once_with(contract)
@@ -847,7 +1044,13 @@ class TestCurrentSnapshotFallbacks:
 
         result = await data_feed.get_current_price_details(contract)
 
-        assert result == {"price": None, "source": None, "fresh": False}
+        assert result == {
+            "price": None,
+            "source": None,
+            "fresh": False,
+            "quality": "unavailable",
+            "execution_ready": False,
+        }
         data_feed.get_price_yfinance.assert_awaited_once_with("AAPL")
 
     @pytest.mark.asyncio
@@ -895,6 +1098,8 @@ class TestCurrentSnapshotFallbacks:
         assert result["price"] == pytest.approx(123.45, abs=1e-5)
         assert result["source"] == "yfinance"
         assert result["fresh"] is True
+        assert result["quality"] == "yfinance_fallback"
+        assert result["execution_ready"] is False
 
     @pytest.mark.asyncio
     async def test_get_price_yfinance_success_sets_price_and_asof_cache(
@@ -1038,17 +1243,66 @@ class TestCurrentSnapshotFallbacks:
         data_feed._request_executor.run = AsyncMock(side_effect=_run)
         clock = {"now": 0.0}
 
-        def _fake_monotonic():
-            current = clock["now"]
-            if current == 0.0:
-                clock["now"] = 10.1
-            return current
+        async def _fake_sleep(_delay: float):
+            clock["now"] += 10.1
+            return None
 
-        with patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic):
+        def _fake_monotonic():
+            return clock["now"]
+
+        with (
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=_fake_monotonic),
+        ):
             result = await data_feed.get_current_volume(contract)
 
         assert result == pytest.approx(555_000.0, abs=1e-5)
         data_feed.get_volume_yfinance.assert_awaited_once_with("AAPL")
+        mock_ib.cancelMktData.assert_called_once_with(contract)
+
+    @pytest.mark.asyncio
+    async def test_get_current_volume_short_circuits_degraded_ib_request_to_yfinance(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = _build_contract("QQQ")
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_connection.operational_events_since = MagicMock(
+            return_value=[
+                IBErrorPolicyDecision(
+                    error_code=10167,
+                    message="delayed market data available",
+                    action="degraded_market_data",
+                    scope="request",
+                    severity="warning",
+                ),
+            ],
+        )
+        mock_ib.reqMktData.return_value = SimpleNamespace(volume=None)
+        data_feed.get_volume_yfinance = AsyncMock(return_value=47_862_102.0)
+        sleep_calls: list[float] = []
+
+        async def _run(_operation_name, _request_key, func, **_kwargs):
+            return await func()
+
+        async def _fake_sleep(delay: float):
+            sleep_calls.append(delay)
+            return None
+
+        monotonic_values = iter([0.0, 0.0, 0.1])
+        data_feed._request_executor.run = AsyncMock(side_effect=_run)
+
+        with (
+            patch("src.data_feed.asyncio.sleep", new=_fake_sleep),
+            patch("src.data_feed.time.monotonic", side_effect=lambda: next(monotonic_values, 0.1)),
+        ):
+            result = await data_feed.get_current_volume(contract)
+
+        assert result == pytest.approx(47_862_102.0, abs=1e-5)
+        assert sleep_calls == [0.1]
+        data_feed.get_volume_yfinance.assert_awaited_once_with("QQQ")
         mock_ib.cancelMktData.assert_called_once_with(contract)
 
     @pytest.mark.asyncio
@@ -1213,6 +1467,8 @@ class TestCurrentSnapshotFallbacks:
             "source": "last",
             "fresh": True,
             "volume": None,
+            "quality": "ib_reliable",
+            "execution_ready": True,
         }
         assert volume_result == pytest.approx(321_000.0, abs=1e-5)
         assert mock_ib.reqMktData.call_count == 2
@@ -1291,6 +1547,8 @@ class TestCurrentSnapshotFallbacks:
             "source": "last",
             "fresh": True,
             "volume": None,
+            "quality": "ib_reliable",
+            "execution_ready": True,
         }
         assert volume_result == pytest.approx(654_000.0, abs=1e-5)
         assert mock_ib.cancelMktData.call_count == 2
@@ -1334,7 +1592,13 @@ class TestCurrentSnapshotFallbacks:
         ):
             for _ in range(_DATA_FEED_CIRCUIT_BREAKER_THRESHOLD):
                 result = await data_feed.get_current_price_details(contract)
-                assert result == {"price": None, "source": None, "fresh": False}
+                assert result == {
+                    "price": None,
+                    "source": None,
+                    "fresh": False,
+                    "quality": "unavailable",
+                    "execution_ready": False,
+                }
 
             open_until = data_feed._data_feed_circuit_open_until.get("current_price")
             assert open_until is not None
@@ -1348,7 +1612,13 @@ class TestCurrentSnapshotFallbacks:
             data_feed.get_price_yfinance.reset_mock()
 
             blocked = await data_feed.get_current_price_details(contract)
-            assert blocked == {"price": None, "source": None, "fresh": False}
+            assert blocked == {
+                "price": None,
+                "source": None,
+                "fresh": False,
+                "quality": "unavailable",
+                "execution_ready": False,
+            }
             mock_ib.reqMktData.assert_not_called()
             data_feed.get_price_yfinance.assert_not_awaited()
 
@@ -1368,6 +1638,8 @@ class TestCurrentSnapshotFallbacks:
             "source": "last",
             "fresh": True,
             "volume": None,
+            "quality": "ib_reliable",
+            "execution_ready": True,
         }
         assert data_feed._data_feed_failure_counts["current_price"] == 0
         assert data_feed._data_feed_circuit_open_until.get("current_price") is None
@@ -1468,7 +1740,13 @@ class TestCurrentSnapshotFallbacks:
                 volume=None,
             )
             failed = await data_feed.get_current_price_details(contract)
-            assert failed == {"price": None, "source": None, "fresh": False}
+            assert failed == {
+                "price": None,
+                "source": None,
+                "fresh": False,
+                "quality": "unavailable",
+                "execution_ready": False,
+            }
             assert data_feed._data_feed_failure_counts["current_price"] == 1
 
             mock_ib.reqMktData.return_value = SimpleNamespace(
@@ -1486,6 +1764,8 @@ class TestCurrentSnapshotFallbacks:
             "source": "last",
             "fresh": True,
             "volume": None,
+            "quality": "ib_reliable",
+            "execution_ready": True,
         }
         assert data_feed._data_feed_failure_counts["current_price"] == 0
         assert data_feed._data_feed_circuit_open_until.get("current_price") is None
@@ -1529,7 +1809,13 @@ class TestCurrentSnapshotFallbacks:
         ):
             for _ in range(_DATA_FEED_CIRCUIT_BREAKER_THRESHOLD + 1):
                 result = await data_feed.get_current_price_details(contract)
-                assert result == {"price": None, "source": None, "fresh": False}
+                assert result == {
+                    "price": None,
+                    "source": None,
+                    "fresh": False,
+                    "quality": "unavailable",
+                    "execution_ready": False,
+                }
 
         assert data_feed._data_feed_failure_counts["current_price"] == 0
         assert data_feed._data_feed_circuit_open_until.get("current_price") is None

@@ -77,6 +77,13 @@ def classify_ib_error(error_code: int, error_string: str) -> IBErrorPolicyDecisi
             scope="request",
             severity="warning",
         ),
+        10167: IBErrorPolicyDecision(
+            error_code=10167,
+            message=error_string,
+            action="degraded_market_data",
+            scope="request",
+            severity="warning",
+        ),
         _IB_PACING_ERROR_CODE: IBErrorPolicyDecision(
             error_code=_IB_PACING_ERROR_CODE,
             message=error_string,

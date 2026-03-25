@@ -272,8 +272,24 @@ class OrderManager:
         informational_codes = {2103, 2104, 2105, 2106, 2107, 2108, 2119, 2157, 2158}
         if errorCode in informational_codes:
             return
+        if errorCode == 300 and "tickerId" in errorString:
+            logger.debug(
+                "Erro IB de cleanup de market data ignorado — reqId=%d, codigo=300: %s",
+                reqId,
+                errorString,
+            )
+            return
 
         decision = classify_ib_error(errorCode, errorString)
+        if decision is not None and decision.scope == "request":
+            logger.debug(
+                "Erro IB request-scoped delegado para data_feed — reqId=%d, codigo=%d, action=%s: %s",
+                reqId,
+                decision.error_code,
+                decision.action,
+                decision.message,
+            )
+            return
         if decision is not None and decision.scope == "order":
             message = (
                 f"Erro operacional IB em ordens [{decision.action}] "

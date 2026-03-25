@@ -27,7 +27,7 @@ import signal
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Coroutine
@@ -57,6 +57,7 @@ from src.signal_engine import (
     analyze,
     calculate_adx,
     calculate_rsi2,
+    Confianca,
     detect_regime,
     kotegawa_signal,
     Regime,
@@ -157,6 +158,10 @@ GAP_FADE_CONFIG: dict[str, Any] = {
     "max_gap_atr": 2.5,
     "min_fill_probability": 0.60,
     "min_body_ratio_fade": 0.35,
+    "direct_execution_enabled": True,
+    "direct_execution_allowed_signals": ["LONG"],
+    "paper_only": True,
+    "required_price_quality": "ib_reliable",
 }
 FOREX_MR_CONFIG: dict[str, Any] = {
     "is_active": False,
@@ -821,14 +826,47 @@ class TradingBot:
         else:
             config_status = "OK sem warnings"
 
+        multi_instrument_policy = self._multi_instrument_execution_policy_summary()
         logger.info(
-            "Modo operacional: %s | Execucao directa multi-instrumento: desactivada por politica | "
+            "Modo operacional: %s | Execucao directa multi-instrumento: %s | "
             "Modulos auxiliares activos: %s | Telegram: %s | Validacao de configuracao: %s",
             mode,
+            multi_instrument_policy,
             active_auxiliary_modules,
             telegram_status,
             config_status,
         )
+
+    @staticmethod
+    def _map_multi_instrument_confidence(
+        confidence: Any,
+    ) -> tuple[Confianca, float]:
+        """Traduz confiança inteira dos módulos auxiliares para sizing já suportado pelo bot."""
+        try:
+            level = int(confidence)
+        except (TypeError, ValueError):
+            level = 0
+
+        if level >= 3:
+            return Confianca.ALTO, 1.0
+        if level == 2:
+            return Confianca.MEDIO, 0.75
+        if level == 1:
+            return Confianca.MEDIO, 0.50
+        return Confianca.BAIXO, 0.0
+
+    @staticmethod
+    def _multi_instrument_execution_policy_summary() -> str:
+        """Resume os módulos multi-instrumento actualmente elegíveis para execução directa."""
+        enabled_policies: list[str] = []
+        for module_name, module_cfg in MODULE_CONFIG.items():
+            if not bool(module_cfg.get("direct_execution_enabled")):
+                continue
+            actions = ",".join(str(action) for action in module_cfg.get("direct_execution_allowed_signals", [])) or "nenhuma"
+            quality = str(module_cfg.get("required_price_quality", "ib_reliable"))
+            scope = "paper-only" if bool(module_cfg.get("paper_only", True)) else "all-modes"
+            enabled_policies.append(f"restrita:{module_name}[{actions};{quality};{scope}]")
+        return ", ".join(enabled_policies) if enabled_policies else "desactivada por politica"
 
     def validate_startup(self) -> bool:
         """
@@ -3008,6 +3046,8 @@ class TradingBot:
 
         price_source = str(indicators.get("price_source") or "unknown")
         price_fresh = bool(indicators.get("price_fresh", False))
+        price_quality = str(indicators.get("price_quality") or "unavailable")
+        price_execution_ready = bool(indicators.get("price_execution_ready", False))
         if not price_fresh:
             logger.warning(
                 "Entradas bloqueadas para %s por preço stale/inconclusivo (%s).",
@@ -3015,6 +3055,14 @@ class TradingBot:
                 price_source,
             )
             return
+        if not price_execution_ready:
+            logger.warning(
+                "Dados de mercado degradados para %s — price_source=%s | price_quality=%s. "
+                "Analise continua, mas a execução directa fica bloqueada neste ciclo.",
+                spec.display,
+                price_source,
+                price_quality,
+            )
 
         price: float = indicators["current_price"]  # type: ignore[assignment]
         last_close: float = indicators["last_close"]  # type: ignore[assignment]
@@ -3179,18 +3227,17 @@ class TradingBot:
                     new_signal.get("metadata", {}).get("strike"),
                 )
             else:
-                self._record_blocked_multi_signal(
-                    spec,
-                    new_signal,
-                    reason="multi_instrument_execution_disabled_by_policy",
-                )
-                logger.warning(
-                    "Sinal multi-instrumento detectado mas bloqueado por política: "
-                    "%s | action=%s | module=%s | reason=%s.",
-                    spec.display,
-                    action,
-                    new_signal.get("metadata", {}).get("module"),
-                    "multi_instrument_execution_disabled_by_policy",
+                await self._handle_multi_instrument_signal(
+                    spec=spec,
+                    contract=contract,
+                    atr=atr14,
+                    regime_info=regime_info,
+                    signal_result=signal_result,
+                    new_signal=new_signal,
+                    bars_df=bars_df,
+                    session_ok=session_state.can_open_new_grid,
+                    data_execution_ready=price_execution_ready,
+                    price_quality=price_quality,
                 )
 
         # 5. SE sinal valido E risco ok → criar grid
@@ -3212,9 +3259,98 @@ class TradingBot:
                 signal_result=signal_result,
                 bars_df=bars_df,
                 session_ok=session_state.can_open_new_grid,
-                data_fresh=price_fresh,
+                data_fresh=price_execution_ready,
                 warmup_ok=True,
             )
+
+    async def _handle_multi_instrument_signal(
+        self,
+        *,
+        spec: InstrumentSpec,
+        contract: Any,
+        atr: float,
+        regime_info: RegimeInfo,
+        signal_result: SignalResult,
+        new_signal: dict[str, Any],
+        bars_df: Any,
+        session_ok: bool,
+        data_execution_ready: bool,
+        price_quality: str,
+    ) -> None:
+        """Aplica a política mínima e segura para execução directa de sinais multi-instrumento."""
+        module_name = str(new_signal.get("metadata", {}).get("module") or "")
+        action = str(new_signal.get("signal", "FLAT"))
+        module_cfg = MODULE_CONFIG.get(module_name, {})
+        blocked_reason: str | None = None
+
+        if not bool(module_cfg.get("direct_execution_enabled")):
+            blocked_reason = "multi_instrument_execution_disabled_by_policy"
+        elif bool(module_cfg.get("paper_only", True)) and not self._config.ib.paper_trading:
+            blocked_reason = "multi_instrument_live_disabled"
+        elif action not in set(module_cfg.get("direct_execution_allowed_signals", [])):
+            blocked_reason = "multi_instrument_action_not_allowed"
+        elif action != "LONG":
+            blocked_reason = "multi_instrument_action_not_supported_by_grid_engine"
+        elif str(module_cfg.get("required_price_quality", "ib_reliable")) != price_quality:
+            blocked_reason = "multi_instrument_data_quality_below_threshold"
+        elif not data_execution_ready:
+            blocked_reason = "multi_instrument_data_execution_not_ready"
+
+        if blocked_reason is not None:
+            self._record_blocked_multi_signal(
+                spec,
+                new_signal,
+                reason=blocked_reason,
+            )
+            logger.warning(
+                "Sinal multi-instrumento detectado mas bloqueado por política: "
+                "%s | action=%s | module=%s | reason=%s.",
+                spec.display,
+                action,
+                module_name,
+                blocked_reason,
+            )
+            return
+
+        execution_confidence, size_multiplier = self._map_multi_instrument_confidence(
+            new_signal.get("confidence")
+        )
+        if size_multiplier <= 0:
+            self._record_blocked_multi_signal(
+                spec,
+                new_signal,
+                reason="multi_instrument_confidence_insufficient",
+            )
+            logger.warning(
+                "Sinal multi-instrumento sem sizing utilizável para %s: module=%s | confidence=%s.",
+                spec.display,
+                module_name,
+                new_signal.get("confidence"),
+            )
+            return
+
+        execution_signal = replace(
+            signal_result,
+            signal=True,
+            size_multiplier=size_multiplier,
+            confianca=execution_confidence,
+            detalhes_confirmacoes=[
+                f"module={module_name}",
+                f"multi_signal={action}",
+            ],
+        )
+        await self._attempt_grid_creation(
+            spec=spec,
+            contract=contract,
+            price=float(new_signal.get("entry_price") or signal_result.preco),
+            atr=float(new_signal.get("metadata", {}).get("gap_info", {}).get("atr14") or atr),
+            regime_info=regime_info,
+            signal_result=execution_signal,
+            bars_df=bars_df,
+            session_ok=session_ok,
+            data_fresh=data_execution_ready,
+            warmup_ok=True,
+        )
 
     def _record_blocked_multi_signal(
         self,

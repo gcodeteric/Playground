@@ -187,6 +187,7 @@ class IBConnection:
         self._error_callback: ErrorHook | None = None
         self._recent_errors: deque[tuple[float, int, str]] = deque(maxlen=100)
         self._recent_operational_events: deque[tuple[float, IBErrorPolicyDecision]] = deque(maxlen=100)
+        self._market_data_type: int | None = None
 
         # Registar callback de desconexão
         self.ib.disconnectedEvent += self._on_disconnected
@@ -300,6 +301,7 @@ class IBConnection:
                     self._connection_state = "CONNECTED"
                     # Activar delayed data por defeito para evitar erro 10089 sem subscrição paga.
                     self.ib.reqMarketDataType(3)
+                    self._market_data_type = 3
                     self._reconnect_delay = _INITIAL_RECONNECT_DELAY  # reiniciar backoff
                     logger.info(
                         "Ligação ao IB estabelecida com sucesso (%s:%d).",
@@ -762,6 +764,67 @@ class DataFeed:
                 time.monotonic() + _DATA_FEED_CIRCUIT_BREAKER_COOLDOWN_SECONDS
             )
 
+    @staticmethod
+    def _request_event_codes(
+        request_events: list[IBErrorPolicyDecision],
+    ) -> set[int]:
+        """Extrai códigos de erro operacionais relevantes do pedido actual."""
+        return {decision.error_code for decision in request_events}
+
+    def _with_price_quality(
+        self,
+        snapshot: dict[str, Any],
+        *,
+        request_events: list[IBErrorPolicyDecision] | None = None,
+    ) -> dict[str, Any]:
+        """Anexa qualidade de dados para separar análise degradada de execução segura."""
+        request_events = request_events or []
+        codes = self._request_event_codes(request_events)
+        result = dict(snapshot)
+        source = result.get("source")
+        market_data_type = getattr(self._conn, "_market_data_type", None)
+
+        quality = "unavailable"
+        execution_ready = False
+        if source == "yfinance":
+            quality = "yfinance_fallback"
+        elif source == "close":
+            quality = "ib_close_only"
+        elif 10089 in codes:
+            quality = "ib_subscription_limited"
+        elif 10167 in codes:
+            quality = "ib_delayed_subscription"
+        elif 354 in codes:
+            quality = "ib_permission_denied"
+        elif 10197 in codes:
+            quality = "ib_out_of_session"
+        elif _IB_PACING_ERROR_CODE in codes:
+            quality = "ib_pacing_limited"
+        elif market_data_type in {3, 4} and source in {"last", "mid", "mark"}:
+            quality = "ib_delayed_mode"
+        elif source in {"last", "mid", "mark"}:
+            quality = "ib_reliable"
+            execution_ready = True
+
+        result["quality"] = quality
+        result["execution_ready"] = execution_ready
+        return result
+
+    @staticmethod
+    def _should_abort_price_request(
+        request_events: list[IBErrorPolicyDecision],
+    ) -> bool:
+        """Interrompe cedo pedidos sem retry útil para evitar timeouts artificiais."""
+        return any(decision.action == "symbol_skip_no_retry" for decision in request_events)
+
+    @staticmethod
+    def _should_abort_volume_request(
+        request_events: list[IBErrorPolicyDecision],
+    ) -> bool:
+        """Evita aguardar volume IB quando o broker já sinalizou degradação conhecida."""
+        codes = {decision.error_code for decision in request_events}
+        return bool(codes & {354, 10089, 10167, 10197})
+
     def _yf_symbol(self, symbol: str) -> str:
         """Converte símbolo IB para símbolo Yahoo Finance."""
         symbol_map = getattr(self, "_yf_symbol_map", self._YF_SYMBOL_MAP)
@@ -977,15 +1040,16 @@ class DataFeed:
         Obtém o preço actual com metadados de fonte/frescura.
 
         Returns:
-            ``{"price": float|None, "source": str|None, "fresh": bool, "volume": float|None}``
+            ``{"price": float|None, "source": str|None, "fresh": bool, "volume": float|None,
+            "quality": str, "execution_ready": bool}``
         """
         contract_key = self._contract_cache_key(contract)
         cache_key = f"price_snapshot:{contract_key}"
         cached = self._cache.get(cache_key)
         if cached is not None:
-            return dict(cached)
+            return self._with_price_quality(dict(cached))
         if self._is_data_feed_circuit_open("current_price"):
-            return {"price": None, "source": None, "fresh": False}
+            return self._with_price_quality({"price": None, "source": None, "fresh": False})
 
         symbol = self._contract_market_symbol(contract)
         connected = await self._conn.ensure_connected()
@@ -993,11 +1057,11 @@ class DataFeed:
             price = await self.get_price_yfinance(symbol)
             if price is not None:
                 yfinance_asof = self._cache.get(f"yfinance_price:{symbol.upper()}:asof")
-                snapshot = {
+                snapshot = self._with_price_quality({
                     "price": float(price),
                     "source": "yfinance",
                     "fresh": _is_yfinance_quote_fresh(yfinance_asof),
-                }
+                })
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
@@ -1007,7 +1071,7 @@ class DataFeed:
                 self._record_data_feed_success("current_price")
                 return snapshot
             self._record_data_feed_failure("current_price", contract)
-            return {"price": None, "source": None, "fresh": False}
+            return self._with_price_quality({"price": None, "source": None, "fresh": False})
 
         async def _request_price() -> dict[str, Any]:
             logger.debug("A obter preço actual de %s…", contract.symbol)
@@ -1015,23 +1079,38 @@ class DataFeed:
             lock = self._market_data_locks.setdefault(contract_key, asyncio.Lock())
 
             async with lock:
+                request_started_at = time.monotonic()
                 ticker = self.ib.reqMktData(contract, snapshot=True)
                 try:
                     deadline = time.monotonic() + 10.0
                     while time.monotonic() < deadline:
                         await asyncio.sleep(0.1)
+                        request_events = self._conn.operational_events_since(request_started_at)
                         snapshot = _build_price_snapshot_from_ticker(ticker)
                         if snapshot is not None:
+                            snapshot = self._with_price_quality(
+                                snapshot,
+                                request_events=request_events,
+                            )
                             self._cache.set(cache_key, snapshot)
                             logger.debug(
-                                "Preço de %s: %.4f (%s).",
+                                "Preço de %s: %.4f (%s | quality=%s | execution_ready=%s).",
                                 contract.symbol,
                                 float(snapshot["price"]),
                                 snapshot["source"],
+                                snapshot["quality"],
+                                snapshot["execution_ready"],
                             )
                             return snapshot
+                        if self._should_abort_price_request(request_events):
+                            break
 
                     late_snapshot = _build_price_snapshot_from_ticker(ticker)
+                    if late_snapshot is not None:
+                        late_snapshot = self._with_price_quality(
+                            late_snapshot,
+                            request_events=self._conn.operational_events_since(request_started_at),
+                        )
                 finally:
                     try:
                         self.ib.cancelMktData(contract)
@@ -1042,10 +1121,12 @@ class DataFeed:
             if snapshot is not None:
                 self._cache.set(cache_key, snapshot)
                 logger.info(
-                    "Preço IB tardio mas utilizável para %s — a usar %s %.4f.",
+                    "Preço IB tardio mas utilizável para %s — a usar %s %.4f (quality=%s, execution_ready=%s).",
                     contract.symbol,
                     snapshot["source"],
                     float(snapshot["price"]),
+                    snapshot["quality"],
+                    snapshot["execution_ready"],
                 )
                 self._record_data_feed_success("current_price")
                 return snapshot
@@ -1053,12 +1134,12 @@ class DataFeed:
             price = await self.get_price_yfinance(symbol)
             if price is not None:
                 yfinance_asof = self._cache.get(f"yfinance_price:{symbol.upper()}:asof")
-                snapshot = {
+                snapshot = self._with_price_quality({
                     "price": float(price),
                     "source": "yfinance",
                     "fresh": _is_yfinance_quote_fresh(yfinance_asof),
                     "volume": None,
-                }
+                })
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
@@ -1068,7 +1149,7 @@ class DataFeed:
                 self._record_data_feed_success("current_price")
                 return snapshot
             self._record_data_feed_failure("current_price", contract)
-            return {"price": None, "source": None, "fresh": False}
+            return self._with_price_quality({"price": None, "source": None, "fresh": False})
 
         try:
             snapshot = await self._request_executor.run(
@@ -1089,12 +1170,12 @@ class DataFeed:
             price = await self.get_price_yfinance(symbol)
             if price is not None:
                 yfinance_asof = self._cache.get(f"yfinance_price:{symbol.upper()}:asof")
-                snapshot = {
+                snapshot = self._with_price_quality({
                     "price": float(price),
                     "source": "yfinance",
                     "fresh": _is_yfinance_quote_fresh(yfinance_asof),
                     "volume": None,
-                }
+                })
                 logger.info(
                     "Preço IB indisponível — yfinance fallback: %s = %.4f",
                     symbol,
@@ -1104,7 +1185,7 @@ class DataFeed:
                 self._record_data_feed_success("current_price")
                 return snapshot
             self._record_data_feed_failure("current_price", contract)
-            return {"price": None, "source": None, "fresh": False}
+            return self._with_price_quality({"price": None, "source": None, "fresh": False})
 
     async def get_current_price(
         self,
@@ -1179,16 +1260,20 @@ class DataFeed:
             lock = self._market_data_locks.setdefault(contract_key, asyncio.Lock())
 
             async with lock:
+                request_started_at = time.monotonic()
                 ticker = self.ib.reqMktData(contract, snapshot=True)
                 try:
                     deadline = time.monotonic() + 10.0
                     while time.monotonic() < deadline:
                         await asyncio.sleep(0.1)
+                        request_events = self._conn.operational_events_since(request_started_at)
                         if _valid_price(ticker.volume):
                             volume = float(ticker.volume)
                             self._cache.set(cache_key, volume)
                             logger.debug("Volume de %s: %.0f.", contract.symbol, volume)
                             return volume
+                        if self._should_abort_volume_request(request_events):
+                            break
                 finally:
                     try:
                         self.ib.cancelMktData(contract)
@@ -1534,6 +1619,10 @@ class DataFeed:
         )
         indicators["price_source"] = price_source
         indicators["price_fresh"] = price_fresh
+        indicators["price_quality"] = price_details.get("quality")
+        indicators["price_execution_ready"] = bool(
+            price_details.get("execution_ready", False)
+        )
         return indicators
 
 

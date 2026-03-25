@@ -228,7 +228,7 @@ def test_validate_startup_banner_reflects_live_mode(tmp_path, caplog):
 
     assert result is True
     assert "Modo operacional: LIVE" in caplog.text
-    assert "Execucao directa multi-instrumento: desactivada por politica" in caplog.text
+    assert "Execucao directa multi-instrumento: restrita:gap_fade[LONG;ib_reliable;paper-only]" in caplog.text
 
 
 @pytest.mark.asyncio
@@ -1701,8 +1701,9 @@ async def test_process_symbol_blocks_entries_on_stale_price(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_process_symbol_records_blocked_multi_signal_without_extra_volume_call(monkeypatch):
+async def test_process_symbol_blocks_multi_signal_when_execution_data_is_degraded(monkeypatch):
     bot = _build_bot_stub()
+    bot._config = SimpleNamespace(ib=SimpleNamespace(paper_trading=True))
     spec = parse_watchlist_entry("AAPL")
     bars_df = pd.DataFrame(
         {
@@ -1731,8 +1732,10 @@ async def test_process_symbol_records_blocked_multi_signal_without_extra_volume_
                 "bb_lower": 95.0,
                 "volume_avg_20": 1000.0,
                 "atr_avg_60": 2.0,
-                "price_source": "mark",
+                "price_source": "yfinance",
                 "price_fresh": True,
+                "price_quality": "yfinance_fallback",
+                "price_execution_ready": False,
             },
         ),
     )
@@ -1757,8 +1760,9 @@ async def test_process_symbol_records_blocked_multi_signal_without_extra_volume_
         AsyncMock(
             return_value={
                 "signal": "LONG",
-                "confidence": "ALTO",
-                "metadata": {"module": "gap_fade"},
+                "confidence": 3,
+                "entry_price": 99.5,
+                "metadata": {"module": "gap_fade", "gap_info": {"atr14": 2.0}},
             },
         ),
     )
@@ -1769,7 +1773,160 @@ async def test_process_symbol_records_blocked_multi_signal_without_extra_volume_
     assert bot._last_blocked_multi_signal["symbol"] == "AAPL"
     assert bot._last_blocked_multi_signal["action"] == "LONG"
     assert bot._last_blocked_multi_signal["module"] == "gap_fade"
-    assert bot._last_blocked_multi_signal["reason"] == "multi_instrument_execution_disabled_by_policy"
+    assert bot._last_blocked_multi_signal["reason"] == "multi_instrument_data_quality_below_threshold"
+    bot._attempt_grid_creation.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_process_symbol_executes_gap_fade_long_when_policy_and_data_quality_allow(monkeypatch):
+    bot = _build_bot_stub()
+    bot._config = SimpleNamespace(ib=SimpleNamespace(paper_trading=True))
+    spec = parse_watchlist_entry("AAPL")
+    bars_df = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=250, freq="B"),
+            "open": [100.0] * 250,
+            "high": [101.0] * 250,
+            "low": [99.0] * 250,
+            "close": [100.0] * 250,
+            "volume": [1000.0] * 250,
+        },
+    )
+    signal_result = replace(_build_signal_result(), signal=False, size_multiplier=0.0)
+    bot._data_feed = SimpleNamespace(
+        qualify_contract=AsyncMock(return_value=True),
+        get_historical_bars=AsyncMock(return_value=bars_df),
+        get_market_data_live=AsyncMock(
+            return_value={
+                "last_close": 100.0,
+                "current_price": 100.0,
+                "current_volume": 1500.0,
+                "sma25": 100.0,
+                "sma50": 100.0,
+                "sma200": 100.0,
+                "rsi14": 45.0,
+                "atr14": 2.0,
+                "bb_lower": 95.0,
+                "volume_avg_20": 1000.0,
+                "atr_avg_60": 2.0,
+                "price_source": "last",
+                "price_fresh": True,
+                "price_quality": "ib_reliable",
+                "price_execution_ready": True,
+            },
+        ),
+    )
+    bot._handle_session_transition = AsyncMock()
+    bot._check_warmup = AsyncMock(return_value=True)
+    bot._attempt_grid_creation = AsyncMock()
+
+    monkeypatch.setattr("main.is_market_open", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "main.get_session_state",
+        lambda _spec: SimpleNamespace(
+            can_open_new_grid=True,
+            is_pre_close=False,
+            status="ABERTA",
+        ),
+    )
+    monkeypatch.setattr("main.build_contract", lambda _spec: MagicMock(symbol="AAPL"))
+    monkeypatch.setattr("main.detect_regime", lambda **_kwargs: _build_regime_info())
+    monkeypatch.setattr("main.kotegawa_signal", lambda **_kwargs: signal_result)
+    monkeypatch.setattr(
+        "main.process_new_modules",
+        AsyncMock(
+            return_value={
+                "signal": "LONG",
+                "confidence": 3,
+                "entry_price": 99.5,
+                "metadata": {"module": "gap_fade", "gap_info": {"atr14": 2.0}},
+            },
+        ),
+    )
+
+    await TradingBot._process_symbol(bot, spec)
+
+    bot._attempt_grid_creation.assert_awaited_once()
+    kwargs = bot._attempt_grid_creation.await_args.kwargs
+    assert kwargs["data_fresh"] is True
+    assert kwargs["price"] == pytest.approx(99.5, abs=1e-5)
+    assert kwargs["signal_result"].signal is True
+    assert kwargs["signal_result"].size_multiplier == pytest.approx(1.0, abs=1e-5)
+    assert kwargs["signal_result"].confianca == Confianca.ALTO
+    assert bot._last_blocked_multi_signal is None
+
+
+@pytest.mark.asyncio
+async def test_process_symbol_blocks_gap_fade_direct_execution_in_live_mode(monkeypatch):
+    bot = _build_bot_stub()
+    bot._config = SimpleNamespace(ib=SimpleNamespace(paper_trading=False))
+    spec = parse_watchlist_entry("AAPL")
+    bars_df = pd.DataFrame(
+        {
+            "date": pd.date_range("2024-01-01", periods=250, freq="B"),
+            "open": [100.0] * 250,
+            "high": [101.0] * 250,
+            "low": [99.0] * 250,
+            "close": [100.0] * 250,
+            "volume": [1000.0] * 250,
+        },
+    )
+    signal_result = replace(_build_signal_result(), signal=False, size_multiplier=0.0)
+    bot._data_feed = SimpleNamespace(
+        qualify_contract=AsyncMock(return_value=True),
+        get_historical_bars=AsyncMock(return_value=bars_df),
+        get_market_data_live=AsyncMock(
+            return_value={
+                "last_close": 100.0,
+                "current_price": 100.0,
+                "current_volume": 1500.0,
+                "sma25": 100.0,
+                "sma50": 100.0,
+                "sma200": 100.0,
+                "rsi14": 45.0,
+                "atr14": 2.0,
+                "bb_lower": 95.0,
+                "volume_avg_20": 1000.0,
+                "atr_avg_60": 2.0,
+                "price_source": "last",
+                "price_fresh": True,
+                "price_quality": "ib_reliable",
+                "price_execution_ready": True,
+            },
+        ),
+    )
+    bot._handle_session_transition = AsyncMock()
+    bot._check_warmup = AsyncMock(return_value=True)
+    bot._attempt_grid_creation = AsyncMock()
+
+    monkeypatch.setattr("main.is_market_open", lambda *_args, **_kwargs: True)
+    monkeypatch.setattr(
+        "main.get_session_state",
+        lambda _spec: SimpleNamespace(
+            can_open_new_grid=True,
+            is_pre_close=False,
+            status="ABERTA",
+        ),
+    )
+    monkeypatch.setattr("main.build_contract", lambda _spec: MagicMock(symbol="AAPL"))
+    monkeypatch.setattr("main.detect_regime", lambda **_kwargs: _build_regime_info())
+    monkeypatch.setattr("main.kotegawa_signal", lambda **_kwargs: signal_result)
+    monkeypatch.setattr(
+        "main.process_new_modules",
+        AsyncMock(
+            return_value={
+                "signal": "LONG",
+                "confidence": 3,
+                "entry_price": 99.5,
+                "metadata": {"module": "gap_fade", "gap_info": {"atr14": 2.0}},
+            },
+        ),
+    )
+
+    await TradingBot._process_symbol(bot, spec)
+
+    assert bot._last_blocked_multi_signal is not None
+    assert bot._last_blocked_multi_signal["reason"] == "multi_instrument_live_disabled"
     bot._attempt_grid_creation.assert_not_awaited()
 
 
