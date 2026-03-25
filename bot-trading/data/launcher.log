@@ -34,3 +34,50 @@
 [24/03/2026 11:47:28,31] ETAPA 5: A lancar dashboard (Streamlit porta 8501) 
 [24/03/2026 11:47:31,28] ETAPA 5: Dashboard lancado e browser aberto 
 [24/03/2026 11:47:31,28] ETAPA 6: A lancar bot (main.py) 
+ 
+============================================================ 
+[25/03/2026  3:30:01,25] LAUNCHER INICIADO 
+[25/03/2026  3:30:01,27] Python resolvido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe 
+[25/03/2026  3:30:01,40] ETAPA 1: A abrir TWS (C:\Jts\tws.exe) 
+[25/03/2026  3:30:01,58] ETAPA 1: TWS detectado como processo activo 
+[25/03/2026  3:30:06,15] ETAPA 2: A executar tws_autologin.py 
+[25/03/2026  3:30:51,25] ETAPA 2: Auto-login concluido com sucesso 
+[25/03/2026  3:30:51,25] ETAPA 3: Buffer pos-login iniciado (60s) 
+[25/03/2026  3:31:51,16] ETAPA 3: Buffer pos-login concluido 
+[25/03/2026  3:31:51,16] ETAPA 4: Probe TCP em 127.0.0.1:7497 (timeout=120s) 
+[25/03/2026  3:31:51,31] ETAPA 4: API TWS pronta na porta 7497 
+[25/03/2026  3:31:51,31] ETAPA 5: A lancar dashboard (Streamlit porta 8501) 
+[25/03/2026  3:31:54,29] ETAPA 5: Dashboard lancado e browser aberto 
+[25/03/2026  3:31:54,29] ETAPA 6: A lancar bot (main.py) 
+[25/03/2026  3:34:02,15] ETAPA 6: Bot terminou com exit code 1 
+ 
+============================================================ 
+[25/03/2026  9:34:21,83] LAUNCHER INICIADO 
+[25/03/2026  9:34:21,85] Python resolvido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe 
+[25/03/2026  9:34:22,01] ETAPA 1: A abrir TWS (C:\Jts\tws.exe) 
+[25/03/2026  9:34:22,28] ETAPA 1: TWS detectado como processo activo 
+[25/03/2026  9:34:27,19] ETAPA 2: A executar tws_autologin.py 
+[25/03/2026  9:35:12,49] ETAPA 2: Auto-login concluido com sucesso 
+[25/03/2026  9:35:12,50] ETAPA 3: Buffer pos-login iniciado (60s) 
+[25/03/2026  9:36:12,14] ETAPA 3: Buffer pos-login concluido 
+[25/03/2026  9:36:12,15] ETAPA 4: Probe TCP em 127.0.0.1:7497 (timeout=120s) 
+[25/03/2026  9:36:12,31] ETAPA 4: API TWS pronta na porta 7497 
+[25/03/2026  9:36:12,32] ETAPA 5: A lancar dashboard (Streamlit porta 8501) 
+[25/03/2026  9:36:15,32] ETAPA 5: Dashboard lancado e browser aberto 
+[25/03/2026  9:36:15,33] ETAPA 6: A lancar bot (main.py) 
+[25/03/2026  9:36:52,35] ETAPA 6: Bot terminou com exit code 0 
+ 
+============================================================ 
+[25/03/2026  9:37:10,27] LAUNCHER INICIADO 
+[25/03/2026  9:37:10,28] Python resolvido: C:\Users\berna\Desktop\Playground\bot-trading\venv\Scripts\python.exe 
+[25/03/2026  9:37:10,42] ETAPA 1: A abrir TWS (C:\Jts\tws.exe) 
+[25/03/2026  9:37:10,57] ETAPA 1: TWS detectado como processo activo 
+[25/03/2026  9:37:15,20] ETAPA 2: A executar tws_autologin.py 
+[25/03/2026  9:37:59,74] ETAPA 2: Auto-login concluido com sucesso 
+[25/03/2026  9:37:59,74] ETAPA 3: Buffer pos-login iniciado (60s) 
+[25/03/2026  9:38:59,15] ETAPA 3: Buffer pos-login concluido 
+[25/03/2026  9:38:59,16] ETAPA 4: Probe TCP em 127.0.0.1:7497 (timeout=120s) 
+[25/03/2026  9:38:59,32] ETAPA 4: API TWS pronta na porta 7497 
+[25/03/2026  9:38:59,33] ETAPA 5: A lancar dashboard (Streamlit porta 8501) 
+[25/03/2026  9:39:02,31] ETAPA 5: Dashboard lancado e browser aberto 
+[25/03/2026  9:39:02,32] ETAPA 6: A lancar bot (main.py) 

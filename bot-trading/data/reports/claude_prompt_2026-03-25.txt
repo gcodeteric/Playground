@@ -1,0 +1,134 @@
+Analisa o estado operacional do meu trading bot em paper trading com base no resumo abaixo.
+
+Tipo de relatório: DIÁRIO
+Data: 2026-03-25 02:15 UTC
+
+Quero uma resposta em 5 secções:
+
+1. ESTADO GERAL
+- O bot arrancou e operou bem hoje?
+- Houve halts, erros ou warnings críticos?
+- O estado geral parece saudável para continuar amanhã?
+
+2. RISCO
+- Quantos reconnects, fallbacks yfinance e reconciliacoes inconclusivas ocorreram hoje?
+- Houve sinais de risco operacional?
+- Kill switches, entry_halt, emergency_halt, reconnects, falhas de dados?
+- Alguma situação que deva bloquear a próxima sessão?
+
+3. EXECUÇÃO E COMPORTAMENTO
+- Houve grids abertas ou fechadas?
+- Os eventos parecem normais para paper trading supervisionado?
+- Algum comportamento inesperado?
+
+4. PROBLEMAS CONCRETOS
+- Lista curta do que correu mal (se houver)
+- Para cada ponto: severidade (baixa/média/alta) e causa provável
+
+5. PRÓXIMOS PASSOS
+- O que devo fazer amanhã?
+- Manter igual, ajustar watchlist, rever configuração, ou abrir fix?
+
+Regras:
+- Não inventes contexto que não esteja no resumo
+- Distingue claramente facto de inferência
+- Se algo estiver ambíguo, diz que está ambíguo
+- Responde em português europeu
+- Foco em operação prática, não em teoria
+
+================================================================================
+RESUMO OPERACIONAL:
+================================================================================
+
+================================================================================
+RELATÓRIO DIÁRIO — BOT DE TRADING
+Data: 2026-03-25 02:15 UTC
+Modo: PAPER TRADING
+================================================================================
+
+── ESTADO OPERACIONAL ──────────────────────────────────────────────────────────
+IB Conectado:          ✅ SIM
+Pausa manual:          ✅ NÃO
+Entry halt:            ✅ NENHUM
+Emergency halt:        ✅ NÃO
+Último erro:           IB 10089: Os dados de mercado solicitados exigem outra inscri\u00e7\u00e3o de API. Abra a caixa de di\u00e1logo "Conex\u00f5es de dados de mercado" para ver mais detalhes.SPY ARCA/TOP/ALL
+Último ciclo:          2026-03-24T20:48:45.868284+00:00
+
+── CAPITAL ─────────────────────────────────────────────────────────────────────
+Capital actual:        1119.91
+Capital inicial:       1120.0
+Peak equity:           1120.0
+Baseline diário:       1119.91
+Baseline semanal:      1119.91
+
+── PERFORMANCE ─────────────────────────────────────────────────────────────────
+P&L total:             0.0
+Número de trades:      0
+Win rate:              0.0%
+Max drawdown:          0.00%
+
+── GRIDS ───────────────────────────────────────────────────────────────────────
+Grids activas:         0
+Grids fechadas hoje:   0
+
+  (nenhuma grid activa)
+
+── PREFLIGHT ───────────────────────────────────────────────────────────────────
+Reconciliação:         ✅ OK
+Telegram:              disabled
+Watchlist size:        7
+
+── ÚLTIMAS LINHAS DO LOG ───────────────────────────────────────────────────────
+-- EVENTOS DO DIA --------------------------------------------------------
+Sessao:   N/D -> em curso
+
+Erros/Criticos (0):
+  (nenhum)
+
+Reconnects ao IB (0):
+  (nenhum)
+
+Fallbacks yfinance (0):
+  (nenhum)
+
+Reconciliacoes inconclusivas (0):
+  (nenhuma)
+
+Entry halts (0):
+  (nenhum)
+
+Outros warnings (0):
+  (nenhum)
+
+2026-03-24 20:50:17 | INFO     | main                 | Metricas finais guardadas com sucesso.
+2026-03-24 20:50:17 | WARNING  | src.data_feed        | Desconexão do IB detectada pelo callback.
+2026-03-24 20:50:17 | INFO     | src.data_feed        | Reconexao automatica bloqueada - shutdown em curso.
+2026-03-24 20:50:17 | INFO     | src.data_feed        | Desligado do IB com sucesso.
+2026-03-24 20:50:17 | INFO     | main                 | Ligacao ao IB encerrada.
+2026-03-24 20:50:17 | INFO     | main                 | Bot encerrado com sucesso.
+2026-03-24 20:50:17 | ERROR    | asyncio              | Task exception was never retrieved
+future: <Task finished name='Task-10' coro=<IBConnection._auto_reconnect() done, defined at C:\Users\berna\Desktop\Playground\bot-trading\src\data_feed.py:473> exception=RuntimeError('This event loop is already running')>
+Traceback (most recent call last):
+  File "C:\Users\berna\Desktop\Playground\bot-trading\src\data_feed.py", line 498, in _auto_reconnect
+    await self._post_reconnect_callback()
+  File "C:\Users\berna\Desktop\Playground\bot-trading\main.py", line 1729, in _post_reconnect_sequence
+    await self._connection.request_executor.run(
+  File "C:\Users\berna\Desktop\Playground\bot-trading\src\ib_requests.py", line 282, in run
+    result = func()
+             ^^^^^^
+  File "C:\Users\berna\Desktop\Playground\bot-trading\venv\Lib\site-packages\ib_insync\ib.py", line 732, in reqCurrentTime
+    return self._run(self.reqCurrentTimeAsync())
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\berna\Desktop\Playground\bot-trading\venv\Lib\site-packages\ib_insync\ib.py", line 318, in _run
+    return util.run(*awaitables, timeout=self.RequestTimeout)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\berna\Desktop\Playground\bot-trading\venv\Lib\site-packages\ib_insync\util.py", line 341, in run
+    result = loop.run_until_complete(task)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python311\Lib\asyncio\base_events.py", line 630, in run_until_complete
+    self._check_running()
+  File "C:\Python311\Lib\asyncio\base_events.py", line 589, in _check_running
+    raise RuntimeError('This event loop is already running')
+RuntimeError: This event loop is already running
+
+================================================================================
