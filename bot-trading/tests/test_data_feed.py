@@ -804,8 +804,8 @@ class TestCurrentSnapshotFallbacks:
         contract = MagicMock()
         contract.symbol = "AAPL"
         mock_connection.ensure_connected = AsyncMock(return_value=True)
-        mock_connection._market_data_type = 3
         mock_ib.reqMktData.return_value = SimpleNamespace(
+            marketDataType=3,
             last=101.25,
             close=100.0,
             bid=101.0,
@@ -821,6 +821,35 @@ class TestCurrentSnapshotFallbacks:
         assert result["fresh"] is True
         assert result["quality"] == "ib_delayed_mode"
         assert result["execution_ready"] is False
+
+    @pytest.mark.asyncio
+    async def test_get_current_price_details_does_not_blindly_downgrade_from_requested_delayed_mode(
+        self,
+        data_feed,
+        mock_connection,
+        mock_ib,
+    ):
+        contract = MagicMock()
+        contract.symbol = "AAPL"
+        mock_connection.ensure_connected = AsyncMock(return_value=True)
+        mock_connection._market_data_type = 3
+        mock_ib.reqMktData.return_value = SimpleNamespace(
+            marketDataType=1,
+            last=101.25,
+            close=100.0,
+            bid=101.0,
+            ask=101.5,
+            markPrice=None,
+            volume=None,
+        )
+
+        result = await data_feed.get_current_price_details(contract)
+
+        assert result["price"] == pytest.approx(101.25, abs=1e-5)
+        assert result["source"] == "last"
+        assert result["fresh"] is True
+        assert result["quality"] == "ib_reliable"
+        assert result["execution_ready"] is True
 
     @pytest.mark.asyncio
     async def test_get_current_price_details_marks_subscription_limited_ib_snapshot_as_not_execution_ready(

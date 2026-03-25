@@ -782,7 +782,7 @@ class DataFeed:
         codes = self._request_event_codes(request_events)
         result = dict(snapshot)
         source = result.get("source")
-        market_data_type = getattr(self._conn, "_market_data_type", None)
+        snapshot_market_data_type = result.pop("_market_data_type", None)
 
         quality = "unavailable"
         execution_ready = False
@@ -800,7 +800,7 @@ class DataFeed:
             quality = "ib_out_of_session"
         elif _IB_PACING_ERROR_CODE in codes:
             quality = "ib_pacing_limited"
-        elif market_data_type in {3, 4} and source in {"last", "mid", "mark"}:
+        elif snapshot_market_data_type in {3, 4} and source in {"last", "mid", "mark"}:
             quality = "ib_delayed_mode"
         elif source in {"last", "mid", "mark"}:
             quality = "ib_reliable"
@@ -1692,6 +1692,7 @@ def _extract_ticker_volume(ticker: Any) -> float | None:
 def _build_price_snapshot_from_ticker(ticker: Any) -> dict[str, Any] | None:
     """Constrói o snapshot de preço a partir do ticker IB, priorizando dados IB antes de fallback externo."""
     volume = _extract_ticker_volume(ticker)
+    market_data_type = getattr(ticker, "marketDataType", None)
 
     if _valid_price(getattr(ticker, "last", None)):
         return {
@@ -1699,6 +1700,7 @@ def _build_price_snapshot_from_ticker(ticker: Any) -> dict[str, Any] | None:
             "source": "last",
             "fresh": True,
             "volume": volume,
+            "_market_data_type": market_data_type,
         }
 
     if _valid_price(getattr(ticker, "bid", None)) and _valid_price(getattr(ticker, "ask", None)):
@@ -1707,6 +1709,7 @@ def _build_price_snapshot_from_ticker(ticker: Any) -> dict[str, Any] | None:
             "source": "mid",
             "fresh": True,
             "volume": volume,
+            "_market_data_type": market_data_type,
         }
 
     if _valid_price(getattr(ticker, "markPrice", None)):
@@ -1715,6 +1718,7 @@ def _build_price_snapshot_from_ticker(ticker: Any) -> dict[str, Any] | None:
             "source": "mark",
             "fresh": True,
             "volume": volume,
+            "_market_data_type": market_data_type,
         }
 
     if _valid_price(getattr(ticker, "close", None)):
@@ -1723,6 +1727,7 @@ def _build_price_snapshot_from_ticker(ticker: Any) -> dict[str, Any] | None:
             "source": "close",
             "fresh": False,
             "volume": volume,
+            "_market_data_type": market_data_type,
         }
 
     return None
